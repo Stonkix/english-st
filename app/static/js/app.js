@@ -64,5 +64,26 @@ window.addEventListener("pageshow", () => {
   document.querySelectorAll("form[data-once] [type=submit]").forEach((b) => { b.disabled = false; });
 });
 
+// ---------- Подсказка логина (форма нового ученика) ----------
+// Поля имени и фамилии (data-login-suggest) через htmx просят логин, ответ — простой текст.
+// hx-sync на форме отменяет устаревший запрос; #login не заменяется, а только получает value.
+// Если учитель правил логин руками (data-manual), подсказку не применяем; очистил поле — подсказки снова работают.
+function initLoginSuggest() {
+  const login = document.getElementById("login");
+  if (!login || !document.querySelector("[data-login-suggest]")) return;
+  // логин, пришедший с сервера (форма с ошибками), считаем введённым вручную
+  if (login.value !== "") login.dataset.manual = "1";
+  login.addEventListener("input", () => {
+    if (login.value === "") delete login.dataset.manual;
+    else login.dataset.manual = "1";
+  });
+  document.addEventListener("htmx:afterRequest", (event) => {
+    if (!event.target.matches("[data-login-suggest]") || !event.detail.successful) return;
+    if (login.dataset.manual) return;
+    login.value = event.detail.xhr.responseText;
+  });
+}
+
 initPasswordToggles();
 initPasswordRules();
+initLoginSuggest();

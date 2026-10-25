@@ -101,15 +101,18 @@ def test_login_suggest(client, db):
     t, g = setup_teacher(client, db)
     make_user(db, login="petya.kotov")
     r = client.get("/teacher/login-suggest", params={"first_name": "Петя", "last_name": "Котов"})
-    assert "petya.kotov2" in r.text
+    assert r.text == "petya.kotov2"
+    # порядок параметров в запросе не важен (так уходит второй запрос, когда меняют фамилию)
+    r = client.get("/teacher/login-suggest", params={"last_name": "Котов", "first_name": "Вася"})
+    assert r.text == "vasya.kotov"
 
 
 def test_login_suggest_empty_when_nothing_usable(client, db):
     setup_teacher(client, db)
     r = client.get("/teacher/login-suggest", params={"first_name": "Я", "last_name": ""})  # «ya» — короче 3
-    assert r.status_code == 200 and 'value=""' in r.text
+    assert r.status_code == 200 and r.text == ""
     r = client.get("/teacher/login-suggest", params={"first_name": "!!", "last_name": "??"})
-    assert 'value=""' in r.text
+    assert r.text == ""
 
 
 def test_login_suggest_needs_teacher(client, db):

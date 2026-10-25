@@ -1,7 +1,7 @@
 """Учитель: группы, ученики, временные пароли, сброс, разблокировка и отключение."""
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import PlainTextResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
@@ -194,11 +194,11 @@ def login_suggest(
     user: User = Depends(teacher_only),
     db: DbSession = Depends(get_db),
 ):
-    """HTMX-фрагмент: поле логина с подставленным значением (или пустое, если подходящего нет)."""
+    """Подсказка логина простым текстом (пусто, если подходящего нет); подставляет её app.js."""
     login = unique_login(db, suggest_login(first_name[:NAME_MAX], last_name[:NAME_MAX]))
     if not is_valid_login(login):
         login = ""
-    return templates.TemplateResponse(request, "partials/login_suggest.html", {"login": login})
+    return PlainTextResponse(login)
 
 
 @router.get("/groups/{group_id}/students/new")
