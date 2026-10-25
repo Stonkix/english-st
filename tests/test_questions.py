@@ -134,16 +134,27 @@ def test_match_pairs_view_and_grade():
     assert grade_pairs(q, 2).correct_answer == "a — x; b — y; c — z"
 
 
-def test_two_item_shuffles_change_order():
-    q = make_q("match_pairs", {"pairs": [["a", "x"], ["b", "y"]]})
-    for seed in ("a", "b", "c", "d"):
-        assert [p["text"] for p in public_view(q, seed, True)["right"]] == ["y", "x"]
+def test_shuffles_change_order_from_three_items_and_two_items_are_unpredictable():
+    seeds = [str(i) for i in range(30)]
+    q = make_q("match_pairs", {"pairs": [["a", "x"], ["b", "y"], ["c", "z"]]})
+    for seed in seeds:
+        assert [p["text"] for p in public_view(q, seed, True)["right"]] != ["x", "y", "z"]
     q = make_q("word_bank", {"answer": "hi you", "distractors": []})
-    for seed in ("a", "b", "c", "d"):
-        assert [t["word"] for t in public_view(q, seed, True)["tiles"]] == ["you", "hi"]
+    orders = {tuple(t["word"] for t in public_view(q, s, True)["tiles"]) for s in seeds}
+    ids = {tuple(t["id"] for t in public_view(q, s, True)["tiles"]) for s in seeds}
+    assert orders == {("hi", "you"), ("you", "hi")} and len(ids) == 2
+    q = make_q("match_pairs", {"pairs": [["a", "x"], ["b", "y"]]})
+    orders = {tuple(p["text"] for p in public_view(q, s, True)["right"]) for s in seeds}
+    left_ids = {tuple(p["id"] for p in public_view(q, s, True)["left"]) for s in seeds}
+    assert orders == {("x", "y"), ("y", "x")} and left_ids == {(0, 1), (1, 0)}
     q = make_q("choice_text", {"options": ["a", "b"], "correct": 0})
-    for seed in ("a", "b", "c", "d"):
-        assert [o["id"] for o in public_view(q, seed, True)["options"]] == [1, 0]
+    assert {tuple(o["id"] for o in public_view(q, s, True)["options"]) for s in seeds} == {(0, 1), (1, 0)}
+
+
+def test_match_pairs_ids_depend_on_seed():
+    q = make_q("match_pairs", {"pairs": [["a", "x"], ["b", "y"], ["c", "z"], ["d", "w"]]})
+    lefts = {tuple(p["id"] for p in public_view(q, str(i), True)["left"]) for i in range(20)}
+    assert len(lefts) > 1 and any(l != (0, 1, 2, 3) for l in lefts)
 
 
 def test_long_text_answer_is_fast_and_wrong():

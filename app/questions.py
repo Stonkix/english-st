@@ -99,7 +99,7 @@ def _shuffled(items: list, seed: str, salt: str) -> list:
     original = list(items)
     items = list(items)
     random.Random(f"{seed}|{salt}").shuffle(items)
-    if len(items) >= 2 and items == original:
+    if len(items) >= 3 and items == original:  # для 2 элементов — честный 50/50, иначе порядок предсказуем
         items = items[1:] + items[:1]  # порядок не должен совпасть с исходным
     return items
 
@@ -108,8 +108,6 @@ def _perm(n: int, seed: str, question_id, salt: str) -> list[int]:
     """Непрозрачные id: perm[i] — id элемента с исходным индексом i (зависит от seed)."""
     perm = list(range(n))
     random.Random(f"{seed}|{question_id}|ids|{salt}").shuffle(perm)
-    if n >= 2 and perm == list(range(n)):
-        perm = perm[1:] + perm[:1]
     return perm
 
 
@@ -118,8 +116,6 @@ def pair_ids(question: Question, seed: str) -> tuple[list[int], list[int]]:
     n = len(question.payload["pairs"])
     left = _perm(n, seed, question.id, "left")
     right = _perm(n, seed, question.id, "right")
-    if left == right:
-        right = right[1:] + right[:1]
     return left, right
 
 
