@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ test.title }} — English ST{% endblock %}
+
+{% block content %}
+<section class="page teacher-page">
+  <a class="back-link" href="/tasks/tests">← Тесты</a>
+  <div>
+    <h1>{{ test.title }}</h1>
+    {% if test.description %}<p>{{ test.description }}</p>{% endif %}
+  </div>
+
+  <h2>Вопросы ({{ items|length }})</h2>
+  {% if items %}
+  <ul class="list">
+    {% for q in items %}
+    <li class="item-row">
+      <a class="item-row-main" href="/tasks/questions/{{ q.id }}/edit">
+        <strong>{{ q.prompt }}</strong>
+        <small>{{ labels[q.type] }}</small>
+      </a>
+      <form method="post" action="/tasks/tests/{{ test.id }}/questions/{{ q.id }}/move">
+        <input type="hidden" name="direction" value="up">
+        <button class="btn btn-secondary mini-btn" type="submit" aria-label="Выше"{% if loop.first %} disabled{% endif %}>↑</button>
+      </form>
+      <form method="post" action="/tasks/tests/{{ test.id }}/questions/{{ q.id }}/move">
+        <input type="hidden" name="direction" value="down">
+        <button class="btn btn-secondary mini-btn" type="submit" aria-label="Ниже"{% if loop.last %} disabled{% endif %}>↓</button>
+      </form>
+      <form method="post" action="/tasks/tests/{{ test.id }}/questions/{{ q.id }}/remove" data-confirm="Убрать вопрос из теста?">
+        <button class="btn btn-secondary mini-btn" type="submit" aria-label="Убрать из теста">×</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="card"><p class="lead">В тесте пока нет вопросов. Добавьте их из пула или создайте новые ниже.</p></div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Добавить из пула</h2>
+    {% if error %}
+    <div class="alert-error" role="alert"><p>{{ error }}</p></div>
+    {% endif %}
+    {% if pools %}
+    <ul class="list">
+      {% for p in pools %}
+      <li><a class="list-item" href="/tasks/tests/{{ test.id }}?pool={{ p.id }}">
+        <span class="list-item-main"><strong>{{ p.title }}</strong><small>{{ p.questions|length }} вопр.</small></span>
+        <span class="badge badge-blue">{{ p.level }}</span>
+      </a></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Пулов пока нет.</p>
+    {% endif %}
+  </div>
+
+  {% if pool %}
+  <div class="card">
+    <h2>Пул «{{ pool.title }}»</h2>
+    {% if candidates %}
+    <ul class="list">
+      {% for q in candidates %}
+      <li class="item-row">
+        <span class="item-row-main"><strong>{{ q.prompt }}</strong><small>{{ labels[q.type] }}</small></span>
+        <form method="post" action="/tasks/tests/{{ test.id }}/add" data-once>
+          <input type="hidden" name="question_id" value="{{ q.id }}">
+          <button class="btn btn-primary mini-btn" type="submit" aria-label="Добавить в тест">+</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Все вопросы этого пула уже в тесте (или пул пуст).</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Создать вопрос в тесте</h2>
+    <div class="type-grid">
+      {% for t in types %}
+      <a class="btn btn-secondary type-btn" href="/tasks/tests/{{ test.id }}/questions/new?type={{ t }}">
+        <strong>{{ labels[t] }}</strong><small>{{ hints[t] }}</small>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}

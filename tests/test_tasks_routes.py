@@ -1,13 +1,14 @@
 import random
 import shutil
-from datetime import date
+from datetime import date, timedelta
 from io import BytesIO
 
 import pytest
 from PIL import Image
 
 from app.config import settings
-from app.models import Attempt, AttemptAnswer, Pool, Question
+from app.models import Assignment, Attempt, AttemptAnswer, DailySettings, GroupPool, Pool, Question, Test, TestQuestion
+from app.timeutil import moscow_today
 from tests.factories import login_as, make_group, make_user
 
 
@@ -483,3 +484,275 @@ def test_question_post_sets_no_unbounded_upload(client, db):
     pool = make_pool(db, t)
     r = post_q(client, pool, "text_input", {"prompt": "Q", "accepted": "a"}, files={"image": ("big.png", b"0" * (MAX_UPLOAD_BYTES + 1), "image/png")})
     assert r.status_code == 200 and "Не получилось открыть картинку" in r.text and pics(t) == []
+
+
+# ---------- тесты ----------
+
+
+def make_question(db, owner, pool=None, prompt="Вопрос"):
+    q = Question(owner_id=owner.id, pool_id=pool.id if pool else None, type="text_input", prompt=prompt, payload={"accepted": ["cat"]})
+    db.add(q)
+    db.commit()
+    return q
+
+
+def make_test(db, owner, title="Тест", questions=()):
+    test = Test(owner_id=owner.id, title=title, description="")
+    db.add(test)
+    db.flush()
+    for pos, q in enumerate(questions):
+        db.add(TestQuestion(test_id=test.id, question_id=q.id, position=pos))
+    db.commit()
+    return test
+
+
+def order_of(db, test):
+    return [r.question_id for r in db.query(TestQuestion).filter_by(test_id=test.id).order_by(TestQuestion.position)]
+
+
+def test_create_test_and_list(client, db):
+    t = teacher(client, db)
+    other = make_user(db, role="teacher", login="teach2")
+    make_test(db, other, "Чужой тест")
+    r = client.post("/tasks/tests", data={"title": " ", "description": ""})
+    assert r.status_code == 200 and 'role="alert"' in r.text
+    r = client.post("/tasks/tests", data={"title": "Неделя 1", "description": "Повторение"}, follow_redirects=False)
+    test = db.query(Test).filter_by(title="Неделя 1").one()
+    assert r.status_code == 303 and r.headers["location"] == f"/tasks/tests/{test.id}" and test.owner_id == t.id
+    page = client.get("/tasks/tests").text
+    assert "Неделя 1" in page and "Чужой тест" not in page
+
+
+def test_foreign_test_404(client, db):
+    teacher(client, db)
+    other = make_user(db, role="teacher", login="teach2")
+    foreign = make_test(db, other)
+    q = make_question(db, other)
+    assert client.get(f"/tasks/tests/{foreign.id}").status_code == 404
+    assert client.post(f"/tasks/tests/{foreign.id}/add", data={"question_id": q.id}).status_code == 404
+    assert client.post(f"/tasks/tests/{foreign.id}/questions", data={"type": "text_input"}).status_code == 404
+
+
+def test_add_existing_question_only_from_own_pools_once(client, db):
+    t = teacher(client, db)
+    other = make_user(db, role="teacher", login="teach2")
+    mine = make_question(db, t, make_pool(db, t), "Моё")
+    foreign = make_question(db, other, make_pool(db, other), "Чужое")
+    loose = make_question(db, t, None, "Без пула")
+    test = make_test(db, t)
+    url = f"/tasks/tests/{test.id}/add"
+    assert client.post(url, data={"question_id": mine.id}, follow_redirects=False).status_code == 303
+    assert order_of(db, test) == [mine.id]
+    r = client.post(url, data={"question_id": mine.id})
+    assert r.status_code == 200 and "уже в тесте" in r.text and order_of(db, test) == [mine.id]
+    assert client.post(url, data={"question_id": foreign.id}).status_code == 404
+    assert client.post(url, data={"question_id": loose.id}).status_code == 404
+    assert order_of(db, test) == [mine.id]
+
+
+def test_test_page_shows_pool_questions_to_add(client, db):
+    t = teacher(client, db)
+    pool = make_pool(db, t, title="Еда")
+    make_question(db, t, pool, "Как будет яблоко")
+    test = make_test(db, t)
+    page = client.get(f"/tasks/tests/{test.id}").text
+    assert "Еда" in page and "Как будет яблоко" not in page
+    assert "Как будет яблоко" in client.get(f"/tasks/tests/{test.id}?pool={pool.id}").text
+    assert client.get(f"/tasks/tests/{test.id}?pool=999999").status_code == 404
+
+
+def test_create_question_directly_in_test(client, db):
+    t = teacher(client, db)
+    test = make_test(db, t)
+    assert client.get(f"/tasks/tests/{test.id}/questions/new?type=text_input").status_code == 200
+    assert client.get(f"/tasks/tests/{test.id}/questions/new?type=bad").status_code == 404
+    r = client.post(
+        f"/tasks/tests/{test.id}/questions",
+        data={"type": "text_input", "prompt": "Кошка", "accepted": "cat"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303 and r.headers["location"] == f"/tasks/tests/{test.id}"
+    q = db.query(Question).one()
+    assert (q.pool_id, q.owner_id, q.prompt) == (None, t.id, "Кошка")
+    assert order_of(db, test) == [q.id]
+    bad = client.post(f"/tasks/tests/{test.id}/questions", data={"type": "text_input", "prompt": "", "accepted": "x"})
+    assert bad.status_code == 200 and 'role="alert"' in bad.text and db.query(Question).count() == 1
+
+
+def test_edit_test_question_returns_to_test(client, db):
+    t = teacher(client, db)
+    q = make_question(db, t, None, "Старый")
+    test = make_test(db, t, questions=[q])
+    page = client.get(f"/tasks/questions/{q.id}/edit")
+    assert page.status_code == 200 and f"/tasks/tests/{test.id}" in page.text
+    r = client.post(f"/tasks/questions/{q.id}", data={"prompt": "Новый", "accepted": "dog"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == f"/tasks/tests/{test.id}"
+    db.refresh(q)
+    assert q.prompt == "Новый"
+
+
+def test_move_and_remove_questions(client, db):
+    t = teacher(client, db)
+    pool = make_pool(db, t)
+    a, b, c = (make_question(db, t, pool, n) for n in "abc")
+    test = make_test(db, t, questions=[a, b, c])
+    base = f"/tasks/tests/{test.id}/questions"
+    client.post(f"{base}/{c.id}/move", data={"direction": "up"})
+    assert order_of(db, test) == [a.id, c.id, b.id]
+    client.post(f"{base}/{a.id}/move", data={"direction": "up"})  # крайний: без изменений
+    assert order_of(db, test) == [a.id, c.id, b.id]
+    client.post(f"{base}/{a.id}/move", data={"direction": "down"})
+    assert order_of(db, test) == [c.id, a.id, b.id]
+    assert client.post(f"{base}/{a.id}/move", data={"direction": "sideways"}).status_code == 404
+    client.post(f"{base}/{c.id}/remove")
+    assert order_of(db, test) == [a.id, b.id] and db.get(Question, c.id) is not None  # вопрос пула остаётся
+    assert client.post(f"{base}/{c.id}/remove").status_code == 404
+
+
+def test_remove_direct_question_deletes_it(client, db):
+    t = teacher(client, db)
+    q = make_question(db, t, None)
+    test = make_test(db, t, questions=[q])
+    client.post(f"/tasks/tests/{test.id}/questions/{q.id}/remove")
+    assert order_of(db, test) == [] and db.query(Question).count() == 0
+
+
+# ---------- задания группы ----------
+
+
+def future(days=1):
+    return (moscow_today() + timedelta(days=days)).isoformat()
+
+
+def test_foreign_group_tasks_404(client, db):
+    teacher(client, db)
+    other = make_user(db, role="teacher", login="teach2")
+    group = make_group(db, other)
+    test = make_test(db, other)
+    assert client.get(f"/tasks/groups/{group.id}").status_code == 404
+    for tail, data in (
+        ("pools", {}),
+        ("settings", {"question_count": 5, "max_attempts": 3}),
+        ("assignments", {"test_id": test.id, "date": future(), "target": "group"}),
+    ):
+        assert client.post(f"/tasks/groups/{group.id}/{tail}", data=data).status_code == 404
+    assert client.get("/tasks/groups/999999").status_code == 404
+    assert db.query(DailySettings).count() == 0 and db.query(Assignment).count() == 0
+
+
+def test_group_page_links_from_group(client, db):
+    t = teacher(client, db)
+    group = make_group(db, t)
+    assert f"/tasks/groups/{group.id}" in client.get(f"/teacher/groups/{group.id}").text
+    assert client.get(f"/tasks/groups/{group.id}").status_code == 200
+
+
+def test_group_pools_only_teachers_own(client, db):
+    t = teacher(client, db)
+    other = make_user(db, role="teacher", login="teach2")
+    group = make_group(db, t)
+    mine, mine2, foreign = make_pool(db, t, "Мой 1"), make_pool(db, t, "Мой 2"), make_pool(db, other, "Чужой")
+    page = client.get(f"/tasks/groups/{group.id}").text
+    assert "Мой 1" in page and "Чужой" not in page
+    r = client.post(f"/tasks/groups/{group.id}/pools", data={"pool_ids": [mine.id, foreign.id]}, follow_redirects=False)
+    assert r.status_code == 303
+    assert {g.pool_id for g in db.query(GroupPool)} == {mine.id}
+    client.post(f"/tasks/groups/{group.id}/pools", data={"pool_ids": [mine2.id]})
+    assert {g.pool_id for g in db.query(GroupPool)} == {mine2.id}
+    client.post(f"/tasks/groups/{group.id}/pools", data={})
+    assert db.query(GroupPool).count() == 0
+
+
+def test_admin_sees_group_teachers_pools(client, db):
+    t = make_user(db, role="teacher", login="teach1")
+    group = make_group(db, t)
+    mine = make_pool(db, t, "Пул учителя")
+    admin = make_user(db, role="admin", login="boss")
+    make_pool(db, admin, "Пул админа")
+    login_as(client, "boss")
+    page = client.get(f"/tasks/groups/{group.id}").text
+    assert "Пул учителя" in page and "Пул админа" not in page
+    client.post(f"/tasks/groups/{group.id}/pools", data={"pool_ids": [mine.id]})
+    assert {g.pool_id for g in db.query(GroupPool)} == {mine.id}
+
+
+def test_settings_validation(client, db):
+    t = teacher(client, db)
+    group = make_group(db, t)
+    url = f"/tasks/groups/{group.id}/settings"
+    for count, attempts, message in (
+        ("0", "3", "Число вопросов — от 1 до 30"),
+        ("31", "3", "Число вопросов — от 1 до 30"),
+        ("abc", "3", "Число вопросов — от 1 до 30"),
+        ("5", "0", "Попыток — от 1 до 10"),
+        ("5", "11", "Попыток — от 1 до 10"),
+        ("5", "", "Попыток — от 1 до 10"),
+    ):
+        r = client.post(url, data={"question_count": count, "max_attempts": attempts})
+        assert r.status_code == 200 and message in r.text, (count, attempts)
+    s = db.get(DailySettings, group.id)  # страница с ошибкой показала значения по умолчанию, ничего не сохранив
+    assert (s.question_count, s.max_attempts) == (5, 3)
+    r = client.post(url, data={"question_count": "30", "max_attempts": "10", "shuffle_options": "1"}, follow_redirects=False)
+    assert r.status_code == 303
+    db.refresh(s)
+    assert (s.question_count, s.max_attempts, s.shuffle_questions, s.shuffle_options) == (30, 10, False, True)
+
+
+def test_assignment_rules(client, db):
+    t = teacher(client, db)
+    group = make_group(db, t)
+    kid = make_user(db, group=group)
+    outsider = make_user(db, group=make_group(db, t, "Другая"))
+    test = make_test(db, t)
+    foreign_test = make_test(db, make_user(db, role="teacher", login="teach2"))
+    url = f"/tasks/groups/{group.id}/assignments"
+    today = moscow_today().isoformat()
+
+    r = client.post(url, data={"test_id": test.id, "date": (moscow_today() - timedelta(days=1)).isoformat(), "target": "group"})
+    assert r.status_code == 200 and "Дата уже прошла" in r.text
+    for data in (
+        {"test_id": foreign_test.id, "date": today, "target": "group"},
+        {"test_id": test.id, "date": "не дата", "target": "group"},
+        {"test_id": test.id, "date": today, "target": str(outsider.id)},
+        {"test_id": test.id, "date": today, "target": "abc"},
+    ):
+        r = client.post(url, data=data)
+        assert r.status_code == 200 and 'role="alert"' in r.text, data
+    assert db.query(Assignment).count() == 0
+
+    assert client.post(url, data={"test_id": test.id, "date": today, "target": "group"}, follow_redirects=False).status_code == 303
+    assert client.post(url, data={"test_id": test.id, "date": future(), "target": str(kid.id)}, follow_redirects=False).status_code == 303
+    group_a = db.query(Assignment).filter(Assignment.group_id == group.id).one()
+    kid_a = db.query(Assignment).filter(Assignment.student_id == kid.id).one()
+    assert (group_a.date, kid_a.date) == (moscow_today(), moscow_today() + timedelta(days=1))
+    page = client.get(f"/tasks/groups/{group.id}").text
+    assert kid.last_name in page and "Тест" in page
+
+    client.post(f"{url}/{kid_a.id}/delete")
+    assert db.query(Assignment).filter(Assignment.student_id == kid.id).count() == 0
+    assert client.post(f"{url}/{kid_a.id}/delete").status_code == 404
+
+
+def test_assignment_conflict_friendly(client, db):
+    t = teacher(client, db)
+    group = make_group(db, t)
+    kid = make_user(db, group=group)
+    test = make_test(db, t)
+    url = f"/tasks/groups/{group.id}/assignments"
+    for target in ("group", str(kid.id)):
+        data = {"test_id": test.id, "date": future(2), "target": target}
+        assert client.post(url, data=data, follow_redirects=False).status_code == 303
+        r = client.post(url, data=data)
+        assert r.status_code == 200 and "На эту дату уже назначен тест" in r.text
+    assert db.query(Assignment).count() == 2
+
+
+def test_cannot_delete_foreign_assignment(client, db):
+    t = teacher(client, db)
+    mine, other_group = make_group(db, t), make_group(db, t, "Другая")
+    test = make_test(db, t)
+    a = Assignment(test_id=test.id, group_id=other_group.id, date=moscow_today())
+    db.add(a)
+    db.commit()
+    assert client.post(f"/tasks/groups/{mine.id}/assignments/{a.id}/delete").status_code == 404
+    assert db.query(Assignment).count() == 1

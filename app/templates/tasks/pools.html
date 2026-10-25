@@ -49,14 +49,15 @@
   {% if tests %}
   <ul class="list">
     {% for t in tests %}
-    <li class="list-item"><span class="list-item-main">
+    <li><a class="list-item" href="/tasks/tests/{{ t.id }}"><span class="list-item-main">
       <strong>{{ t.title }}</strong>
       <small>{{ t.questions|selectattr("is_active")|list|length }} вопр.{% if user.role == "admin" and owners.get(t.owner_id) %} · {{ owners[t.owner_id].full_name }}{% endif %}</small>
-    </span></li>
+    </span></a></li>
     {% endfor %}
   </ul>
   {% else %}
   <div class="card"><p class="muted">Тестов пока нет.</p></div>
   {% endif %}
+  <a class="btn btn-secondary btn-block" href="/tasks/tests">Новый тест</a>
 </section>
 {% endblock %}

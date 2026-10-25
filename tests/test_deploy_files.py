@@ -26,6 +26,10 @@ def test_nginx_limits_and_headers():
     assert "client_max_body_size 11m" in n
     assert "zone=englishst_login" in n and "zone=englishst_upload" in n
     assert "location /ws/ {" in n and "proxy_read_timeout 3600s" in n
+    assert "zone=englishst_editor:10m rate=30r/m" in n and "zone=englishst_editor burst=10" in n
+    assert "client_max_body_size 52m" in n
+    editor = n[n.index("location ~ ^/tasks/"):]
+    assert "englishst_editor" in editor.split("}")[0] and "englishst_upload" not in editor.split("}")[0]
     assert "rate=20r/m" in n and "zone=englishst_login burst=20" in n
     assert "limit_req_status 429;" in n and "error_page 429 /429.html;" in n
     assert "<script" not in _read("app/static/429.html")

@@ -53,7 +53,7 @@
 
 {% block content %}
 <section class="page teacher-page">
-  <a class="back-link" href="/tasks/pools/{{ pool.id }}">← {{ pool.title }}</a>
+  <a class="back-link" href="{{ back_url }}">← {{ home.title }}</a>
   <form class="card" method="post" action="{{ action }}" enctype="multipart/form-data" data-once>
     <h1>{{ label }}</h1>
     {% if errors %}
