@@ -11,17 +11,30 @@ from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from app.auth.access import can_view_avatar, can_view_previous_avatar
+from app.auth.access import can_view_avatar, can_view_previous_avatar, can_view_question_image
 from app.auth.deps import require_user
 from app.config import settings
 from app.db import get_db
-from app.models import AvatarHistory, User
+from app.models import AvatarHistory, Question, User
+from app.questions import picture_paths
 
 router = APIRouter()
 
 _USER_ID = re.compile(r"[1-9][0-9]{0,8}")  # только ASCII-цифры, без ведущих нулей: «007» — не тот же адрес
 _NAME = re.compile(r"[0-9a-f]{12}\.webp")
 _HEADERS = {"Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff"}
+
+
+def _file_response(rel: str):
+    if settings.debug:
+        path = settings.media_dir / rel
+        if not path.is_file():
+            raise HTTPException(404)
+        return FileResponse(path, media_type="image/webp", headers=_HEADERS)
+    return Response(
+        b"", media_type="image/webp",
+        headers={**_HEADERS, "X-Accel-Redirect": f"/_protected/{rel}"},
+    )
 
 
 @router.get("/media/avatars/{user_id}/{name}")
@@ -43,12 +56,18 @@ def avatar(user_id: str, name: str, viewer: User = Depends(require_user), db: Db
     if not (is_current or is_previous):
         raise HTTPException(404)
 
-    if settings.debug:
-        path = settings.media_dir / rel
-        if not path.is_file():
-            raise HTTPException(404)
-        return FileResponse(path, media_type="image/webp", headers=_HEADERS)
-    return Response(
-        b"", media_type="image/webp",
-        headers={**_HEADERS, "X-Accel-Redirect": f"/_protected/{rel}"},
-    )
+    return _file_response(rel)
+
+
+@router.get("/media/questions/{owner_id}/{name}")
+def question_image(owner_id: str, name: str, viewer: User = Depends(require_user), db: DbSession = Depends(get_db)):
+    if not _USER_ID.fullmatch(owner_id) or not _NAME.fullmatch(name):
+        raise HTTPException(404)
+    rel = f"questions/{owner_id}/{name}"
+    if not can_view_question_image(viewer, int(owner_id), db):
+        raise HTTPException(404)
+    # отдаём только картинки, на которые ещё ссылается вопрос автора (скрытые тоже: они нужны истории ответов)
+    questions = db.scalars(select(Question).where(Question.owner_id == int(owner_id)))
+    if not any(rel in picture_paths(q) for q in questions):
+        raise HTTPException(404)
+    return _file_response(rel)

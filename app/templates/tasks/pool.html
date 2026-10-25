@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ pool.title }} — English ST{% endblock %}
+
+{% block content %}
+<section class="page teacher-page">
+  <a class="back-link" href="/tasks">← Задания</a>
+  <div>
+    <h1>{{ pool.title }}</h1>
+    <p class="muted"><span class="badge badge-blue">{{ pool.level }}</span></p>
+    <p>{{ pool.description }}</p>
+  </div>
+
+  <div class="card">
+    <h2>Добавить вопрос</h2>
+    <div class="type-grid">
+      {% for t in types %}
+      <a class="btn btn-secondary type-btn" href="/tasks/pools/{{ pool.id }}/questions/new?type={{ t }}">
+        <strong>{{ labels[t] }}</strong><small>{{ hints[t] }}</small>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <h2>Вопросы ({{ pool.questions|length }})</h2>
+  {% if pool.questions %}
+  <ul class="list">
+    {% for q in pool.questions %}
+    <li><a class="list-item" href="/tasks/questions/{{ q.id }}/edit">
+      <span class="list-item-main">
+        <strong>{{ q.prompt }}</strong>
+        <small>{{ labels[q.type] }}</small>
+      </span>
+    </a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="card"><p class="lead">В пуле пока нет вопросов. Выберите тип вопроса выше.</p></div>
+  {% endif %}
+
+  <details class="card"{% if edit_error %} open{% endif %}>
+    <summary>Изменить пул</summary>
+    <form method="post" action="/tasks/pools/{{ pool.id }}/edit" data-once>
+      {% if edit_error %}
+      <div class="alert-error" role="alert"><p>{{ edit_error }}</p></div>
+      {% endif %}
+      {% set v = edit_values if edit_values is defined else {"title": pool.title, "description": pool.description, "level": pool.level} %}
+      <div class="field">
+        <label for="pool-title">Название</label>
+        <input id="pool-title" name="title" value="{{ v.title }}" maxlength="80" autocomplete="off" required>
+      </div>
+      <div class="field">
+        <label for="pool-description">Описание</label>
+        <textarea id="pool-description" name="description" rows="3" maxlength="500" required>{{ v.description }}</textarea>
+      </div>
+      <div class="field">
+        <label for="pool-level">Уровень</label>
+        <select id="pool-level" name="level" required>
+          {% for l in levels %}<option value="{{ l }}"{% if v.level == l %} selected{% endif %}>{{ l }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-secondary btn-block" type="submit">Сохранить</button>
+    </form>
+  </details>
+
+  <form class="card" method="post" action="/tasks/pools/{{ pool.id }}/delete" data-confirm="Удалить пул «{{ pool.title }}»?">
+    {% if delete_error %}
+    <div class="alert-error" role="alert"><p>{{ delete_error }}</p></div>
+    {% endif %}
+    <button class="btn btn-danger btn-block" type="submit">Удалить пул</button>
+    <small class="muted">Удалить можно только пустой пул.</small>
+  </form>
+</section>
+{% endblock %}

@@ -13,6 +13,11 @@
   <path d="M17 28v-2a7.5 7 0 0 1 13.5-4v6z" fill="#84D8FF"/>
   <circle cx="12" cy="10.5" r="5.5" fill="#1CB0F6"/>
   <path d="M2 28v-1a10 9 0 0 1 20 0v1z" fill="#1899D6"/>
+  {%- elif name == "tasks" %}
+  <rect x="6" y="4" width="20" height="25" rx="4" fill="#58CC02"/>
+  <rect x="11" y="2" width="10" height="6" rx="2" fill="#58A700"/>
+  <path d="M10.5 15.5l2.5 2.5 4.5-5" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M10.5 24h11" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
   {%- elif name == "school" %}
   <path d="M16 9V2.5" stroke="#4B4B4B" stroke-width="2" stroke-linecap="round"/>
   <path d="M16 2.5h7l-2 2.25 2 2.25h-7z" fill="#FF4B4B"/>
@@ -22,7 +27,7 @@
   {%- endif %}
 </svg>
 {%- endmacro %}
-{% set items = [("Главная", "/", "home")] if user.role == "student" else [("Группы", "/teacher", "groups")] %}
+{% set items = [("Главная", "/", "home")] if user.role == "student" else [("Группы", "/teacher", "groups"), ("Задания", "/tasks", "tasks")] %}
 {% if user.role == "admin" %}{% set items = items + [("Школа", "/school", "school")] %}{% endif %}
 {% set items = items + [("Профиль", "/profile", "profile")] %}
 {% set path = request.url.path %}

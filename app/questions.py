@@ -238,3 +238,11 @@ def grade(question: Question, answer: dict, seed: str) -> GradeResult:
 def grade_pairs(question: Question, mistakes: int) -> GradeResult:
     """match_pairs: верно, только если не было ошибок при сопоставлении."""
     return GradeResult(mistakes == 0, False, _correct_answer(question))
+
+
+def picture_paths(question: Question) -> set[str]:
+    """Все файлы картинок вопроса: к тексту вопроса и к вариантам choice_image."""
+    paths = {question.image} if question.image else set()
+    if question.type == "choice_image":
+        paths.update(o["image"] for o in question.payload.get("options", []))
+    return paths

@@ -20,3 +20,10 @@ def can_view_previous_avatar(viewer: User, owner: User) -> bool:
     if viewer.role == "admin":
         return True
     return owner.group is not None and owner.group.teacher_id == viewer.id
+
+
+def can_view_question_image(viewer: User, owner_id: int, db) -> bool:
+    """Картинки вопроса: автор, админ и ученики групп автора."""
+    if viewer.id == owner_id or viewer.role == "admin":
+        return True
+    return viewer.role == "student" and viewer.group is not None and viewer.group.teacher_id == owner_id
