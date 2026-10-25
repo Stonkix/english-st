@@ -16,7 +16,7 @@ class Pool(Base):
     __tablename__ = "pools"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))  # пользователей не удаляют (только деактивация): FK без ondelete — страховка
     title: Mapped[str]
     description: Mapped[str]
     level: Mapped[str]  # одно из LEVELS
@@ -46,7 +46,7 @@ class Question(Base):
     __tablename__ = "questions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))  # пользователей не удаляют (только деактивация): FK без ondelete — страховка
     pool_id: Mapped[int | None] = mapped_column(ForeignKey("pools.id", ondelete="SET NULL"))
     type: Mapped[str]  # одно из QUESTION_TYPES
     prompt: Mapped[str]
@@ -61,11 +61,12 @@ class Test(Base):
     __test__ = False  # не тест для pytest
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))  # пользователей не удаляют (только деактивация): FK без ondelete — страховка
     title: Mapped[str]
     description: Mapped[str]
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
+    # намеренно включает и неактивные (скрытые) вопросы: фильтрует потребитель
     questions: Mapped[list[Question]] = relationship(
         secondary="test_questions",
         order_by="TestQuestion.position",
@@ -81,7 +82,7 @@ class TestQuestion(Base):
     __test__ = False
 
     test_id: Mapped[int] = mapped_column(ForeignKey("tests.id", ondelete="CASCADE"), primary_key=True)
-    question_id: Mapped[int] = mapped_column(ForeignKey("questions.id"), primary_key=True)
+    question_id: Mapped[int] = mapped_column(ForeignKey("questions.id", ondelete="CASCADE"), primary_key=True)
     position: Mapped[int]
 
 

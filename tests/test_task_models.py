@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app.models import Assignment, Attempt, AttemptAnswer, Group, Pool, Question, Test, User
+from app.models import Assignment, Attempt, AttemptAnswer, Group, Pool, Question, Test, TestQuestion, User
 
 
 def _teacher(db):
@@ -48,9 +48,10 @@ def test_assignment_unique_per_group_day(db):
 def test_answer_once_per_question(db):
     t, g, s, test = _setup(db)
     q = Question(owner_id=t.id, type="text_input", prompt="?", payload={"answers": ["a"]})
-    a = Attempt(student_id=s.id, date=date(2026, 10, 26), source="test", question_ids=[1], total_count=1)
+    a = Attempt(student_id=s.id, date=date(2026, 10, 26), source="test", question_ids=[], total_count=1)
     db.add_all([q, a])
     db.flush()
+    a.question_ids = [q.id]
     db.add(AttemptAnswer(attempt_id=a.id, question_id=q.id, answer="a", is_correct=True, had_typo=False))
     db.commit()
     db.add(AttemptAnswer(attempt_id=a.id, question_id=q.id, answer="b", is_correct=False, had_typo=False))
@@ -87,3 +88,18 @@ def test_question_pool_set_null_on_pool_delete(db):
     db.commit()
     db.refresh(q)
     assert q.pool_id is None
+
+
+def test_delete_question_removes_test_link(db):
+    t, _, _, test = _setup(db)
+    q1 = Question(owner_id=t.id, type="text_input", prompt="1", payload={})
+    q2 = Question(owner_id=t.id, type="text_input", prompt="2", payload={})
+    db.add_all([q1, q2])
+    db.flush()
+    db.add_all([TestQuestion(test_id=test.id, question_id=q1.id, position=0),
+                TestQuestion(test_id=test.id, question_id=q2.id, position=1)])
+    db.commit()
+    db.delete(q1)
+    db.commit()
+    db.expire_all()
+    assert [q.prompt for q in test.questions] == ["2"]

@@ -113,7 +113,7 @@ def upgrade() -> None:
     sa.Column('test_id', sa.Integer(), nullable=False),
     sa.Column('question_id', sa.Integer(), nullable=False),
     sa.Column('position', sa.Integer(), nullable=False),
-    sa.ForeignKeyConstraint(['question_id'], ['questions.id'], ),
+    sa.ForeignKeyConstraint(['question_id'], ['questions.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['test_id'], ['tests.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('test_id', 'question_id')
     )
