@@ -259,3 +259,98 @@ def test_change_password_keeps_other_users_sessions(client, db):
     login_as(client, "kid")
     change(client)
     assert friend.get("/profile").status_code == 200
+
+
+# ---------- память и параллельность при декодировании ----------
+
+def test_decode_max_allowed_size_small_png_ok(client, db):
+    from app.images import MAX_PIXELS
+
+    u = make_user(db, login="kid")
+    login_as(client, "kid")
+    side = int(MAX_PIXELS**0.5)
+    b = BytesIO()
+    Image.new("1", (side, side)).save(b, "PNG")  # несколько КБ, ~50 Мп
+    assert len(b.getvalue()) < 100_000
+    r = upload(client, b.getvalue(), "a.png", "image/png")
+    assert r.status_code in (200, 303)
+    db.refresh(u)
+    assert Image.open(settings.media_dir / u.avatar).size == (512, 512)
+
+
+def test_decode_over_pixel_cap_is_invalid():
+    from app.images import MAX_PIXELS, _decode_square
+
+    side = int(MAX_PIXELS**0.5) + 100
+    b = BytesIO()
+    Image.new("1", (side, side)).save(b, "PNG")
+    with pytest.raises(InvalidImage):
+        _decode_square(b.getvalue())
+
+
+def test_decode_48_megapixel_jpeg_ok():
+    from app.images import _decode_square
+
+    assert _decode_square(jpeg(8000, 6000)).size == (512, 512)
+
+
+def test_decode_is_serialized(monkeypatch, tmp_path):
+    import threading
+    import time
+
+    import app.images as images
+
+    monkeypatch.setattr(settings, "media_dir", tmp_path)
+    state = {"now": 0, "max": 0}
+    guard = threading.Lock()
+    real = images._decode_square
+
+    def slow(data):
+        with guard:
+            state["now"] += 1
+            state["max"] = max(state["max"], state["now"])
+        time.sleep(0.15)
+        try:
+            return real(data)
+        finally:
+            with guard:
+                state["now"] -= 1
+
+    monkeypatch.setattr(images, "_decode_square", slow)
+    data = jpeg(600, 600)
+    threads = [threading.Thread(target=images.save_avatar, args=(i, data)) for i in range(1, 5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert state["max"] == 1
+    assert len(list(tmp_path.glob("avatars/*/*.webp"))) == 4
+
+
+def test_decode_transparent_png_gets_white_background():
+    from app.images import _decode_square
+
+    b = BytesIO()
+    Image.new("RGBA", (800, 600), (255, 0, 0, 0)).save(b, "PNG")  # полностью прозрачная
+    img = _decode_square(b.getvalue())
+    assert img.mode == "RGB" and img.getpixel((256, 256)) == (255, 255, 255)
+
+    b = BytesIO()
+    p = Image.new("P", (800, 600), 0)
+    p.putpalette([255, 0, 0] + [0] * 765)
+    p.save(b, "PNG", transparency=0)  # прозрачность через палитру
+    assert _decode_square(b.getvalue()).getpixel((256, 256)) == (255, 255, 255)
+
+
+def test_decode_respects_exif_orientation():
+    from app.images import _decode_square
+
+    src = Image.new("RGB", (300, 200), "blue")
+    src.paste("red", (0, 0, 150, 200))  # слева красный, справа синий
+    exif = Image.Exif()
+    exif[0x0112] = 6  # показывать повёрнутым на 90° по часовой: левая половина уходит вверх
+    b = BytesIO()
+    src.save(b, "JPEG", quality=95, exif=exif)
+    img = _decode_square(b.getvalue())
+    top, bottom = img.getpixel((256, 40)), img.getpixel((256, 470))
+    assert top[0] > 200 and top[2] < 60 and bottom[2] > 200 and bottom[0] < 60
