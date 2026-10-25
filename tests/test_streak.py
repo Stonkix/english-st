@@ -44,16 +44,16 @@ def test_gap_without_tasks_keeps(db):
 
 
 def test_gap_day_with_assignment_resets(db):
+    from app.models import GroupPool
+
     teacher, group, student = moscow_setup(db)
     ids = add_pool(db, teacher, group, 1)
-    db.get(Question, ids[0]).is_active = False  # пул пуст: заданий нет
+    db.query(GroupPool).delete()  # пулов нет, только назначение на пропущенный день
     db.commit()
-    test = add_test(db, teacher, ids)
     set_streak(db, student, 3, DAY - timedelta(days=2))
-    assert not had_tasks(db, student, DAY - timedelta(days=1))
-    assign(db, add_test(db, teacher, [add_pool(db, teacher, group, 1)[0]]), day=DAY - timedelta(days=1), student=student)
-    assert had_tasks(db, student, DAY - timedelta(days=1))
-    assert test is not None
+    assert effective_streak(db, student, DAY) == 3
+    assign(db, add_test(db, teacher, ids), day=DAY - timedelta(days=1), student=student)
+    assert effective_streak(db, student, DAY) == 0
 
 
 def test_best_kept(db):
