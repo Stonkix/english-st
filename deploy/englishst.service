@@ -1,0 +1,28 @@
+# /etc/systemd/system/englishst.service
+# Третий сайт на сервере: свой порт (8002), свой пользователь, своя база и фото
+# (rieltor — 8000, artsite — 8001).
+[Unit]
+Description=English school site (FastAPI)
+After=network.target
+
+[Service]
+User=englishst
+Group=englishst
+WorkingDirectory=/srv/englishst
+# Ровно один воркер: чат (этап 3) живёт в памяти процесса — комнаты и подключения WebSocket
+# не разделяются между процессами. Два воркера сломают доставку сообщений.
+ExecStart=/srv/englishst/.venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 --port 8002 --workers 1 \
+    --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=always
+RestartSec=3
+
+# Минимальная изоляция: писать можно только в БД и фото (оба каталога должны существовать)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/englishst/data /srv/englishst/media
+
+[Install]
+WantedBy=multi-user.target
