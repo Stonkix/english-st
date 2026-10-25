@@ -36,7 +36,7 @@ FastAPI + SQLite + Jinja2 + HTMX + sqladmin. Без Node, без сборки ф
 
 ```bat
 py -3.12 -m venv .venv
-.venv\Scripts\pip install -r requirements-dev.txt
+.venv\Scripts\pip install -r requirements-dev.txt -c constraints.txt
 copy .env.example .env
 ```
 
@@ -73,7 +73,7 @@ sudo -u englishst git clone <АДРЕС_РЕПОЗИТОРИЯ> .
 # Приватный репозиторий: нужен доступ без пароля - токен в адресе (https://<токен>@github.com/...) или deploy-ключ в /srv/englishst/.ssh.
 # Тот же доступ нужен update.sh (git pull от имени englishst).
 sudo -u englishst python3 -m venv .venv
-sudo -u englishst .venv/bin/pip install -r requirements.txt
+sudo -u englishst .venv/bin/pip install -r requirements.txt -c constraints.txt
 sudo -u englishst mkdir -p data media
 # Права: БД и фото детей закрыты от посторонних пользователей сервера; nginx (www-data) читает media через группу
 sudo chmod 711 /srv/englishst

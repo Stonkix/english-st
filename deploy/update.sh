@@ -10,7 +10,7 @@ fi
 
 cd /srv/englishst
 sudo -u englishst git pull --ff-only
-sudo -u englishst .venv/bin/pip install -r requirements.txt
+sudo -u englishst .venv/bin/pip install -r requirements.txt -c constraints.txt
 sudo -u englishst .venv/bin/alembic upgrade head
 systemctl restart englishst
 systemctl is-active englishst

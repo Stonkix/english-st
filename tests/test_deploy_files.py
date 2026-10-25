@@ -33,9 +33,37 @@ def test_nginx_limits_and_headers():
     assert "alias /srv/englishst/media/;" in n
 
 
+def test_429_page_is_neutral():
+    """429 отдаётся на любой адрес (не только на вход): текст не про вход, ссылка на главную."""
+    p = _read("app/static/429.html")
+    assert "Слишком много запросов. Подождите минуту и попробуйте снова." in p
+    assert 'href="/"' in p and "/login" not in p and "входа" not in p
+    assert "/static/css/app.css?v=" in p
+
+
 def test_update_runs_migrations():
     u = _read("deploy/update.sh")
     assert "alembic upgrade head" in u and "git pull" in u
+
+
+def test_backup_runs_python_as_app_user_and_checks_db():
+    b = _read("deploy/backup.sh")
+    guard = b.index('[ -f "$APP/data/site.db" ]')
+    run = b.index("runuser -u englishst --")
+    assert guard < run < b.index("import sqlite3")  # проверка файла раньше, чем sqlite что-то откроет
+    assert "exit 1" in b[guard:run] and "trap " in b
+    assert "mv " in b and "chown root:root" in b  # готовый файл переезжает в $DEST уже от root
+
+
+def test_pip_installs_use_constraints():
+    assert "-r requirements.txt -c constraints.txt" in _read("deploy/update.sh")
+    assert "-r requirements.txt -c constraints.txt" in _read("README.md")
+    assert "-c constraints.txt" in _read("README.md").split("requirements-dev.txt")[1].split("\n")[0]
+    pins = [l for l in _read("constraints.txt").splitlines() if l and not l.startswith("#")]
+    names = {l.split("==")[0].lower() for l in pins}
+    assert all("==" in l for l in pins)
+    for pkg in ("fastapi", "sqlalchemy", "sqladmin", "pillow", "pillow_heif", "uvicorn", "alembic"):
+        assert pkg in names
 
 
 def test_backup_and_env_example():
