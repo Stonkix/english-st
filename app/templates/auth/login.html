@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Вход — English ST{% endblock %}
+
+{% block content %}
+<section class="page auth-page">
+  <p class="auth-brand">English&nbsp;ST</p>
+  <form class="card" method="post" action="/login">
+    <h1>Привет! Давай заниматься</h1>
+    {% if error %}
+    <div class="alert-error" role="alert">
+      <p>{{ error }}</p>
+      {% if hint %}<p>Проверьте раскладку: пароль набирается латиницей</p>{% endif %}
+    </div>
+    {% endif %}
+    <div class="field">
+      <label for="login">Логин</label>
+      <input id="login" name="login" value="{{ login }}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+    </div>
+    <div class="field">
+      <label for="password">Пароль</label>
+      <div class="input-wrap">
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button class="input-toggle" type="button" data-toggle-password="password" aria-controls="password" aria-pressed="false" hidden>показать</button>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-block" type="submit">Войти</button>
+    <p class="muted auth-hint">Забыли пароль? Попросите учителя его сбросить</p>
+  </form>
+</section>
+{% endblock %}

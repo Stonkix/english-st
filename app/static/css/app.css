@@ -346,6 +346,62 @@ a.list-item:active { background: var(--blue-light); }
   .tabbar-icon { width: 34px; height: 34px; }
 }
 
+/* ---------- Вход и смена пароля ---------- */
+.auth-page { padding-top: 8vh; }
+.auth-brand {
+  color: var(--green);
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: -.01em;
+  text-align: center;
+}
+.auth-page .field { margin-bottom: 0; } /* промежутки задаёт gap карточки */
+.auth-page form .btn-block { margin-top: 4px; }
+.auth-hint { font-size: 16px; text-align: center; }
+.alert-error p + p { margin-top: 4px; }
+
+/* поле пароля с кнопкой «показать» внутри */
+.input-wrap { position: relative; }
+.input-wrap input { padding-right: 112px; }
+.input-toggle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  bottom: 4px;
+  min-width: 96px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--blue);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.input-toggle:hover { background: var(--blue-light); }
+
+/* правила пароля: выполненное получает зелёную галочку (цвет не единственный признак) */
+.rules { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.rules li { position: relative; padding-left: 32px; color: var(--muted); font-size: 16px; font-weight: 700; }
+.rules li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 3px;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  background: #fff;
+  text-align: center;
+  font-size: 13px;
+  line-height: 16px;
+}
+.rules li.is-ok { color: var(--green-dark); }
+.rules li.is-ok::before { content: "✓"; border-color: var(--green); background: var(--green); color: #fff; }
+
 /* ---------- Страницы ошибок ---------- */
 .status-page { align-items: center; padding-top: 12vh; text-align: center; }
 .status-code {

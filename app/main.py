@@ -6,17 +6,21 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import models  # noqa: F401 — регистрирует таблицы в metadata
-from app.auth.deps import LoginRequired, PasswordChangeRequired
+from app.auth.deps import LoginRequired, PasswordChangeRequired, get_current_user
 from app.auth.sessions import COOKIE_NAME, set_session_cookie
 from app.config import BASE_DIR, Settings, settings
+from app.db import SessionLocal
+from app.routes.auth import router as auth_router
 from app.templating import templates
 
 logging.basicConfig(level=logging.INFO)
 
 _PLACEHOLDERS = ("change-me",)
+_UNRESOLVED = object()
 
 
 def check_production_secrets(s: Settings) -> None:
@@ -94,14 +98,31 @@ async def password_change_required(request: Request, exc: PasswordChangeRequired
     return _redirect(request, "/password/new")
 
 
+def _error_page_user(request: Request):
+    """Пользователь для меню на странице ошибки: уже определённый запросом или найденный по cookie."""
+    user = getattr(request.state, "user", _UNRESOLVED)
+    if user is not _UNRESOLVED:
+        return user
+    try:
+        with SessionLocal() as db:
+            return get_current_user(request, db)
+    except Exception:  # страница ошибки не должна сама падать
+        logging.exception("Не удалось определить пользователя для страницы ошибки")
+        return None
+
+
 @app.exception_handler(StarletteHTTPException)
 async def http_error(request: Request, exc: StarletteHTTPException):
+    user = await run_in_threadpool(_error_page_user, request)  # обращение к БД не блокирует цикл событий
     if exc.status_code == 404:
-        return templates.TemplateResponse(request, "404.html", status_code=404)
+        return templates.TemplateResponse(request, "404.html", {"user": user}, status_code=404)
     return templates.TemplateResponse(
-        request, "error.html", {"code": exc.status_code},
+        request, "error.html", {"code": exc.status_code, "user": user},
         status_code=exc.status_code, headers=exc.headers,
     )
+
+
+app.include_router(auth_router)
 
 
 @app.get("/healthz")

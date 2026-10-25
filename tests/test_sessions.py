@@ -182,10 +182,7 @@ def probe():
     def t_admin(user=Depends(deps.require_role("admin"))):
         return {"role": user.role}
 
-    @router.get("/password/new")
-    def t_password(user=Depends(deps.require_user)):
-        return {"ok": True}
-
+    # настоящий /password/new уже есть в приложении; настоящий /logout — только POST, а здесь GET
     @router.get("/logout")
     def t_logout(user=Depends(deps.require_user)):
         return {"ok": True}
