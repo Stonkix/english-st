@@ -13,7 +13,13 @@
     <p class="muted profile-note">Имя и фамилию меняет учитель.</p>
   </div>
 
-  <form class="card" method="post" action="/profile/avatar" enctype="multipart/form-data">
+  {% if avatar_lock %}
+  <div class="card">
+    <h2>Моё фото</h2>
+    <div class="alert-error" role="status"><p>{{ avatar_lock }}</p></div>
+  </div>
+  {% else %}
+  <form class="card" method="post" action="/profile/avatar" enctype="multipart/form-data" data-once>
     <h2>Моё фото</h2>
     {% if avatar_error %}
     <div class="alert-error" role="alert"><p>{{ avatar_error }}</p></div>
@@ -28,6 +34,7 @@
   <form method="post" action="/profile/avatar/delete">
     <button class="btn btn-secondary btn-block" type="submit">Убрать фото</button>
   </form>
+  {% endif %}
   {% endif %}
 
   <form class="card" method="post" action="/profile/password">

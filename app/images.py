@@ -13,9 +13,10 @@ from app.config import settings
 
 register_heif_opener()  # фото с iPhone в формате HEIC/HEIF открываются как обычные картинки
 
-MAX_UPLOAD_BYTES = 15 * 1024 * 1024
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+AVATAR_MAX_BYTES = 400 * 1024  # потолок размера готового файла
 AVATAR_SIZE = 512
-WEBP_QUALITY = 85
+WEBP_QUALITIES = (85, 75, 65, 55, 45, 35, 25, 15)  # по порядку, пока файл не уложится в AVATAR_MAX_BYTES
 # Телефоны снимают до ~50 Мп (48 Мп точно проходят). Больше — отказ: полный кадр в памяти занимает 4 байта на пиксель
 MAX_PIXELS = 50_000_000
 _CHUNK = 256 * 1024
@@ -49,7 +50,7 @@ def read_limited(stream: BinaryIO) -> bytes:
             return b"".join(parts)
         parts.append(chunk)
         total += len(chunk)
-    raise InvalidImage("Файл больше 15 МБ")
+    raise InvalidImage("Файл больше 10 МБ")
 
 
 def _shrink(img: Image.Image) -> Image.Image:
@@ -75,7 +76,7 @@ def _shrink(img: Image.Image) -> Image.Image:
 
 def _decode_square(data: bytes) -> Image.Image:
     if not data or len(data) > MAX_UPLOAD_BYTES:
-        raise InvalidImage("Пустой файл или больше 15 МБ")
+        raise InvalidImage("Пустой файл или больше 10 МБ")
     try:
         img = Image.open(BytesIO(data))
         if img.width * img.height > MAX_PIXELS:
@@ -106,7 +107,12 @@ def save_avatar(user_id: int, data: bytes) -> str:
     rel = f"avatars/{user_id}/{secrets.token_hex(6)}.webp"
     target = settings.media_dir / rel
     target.parent.mkdir(parents=True, exist_ok=True)
-    img.save(target, "WEBP", quality=WEBP_QUALITY, method=4)
+    for quality in WEBP_QUALITIES:
+        buf = BytesIO()
+        img.save(buf, "WEBP", quality=quality, method=4)
+        if buf.tell() <= AVATAR_MAX_BYTES:
+            break
+    target.write_bytes(buf.getvalue())
     return rel
 
 

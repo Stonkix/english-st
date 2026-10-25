@@ -51,6 +51,58 @@
   </form>
 
   <div class="card">
+    <h2>Фото</h2>
+    {% if avatar_error %}
+    <div class="alert-error" role="alert"><p>{{ avatar_error }}</p></div>
+    {% endif %}
+    {% if student.avatar %}
+    <form method="post" action="/teacher/students/{{ student.id }}/avatar/delete"
+          data-confirm="Удалить текущее фото насовсем? В предыдущие оно не попадёт." data-once>
+      <button class="btn btn-danger btn-block" type="submit">Удалить текущее фото</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/teacher/students/{{ student.id }}/avatar" enctype="multipart/form-data" data-once>
+      <div class="field">
+        <label for="photo">Загрузить ученику новое фото</label>
+        <input id="photo" name="photo" type="file" accept="image/*,.heic,.heif" required>
+      </div>
+      <button class="btn btn-primary btn-block" type="submit">Загрузить фото</button>
+    </form>
+
+    <h3>Запрет менять фото</h3>
+    {% if photo_locked %}<p class="muted">{{ photo_lock }}</p>{% else %}<p class="muted">Ученик может менять фото.</p>{% endif %}
+    <form method="post" action="/teacher/students/{{ student.id }}/avatar/lock" data-once>
+      <div class="field">
+        <label for="lock-period">Срок запрета</label>
+        <select id="lock-period" name="period">
+          <option value="off"{% if not photo_locked %} selected{% endif %}>Не запрещать</option>
+          <option value="1">На 1 день</option>
+          <option value="7">На 7 дней</option>
+          <option value="30">На 30 дней</option>
+          <option value="forever"{% if student.avatar_locked_forever %} selected{% endif %}>Навсегда</option>
+        </select>
+      </div>
+      <button class="btn btn-secondary btn-block" type="submit">Применить</button>
+    </form>
+
+    <h3>Предыдущие фото</h3>
+    {% if photo_history %}
+    {% for item in photo_history %}
+    <div class="photo-history-item">
+      <span class="avatar avatar-lg"><img src="/media/{{ item.path }}" alt="" width="112" height="112" loading="lazy"></span>
+      <p class="muted">Заменено {{ item.created_at|msk }}</p>
+      <form method="post" action="/teacher/students/{{ student.id }}/avatar/history/{{ item.id }}/delete"
+            data-confirm="Удалить это фото насовсем?" data-once>
+        <button class="btn btn-danger btn-block" type="submit">Удалить</button>
+      </form>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="muted">Пока нет.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
     <h2>Доступ</h2>
     {% if locked %}
     <form method="post" action="/teacher/students/{{ student.id }}/unlock">
@@ -58,7 +110,7 @@
     </form>
     {% endif %}
     <form method="post" action="/teacher/students/{{ student.id }}/reset-password"
-          data-confirm="Сбросить пароль? Ученик выйдет из аккаунта на всех устройствах.">
+          data-confirm="Сбросить пароль? Ученик выйдет из аккаунта на всех устройствах." data-once>
       <button class="btn btn-secondary btn-block" type="submit">Сбросить пароль</button>
     </form>
     {% if student.is_active %}

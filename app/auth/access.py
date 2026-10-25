@@ -13,3 +13,10 @@ def can_view_avatar(viewer: User, owner: User) -> bool:
     if viewer.group is not None:
         return owner.group_id == viewer.group_id or owner.id == viewer.group.teacher_id
     return False
+
+
+def can_view_previous_avatar(viewer: User, owner: User) -> bool:
+    """Прежние фото — только админ и учитель группы владельца (не сам ученик и не одногруппники)."""
+    if viewer.role == "admin":
+        return True
+    return owner.group is not None and owner.group.teacher_id == viewer.id

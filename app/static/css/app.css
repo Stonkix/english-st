@@ -350,6 +350,8 @@ a.list-item:active { background: var(--blue-light); }
 .profile-head { align-items: center; text-align: center; gap: 8px; }
 .profile-head .avatar-lg { margin-bottom: 8px; }
 .profile-note { font-size: 16px; }
+.photo-history-item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.teacher-page input[type="file"] { max-width: 100%; }
 .profile-page input[type="file"]::file-selector-button {
   margin-right: 12px;
   padding: 8px 14px;

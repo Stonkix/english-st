@@ -1,16 +1,28 @@
 """Учитель: группы, ученики, временные пароли, сброс, разблокировка и отключение."""
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
+from app.avatars import (
+    LOCK_PERIODS,
+    avatar_locked,
+    history,
+    lock_message,
+    read_photo,
+    remove_history_item,
+    replace_avatar,
+    set_avatar_lock,
+    teacher_remove_avatar,
+)
 from app.auth.deps import require_role
 from app.auth.login_guard import is_locked, unlock
 from app.auth.passwords import generate_temp_password, hash_password
 from app.auth.sessions import revoke_user_sessions
 from app.db import get_db
+from app.images import InvalidImage
 from app.logins import is_valid_login, normalize_login, suggest_login, unique_login
 from app.models import Group, User
 from app.templating import templates
@@ -26,6 +38,7 @@ NAME_REQUIRED = "Введите имя и фамилию"
 NAME_TOO_LONG = f"Имя и фамилия — не длиннее {NAME_MAX} символов"
 LOGIN_INVALID = "Логин: латинские буквы, цифры, точка, дефис, подчёркивание; от 3 до 32 символов"
 LOGIN_TAKEN = "Логин уже занят"
+BAD_IMAGE = "Не получилось открыть картинку. Попробуйте другое фото."
 
 
 # ---------- доступ ----------
@@ -111,7 +124,15 @@ def _student_form(request: Request, user: User, group: Group, values: dict, erro
 
 
 def _student_page(request: Request, db: DbSession, user: User, student: User, **context):
-    context.update(user=user, student=student, groups=_groups_of(db, user), locked=is_locked(db, student.login))
+    context.update(
+        user=user,
+        student=student,
+        groups=_groups_of(db, user),
+        locked=is_locked(db, student.login),
+        photo_history=history(db, student),
+        photo_lock=lock_message(student),
+        photo_locked=avatar_locked(student),
+    )
     return templates.TemplateResponse(request, "teacher/student.html", context)
 
 
@@ -303,4 +324,53 @@ def activate_student(student_id: int, user: User = Depends(teacher_only), db: Db
     student = own_student(db, user, student_id)
     student.is_active = True
     db.commit()
+    return _to_student(student)
+
+
+# ---------- фото ученика (модерация) ----------
+
+
+@router.post("/students/{student_id}/avatar")
+def upload_student_avatar(
+    student_id: int,
+    request: Request,
+    photo: UploadFile | None = File(None),
+    user: User = Depends(teacher_only),
+    db: DbSession = Depends(get_db),
+):
+    student = own_student(db, user, student_id)
+    try:
+        replace_avatar(db, student, read_photo(photo))  # запрет смены учителя не касается
+    except InvalidImage:
+        return _student_page(request, db, user, student, avatar_error=BAD_IMAGE)
+    return _to_student(student)
+
+
+@router.post("/students/{student_id}/avatar/delete")
+def delete_student_avatar(student_id: int, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
+    student = own_student(db, user, student_id)
+    teacher_remove_avatar(db, student)
+    return _to_student(student)
+
+
+@router.post("/students/{student_id}/avatar/history/{item_id}/delete")
+def delete_student_avatar_history(
+    student_id: int, item_id: int, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)
+):
+    student = own_student(db, user, student_id)
+    try:
+        remove_history_item(db, student, item_id)
+    except ValueError:
+        raise HTTPException(404) from None
+    return _to_student(student)
+
+
+@router.post("/students/{student_id}/avatar/lock")
+def lock_student_avatar(
+    student_id: int, period: str = Form("off"), user: User = Depends(teacher_only), db: DbSession = Depends(get_db)
+):
+    student = own_student(db, user, student_id)
+    if period != "off" and period not in LOCK_PERIODS:
+        raise HTTPException(422, "Неизвестный срок")
+    set_avatar_lock(db, student, period)
     return _to_student(student)

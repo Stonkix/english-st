@@ -62,7 +62,7 @@ def test_avatar_strips_exif_gps(client, db):
     assert not Image.open(BytesIO(raw)).getexif()
 
 
-def test_avatar_replaced_removes_old_file(client, db):
+def test_avatar_replaced_keeps_old_file_in_history(client, db):
     u = make_user(db, login="kid")
     login_as(client, "kid")
     upload(client, jpeg(600, 600))
@@ -71,7 +71,7 @@ def test_avatar_replaced_removes_old_file(client, db):
     assert old.exists()
     upload(client, jpeg(600, 600))
     db.refresh(u)
-    assert (settings.media_dir / u.avatar).exists() and not old.exists()
+    assert (settings.media_dir / u.avatar).exists() and old.exists()  # прежнее ушло в историю для учителя
 
 
 def test_avatar_delete(client, db):
@@ -83,7 +83,7 @@ def test_avatar_delete(client, db):
     r = client.post("/profile/avatar/delete")
     assert r.status_code == 200
     db.refresh(u)
-    assert u.avatar is None and not path.exists()
+    assert u.avatar is None and path.exists()  # файл остался в истории для учителя
     assert "/media/" not in r.text
 
 
@@ -112,7 +112,7 @@ def test_avatar_truncated_image(client, db):
 def test_avatar_too_big(client, db):
     make_user(db, login="kid")
     login_as(client, "kid")
-    r = upload(client, b"0" * (15 * 1024 * 1024 + 1))
+    r = upload(client, b"0" * (10 * 1024 * 1024 + 1))
     assert r.status_code == 200 and BAD_IMAGE in r.text
 
 

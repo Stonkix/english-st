@@ -1,6 +1,6 @@
 """Профиль: фото, смена пароля."""
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session as DbSession
 
@@ -8,7 +8,8 @@ from app.auth.deps import require_user
 from app.auth.passwords import hash_password, new_password_errors
 from app.auth.sessions import COOKIE_NAME, revoke_user_sessions
 from app.db import get_db
-from app.images import InvalidImage, delete_media, read_limited, save_avatar
+from app.avatars import avatar_locked, lock_message, read_photo, replace_avatar, student_remove_avatar
+from app.images import InvalidImage
 from app.models import User
 from app.routes.auth import check_password
 from app.templating import templates
@@ -21,7 +22,8 @@ SAME_PASSWORD = "Новый пароль совпадает с текущим"
 
 
 def _page(request: Request, user: User, **context):
-    return templates.TemplateResponse(request, "profile.html", {"user": user, **context})
+    lock = lock_message(user) if user.role == "student" else None  # запрет касается только учеников
+    return templates.TemplateResponse(request, "profile.html", {"user": user, "avatar_lock": lock, **context})
 
 
 @router.get("/profile")
@@ -52,6 +54,12 @@ def change_password(
     return _page(request, user, password_ok=True)
 
 
+def _require_unlocked(user: User) -> None:
+    """Запрет учителя действует только на ученика; проверка на сервере, не только скрытые формы."""
+    if user.role == "student" and avatar_locked(user):
+        raise HTTPException(403, "Учитель запретил менять фото")
+
+
 @router.post("/profile/avatar")
 def upload_avatar(
     request: Request,
@@ -59,32 +67,16 @@ def upload_avatar(
     user: User = Depends(require_user),
     db: DbSession = Depends(get_db),
 ):
+    _require_unlocked(user)
     try:
-        if photo is None:
-            raise InvalidImage("Файл не выбран")
-        new_path = save_avatar(user.id, read_limited(photo.file))
+        replace_avatar(db, user, read_photo(photo))
     except InvalidImage:
         return _page(request, user, avatar_error=BAD_IMAGE)
-
-    old_path = user.avatar
-    user.avatar = new_path
-    try:
-        db.commit()
-    except Exception:
-        delete_media(new_path)  # в БД запись не легла — новый файл никому не нужен
-        raise
-    delete_media(old_path)
     return RedirectResponse("/profile", status_code=303)
 
 
 @router.post("/profile/avatar/delete")
-def delete_avatar(
-    request: Request,
-    user: User = Depends(require_user),
-    db: DbSession = Depends(get_db),
-):
-    old_path = user.avatar
-    user.avatar = None
-    db.commit()
-    delete_media(old_path)
+def delete_avatar(user: User = Depends(require_user), db: DbSession = Depends(get_db)):
+    _require_unlocked(user)
+    student_remove_avatar(db, user)  # прежнее фото сохраняется для учителя
     return RedirectResponse("/profile", status_code=303)
