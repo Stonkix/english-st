@@ -113,12 +113,18 @@ def test_sqladmin_requires_admin_session(client, db):
 def test_sqladmin_hides_password_hash_and_create(client, db):
     admin(client, db)
     u = make_user(db, role="student", login="kid1")
-    assert "password_hash" not in client.get("/admin/user/list").text
-    assert "$argon2" not in client.get("/admin/user/list").text
-    details = client.get(f"/admin/user/details/{u.id}")
-    assert details.status_code == 200 and "$argon2" not in details.text
-    edit = client.get(f"/admin/user/edit/{u.id}")
-    assert edit.status_code == 200 and "password_hash" not in edit.text
+    pages = {
+        "list": client.get("/admin/user/list"),
+        "details": client.get(f"/admin/user/details/{u.id}"),
+        "edit": client.get(f"/admin/user/edit/{u.id}"),
+        "csv": client.get("/admin/user/export/csv"),
+        "json": client.get("/admin/user/export/json"),
+    }
+    for name, r in pages.items():
+        assert r.status_code == 200, name
+        assert "kid1" in r.text, name  # страница с данными, а не пустая
+        assert u.password_hash not in r.text, name
+        assert "scrypt$" not in r.text and "password_hash" not in r.text, name
     assert client.get("/admin/user/create", follow_redirects=False).status_code in (302, 303, 403)
     assert client.get("/admin/group/list").status_code == 200
 
