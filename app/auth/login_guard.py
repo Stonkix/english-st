@@ -40,6 +40,19 @@ def blocked_until(db: Session, login: str, ip: str, now: datetime | None = None)
     )
 
 
+def is_locked(db: Session, login: str, now: datetime | None = None) -> bool:
+    """Заблокирован ли логин хотя бы на одном IP (для значка у учителя). Блок самого IP не считается."""
+    now = now or utcnow()
+    return (
+        db.scalar(
+            select(LoginAttempt.key)
+            .where(LoginAttempt.key.startswith(f"{login}|", autoescape=True), LoginAttempt.blocked_until > now)
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def _row_exists(db: Session, key: str) -> bool:
     return db.scalar(select(LoginAttempt.key).where(LoginAttempt.key == key)) is not None
 

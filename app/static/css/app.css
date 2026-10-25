@@ -361,8 +361,23 @@ a.list-item:active { background: var(--blue-light); }
   font-weight: 800;
   cursor: pointer;
 }
-.profile-page .field { margin-bottom: 0; } /* промежутки задаёт gap карточки */
-.profile-page form .btn-block { margin-top: 4px; }
+.profile-page .field, .teacher-page .field { margin-bottom: 0; } /* промежутки задаёт gap карточки */
+.profile-page form .btn-block, .teacher-page form .btn-block { margin-top: 4px; }
+
+/* ---------- Учитель: группы и ученики ---------- */
+.back-link { align-self: flex-start; padding: 8px 0; font-size: 17px; }
+.list-item-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.profile-head .list-item-badges { justify-content: center; margin-top: 0; }
+.teacher-page .field small { font-size: 15px; }
+.teacher-page details.card { display: block; } /* иначе gap карточки оставляет пустое место под закрытым блоком */
+.teacher-page details > summary {
+  min-height: 32px;
+  font-size: 18px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.teacher-page details[open] > summary { margin-bottom: 16px; }
+.teacher-page details form { display: flex; flex-direction: column; gap: 16px; }
 
 /* ---------- Вход и смена пароля ---------- */
 .auth-page { padding-top: 8vh; }

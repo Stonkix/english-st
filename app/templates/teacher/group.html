@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{{ group.name }} — English ST{% endblock %}
+
+{% block content %}
+<section class="page teacher-page">
+  <a class="back-link" href="/teacher">← Все группы</a>
+  <div>
+    <h1>{{ group.name }}</h1>
+    {% if user.role == "admin" %}<p class="muted">Учитель: {{ group.teacher.full_name }}</p>{% endif %}
+  </div>
+
+  <a class="btn btn-primary btn-block" href="/teacher/groups/{{ group.id }}/students/new">Добавить ученика</a>
+
+  {% if students %}
+  <ul class="list">
+    {% for s in students %}
+    {% set photo = s|avatar_url %}
+    <li data-login="{{ s.login }}"><a class="list-item" href="/teacher/students/{{ s.id }}">
+      <span class="avatar" aria-hidden="true">
+        {%- if photo %}<img src="{{ photo }}" alt="" width="48" height="48">{% else %}{{ (s.first_name[:1] ~ s.last_name[:1])|upper }}{% endif -%}
+      </span>
+      <span class="list-item-main">
+        <strong>{{ s.first_name }} {{ s.last_name }}</strong>
+        <small>{{ s.login }}</small>
+        {% if flags[s.id].locked or not s.is_active %}
+        <span class="list-item-badges">
+          {% if flags[s.id].locked %}<span class="badge badge-red">заблокирован</span>{% endif %}
+          {% if not s.is_active %}<span class="badge">не активен</span>{% endif %}
+        </span>
+        {% endif %}
+      </span>
+    </a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="card"><p class="lead">В группе пока нет учеников. Нажмите «Добавить ученика».</p></div>
+  {% endif %}
+
+  <details class="card"{% if rename_error %} open{% endif %}>
+    <summary>Переименовать группу</summary>
+    <form method="post" action="/teacher/groups/{{ group.id }}/rename" data-once>
+      {% if rename_error %}
+      <div class="alert-error" role="alert"><p>{{ rename_error }}</p></div>
+      {% endif %}
+      <div class="field">
+        <label for="group-name">Название группы</label>
+        <input id="group-name" name="name" value="{{ rename_value if rename_value is defined else group.name }}" maxlength="50" autocomplete="off" required>
+      </div>
+      <button class="btn btn-secondary btn-block" type="submit">Сохранить название</button>
+    </form>
+  </details>
+</section>
+{% endblock %}

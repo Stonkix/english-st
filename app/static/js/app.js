@@ -44,5 +44,25 @@ function initPasswordRules() {
   });
 }
 
+// ---------- Подтверждение опасных действий ----------
+// <form data-confirm="Текст вопроса"> — без согласия форма не отправляется (inline-обработчиков нет: CSP).
+document.addEventListener("submit", (event) => {
+  const message = event.target instanceof HTMLFormElement ? event.target.dataset.confirm : undefined;
+  if (message && !window.confirm(message)) event.preventDefault();
+});
+
+// ---------- Защита от двойного нажатия ----------
+// <form data-once>: после отправки кнопка блокируется, чтобы второй тап не создал дубль.
+// Если страница вернулась из кэша «назад», кнопку возвращаем к жизни.
+document.addEventListener("submit", (event) => {
+  const form = event.target;
+  if (event.defaultPrevented || !(form instanceof HTMLFormElement) || form.dataset.once === undefined) return;
+  // блокируем после того, как браузер соберёт данные формы
+  setTimeout(() => form.querySelectorAll("[type=submit]").forEach((b) => { b.disabled = true; }), 0);
+});
+window.addEventListener("pageshow", () => {
+  document.querySelectorAll("form[data-once] [type=submit]").forEach((b) => { b.disabled = false; });
+});
+
 initPasswordToggles();
 initPasswordRules();

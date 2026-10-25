@@ -155,3 +155,31 @@ def test_parallel_burst_does_not_exceed_limit(db):
     assert results.count(None) == 4  # блок наступает на 5-й неудаче, остальные видят его
     assert results.count(T0 + timedelta(minutes=10)) == 8
     assert db.get(LoginAttempt, "ivan|7.7.7.7").failures == 5  # после блока счётчик не растёт
+
+
+def test_is_locked_any_ip(db):
+    assert g.is_locked(db, "ivan", now=T0) is False
+    for _ in range(5):
+        g.register_failure(db, "ivan", "1.1.1.1", now=T0)
+    assert g.is_locked(db, "ivan", now=T0) is True  # блок на любом IP считается
+    assert g.is_locked(db, "ivan", now=T0 + timedelta(minutes=10, seconds=1)) is False
+    assert g.is_locked(db, "petr", now=T0) is False
+
+
+def test_is_locked_ignores_ip_block_and_similar_logins(db):
+    for _ in range(20):
+        g.register_failure(db, "other", "3.3.3.3", now=T0)  # блок самого IP, не логина
+    assert g.is_locked(db, "ivan", now=T0) is False
+    for _ in range(5):
+        g.register_failure(db, "ivan2", "1.1.1.1", now=T0)
+    assert g.is_locked(db, "ivan", now=T0) is False  # «ivan2|...» - другой логин
+    for _ in range(5):
+        g.register_failure(db, "a_b", "1.1.1.1", now=T0)
+    assert g.is_locked(db, "axb", now=T0) is False  # «_» не подстановочный знак
+
+
+def test_is_locked_cleared_by_unlock(db):
+    for _ in range(5):
+        g.register_failure(db, "ivan", "1.1.1.1", now=T0)
+    g.unlock(db, "ivan")
+    assert g.is_locked(db, "ivan", now=T0) is False

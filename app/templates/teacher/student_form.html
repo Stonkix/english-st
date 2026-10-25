@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Новый ученик — English ST{% endblock %}
+
+{% block content %}
+<section class="page teacher-page">
+  <a class="back-link" href="/teacher/groups/{{ group.id }}">← {{ group.name }}</a>
+  <form class="card" method="post" action="/teacher/groups/{{ group.id }}/students" data-once>
+    <h1>Новый ученик</h1>
+    {% if errors %}
+    <div class="alert-error" role="alert">
+      {% for e in errors %}<p>{{ e }}</p>{% endfor %}
+    </div>
+    {% endif %}
+    <div class="field">
+      <label for="first-name">Имя</label>
+      <input id="first-name" name="first_name" value="{{ values.first_name }}" maxlength="50" autocomplete="off" required
+             hx-get="/teacher/login-suggest" hx-trigger="change" hx-include="#first-name, #last-name" hx-target="#login" hx-swap="outerHTML">
+    </div>
+    <div class="field">
+      <label for="last-name">Фамилия</label>
+      <input id="last-name" name="last_name" value="{{ values.last_name }}" maxlength="50" autocomplete="off" required
+             hx-get="/teacher/login-suggest" hx-trigger="change" hx-include="#first-name, #last-name" hx-target="#login" hx-swap="outerHTML">
+    </div>
+    <div class="field">
+      <label for="login">Логин для входа</label>
+      {% with login=values.login %}{% include "partials/login_suggest.html" %}{% endwith %}
+      <small class="muted">Латиницей. Подставляется сам по имени и фамилии — можно исправить.</small>
+    </div>
+    <button class="btn btn-primary btn-block" type="submit">Создать ученика</button>
+  </form>
+</section>
+{% endblock %}
