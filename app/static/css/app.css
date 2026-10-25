@@ -1,0 +1,401 @@
+/* English ST — стили в духе Duolingo: крупно, ярко, объёмные кнопки. Мобильный первым. */
+
+/* ---------- Шрифт Nunito (свои файлы, лицензия OFL — fonts/OFL.txt) ---------- */
+@font-face { font-family: "Nunito"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("../fonts/nunito-cyrillic-400-normal.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "Nunito"; font-style: normal; font-weight: 700; font-display: swap;
+  src: url("../fonts/nunito-cyrillic-700-normal.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "Nunito"; font-style: normal; font-weight: 800; font-display: swap;
+  src: url("../fonts/nunito-cyrillic-800-normal.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "Nunito"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("../fonts/nunito-latin-400-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Nunito"; font-style: normal; font-weight: 700; font-display: swap;
+  src: url("../fonts/nunito-latin-700-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Nunito"; font-style: normal; font-weight: 800; font-display: swap;
+  src: url("../fonts/nunito-latin-800-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+/* ---------- Цвета и размеры ---------- */
+:root {
+  --green: #58CC02;
+  --green-dark: #58A700;
+  --green-light: #D7FFB8;
+  --blue: #1CB0F6;
+  --blue-dark: #1899D6;
+  --blue-light: #DDF4FF;
+  --blue-border: #84D8FF;
+  --red: #FF4B4B;
+  --red-dark: #EA2B2B;
+  --red-light: #FFDFE0;
+  --yellow: #FFC800;
+  --text: #4B4B4B;
+  --muted: #777777;
+  --faint: #AFAFAF;
+  --border: #E5E5E5;
+  --bg-soft: #F7F7F7;
+  --radius: 16px;
+  --radius-sm: 12px;
+  --tabbar-h: 72px;
+  --sidebar-w: 256px;
+  color-scheme: light;
+}
+
+/* ---------- Основа ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: #fff;
+  color: var(--text);
+  font-family: "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 18px;
+  line-height: 1.5;
+  -webkit-tap-highlight-color: transparent;
+}
+body.has-nav { padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); }
+
+h1, h2, h3 { margin: 0; color: var(--text); font-weight: 800; line-height: 1.25; }
+h1 { font-size: 28px; }
+h2 { font-size: 22px; }
+h3 { font-size: 19px; }
+p { margin: 0; }
+a { color: var(--blue); font-weight: 700; text-decoration: none; }
+img, svg { display: block; max-width: 100%; }
+:focus-visible { outline: 3px solid var(--blue-border); outline-offset: 2px; }
+.lead { font-size: 20px; }
+.muted { color: var(--muted); }
+
+/* ---------- Раскладка ---------- */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  background: #fff;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* ---------- Кнопки: объёмные, с нижней тенью, «вдавливаются» при нажатии ---------- */
+.btn {
+  --shadow: var(--green-dark);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 12px 24px;
+  margin-bottom: 4px; /* место под тень, чтобы она не налезала на соседей */
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--green);
+  color: #fff;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 4px 0 var(--shadow);
+  transition: transform .08s ease, box-shadow .08s ease, filter .15s ease;
+  touch-action: manipulation;
+  align-self: flex-start; /* в колонке .card/.page не растягивается; на всю ширину — .btn-block */
+}
+.btn:hover { filter: brightness(1.05); }
+.btn:active { transform: translateY(4px); box-shadow: 0 0 0 var(--shadow); }
+.btn-primary { background: var(--green); --shadow: var(--green-dark); color: #fff; }
+.btn-secondary {
+  background: #fff;
+  color: var(--blue);
+  border: 2px solid var(--border);
+  --shadow: var(--border);
+}
+.btn-secondary:hover { filter: none; background: var(--bg-soft); }
+.btn-danger { background: var(--red); --shadow: var(--red-dark); color: #fff; }
+.btn-block { display: flex; width: 100%; align-self: stretch; }
+.btn:disabled, .btn[aria-disabled="true"] {
+  background: var(--border);
+  color: var(--faint);
+  border-color: var(--border);
+  box-shadow: none;
+  transform: none;
+  filter: none;
+  cursor: default;
+}
+
+/* ---------- Поля формы ---------- */
+.field { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+.field label { font-weight: 800; font-size: 17px; }
+.field input, .field select, .field textarea {
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 16px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  color: var(--text);
+  font: inherit;
+  font-size: 18px; /* не меньше 16px — иначе iPhone приближает страницу */
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.field textarea { resize: vertical; }
+.field input::placeholder, .field textarea::placeholder { color: var(--faint); }
+.field input:focus, .field select:focus, .field textarea:focus {
+  outline: none;
+  border-color: var(--blue);
+  background: #fff;
+}
+.field input[aria-invalid="true"], .field:has(.field-error) input,
+.field:has(.field-error) select, .field:has(.field-error) textarea {
+  border-color: var(--red);
+  background: #fff;
+}
+.field-error { color: var(--red-dark); font-size: 16px; font-weight: 700; }
+
+/* ---------- Уведомления ---------- */
+.alert-error, .alert-success {
+  padding: 16px 20px;
+  border-radius: var(--radius);
+  font-weight: 700;
+}
+.alert-error { background: var(--red-light); color: var(--red-dark); }
+.alert-success { background: var(--green-light); color: var(--green-dark); }
+
+/* ---------- Временный пароль: крупно, моноширинно, легко продиктовать ---------- */
+.temp-password {
+  padding: 20px 16px;
+  border: 2px dashed var(--blue-border);
+  border-radius: var(--radius);
+  background: var(--blue-light);
+  color: var(--text);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-align: center;
+  word-break: break-all;
+  user-select: all;
+}
+
+/* ---------- Аватары и значки ---------- */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--blue);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  object-fit: cover;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-lg { width: 112px; height: 112px; font-size: 40px; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--bg-soft);
+  border: 2px solid var(--border);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.badge-green { background: var(--green-light); border-color: var(--green-light); color: var(--green-dark); }
+.badge-blue { background: var(--blue-light); border-color: var(--blue-light); color: var(--blue-dark); }
+.badge-red { background: var(--red-light); border-color: var(--red-light); color: var(--red-dark); }
+
+/* ---------- Прогресс ---------- */
+.progress { height: 16px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  box-shadow: inset 0 4px 0 rgba(255, 255, 255, .3) /* блик сверху */;
+  transition: width .4s ease;
+}
+
+/* ---------- Список ---------- */
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.list > li + li { border-top: 2px solid var(--border); }
+.list-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 72px;
+  padding: 12px 16px;
+  color: var(--text);
+  font-weight: 400;
+}
+a.list-item { transition: background-color .15s ease; }
+a.list-item:hover { background: var(--bg-soft); }
+a.list-item:active { background: var(--blue-light); }
+.list-item-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.list-item-main strong { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-item-main small { color: var(--muted); font-size: 15px; }
+
+/* ---------- Главное меню: снизу на телефоне ---------- */
+.tabbar {
+  position: fixed;
+  z-index: 10;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: space-around;
+  height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  padding: 4px 8px env(safe-area-inset-bottom);
+  background: #fff;
+  border-top: 2px solid var(--border);
+  view-transition-name: tabbar; /* меню не «мигает» при переходе между страницами */
+}
+.tabbar-brand { display: none; }
+.tabbar-item {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  max-width: 120px;
+  min-height: 60px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+.tabbar-icon { width: 30px; height: 30px; flex: none; transition: transform .15s ease; }
+.tabbar-item:active .tabbar-icon { transform: scale(.9); }
+.tabbar-item.is-active {
+  background: var(--blue-light);
+  border-color: var(--blue-border);
+  color: var(--blue);
+}
+
+/* ---------- Широкий экран: меню становится левой колонкой ---------- */
+@media (min-width: 900px) {
+  body.has-nav { padding-bottom: 0; padding-left: var(--sidebar-w); }
+  .page { padding-top: 40px; }
+  .tabbar {
+    top: 0;
+    right: auto;
+    width: var(--sidebar-w);
+    height: auto;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 24px 16px;
+    border-top: 0;
+    border-right: 2px solid var(--border);
+  }
+  .tabbar-brand {
+    display: block;
+    padding: 0 16px 24px;
+    color: var(--green);
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -.01em;
+  }
+  .tabbar-item {
+    flex: none;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 16px;
+    max-width: none;
+    min-height: 56px;
+    padding: 8px 16px;
+    font-size: 16px;
+  }
+  .tabbar-item:hover:not(.is-active) { background: var(--bg-soft); }
+  .tabbar-icon { width: 34px; height: 34px; }
+}
+
+/* ---------- Страницы ошибок ---------- */
+.status-page { align-items: center; padding-top: 12vh; text-align: center; }
+.status-code {
+  color: var(--blue);
+  font-size: 96px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 6px 0 var(--blue-light);
+}
+.status-page .btn { align-self: center; margin-top: 12px; max-width: 360px; }
+
+/* ---------- Только для /ui-kit ---------- */
+.kit-section { display: flex; flex-direction: column; gap: 12px; }
+.kit-swatches, .kit-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.kit-swatch {
+  padding: 24px 12px 8px;
+  min-width: 96px;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+}
+.kit-green { background: var(--green); }
+.kit-blue { background: var(--blue); }
+.kit-red { background: var(--red); }
+.kit-yellow { background: var(--yellow); color: var(--text); }
+.kit-gray { background: var(--border); color: var(--text); }
+.kit-nav .tabbar {
+  position: static;
+  width: auto;
+  height: auto;
+  flex-direction: row;
+  justify-content: space-around;
+  padding: 4px 8px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  view-transition-name: none;
+}
+.kit-nav .tabbar-brand { display: none; }
+
+/* ---------- Плавные переходы между страницами (где браузер умеет) ---------- */
+@view-transition { navigation: auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  @view-transition { navigation: none; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .btn:active, .tabbar-item:active .tabbar-icon { transform: none; }
+}

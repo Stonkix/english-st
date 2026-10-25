@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}UI-кит — English ST{% endblock %}
+
+{% block content %}
+<div class="page">
+  <h1>UI-кит</h1>
+  <p class="muted">Все компоненты сайта на одной странице. Видна только при DEBUG=true.</p>
+
+  <section class="card">
+    <h2>Цвета</h2>
+    <div class="kit-swatches">
+      <span class="kit-swatch kit-green">#58CC02</span>
+      <span class="kit-swatch kit-blue">#1CB0F6</span>
+      <span class="kit-swatch kit-red">#FF4B4B</span>
+      <span class="kit-swatch kit-yellow">#FFC800</span>
+      <span class="kit-swatch kit-gray">#E5E5E5</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Текст</h2>
+    <h1>Заголовок первого уровня</h1>
+    <h2>Заголовок второго уровня</h2>
+    <p class="lead">Крупный вводный текст: коротко, что делать на этом экране.</p>
+    <p>Обычный текст. Hello! Как дела? I am fine, thank you.</p>
+    <p class="muted">Второстепенный текст — подсказки и пояснения.</p>
+  </section>
+
+  <section class="card">
+    <h2>Кнопки</h2>
+    <a class="btn btn-primary" href="#">Начать</a>
+    <button class="btn btn-secondary" type="button">Пропустить</button>
+    <button class="btn btn-danger" type="button">Удалить</button>
+    <button class="btn btn-primary" type="button" disabled>Недоступно</button>
+    <button class="btn btn-primary btn-block" type="button">Проверить</button>
+    <button class="btn btn-secondary btn-block" type="button">Отмена</button>
+  </section>
+
+  <section class="card">
+    <h2>Поля</h2>
+    <form action="#" method="get">
+      <div class="field">
+        <label for="kit-login">Логин</label>
+        <input id="kit-login" name="login" autocomplete="off" placeholder="ivan.petrov">
+      </div>
+      <div class="field">
+        <label for="kit-password">Пароль</label>
+        <input id="kit-password" name="password" type="password" value="Привет12345" aria-invalid="true" aria-describedby="kit-password-error">
+        <p class="field-error" id="kit-password-error">Только латиница: переключи раскладку на английскую.</p>
+      </div>
+      <div class="field">
+        <label for="kit-group">Группа</label>
+        <select id="kit-group" name="group">
+          <option>Звёздочки</option>
+          <option>Ракеты</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="kit-note">Заметка</label>
+        <textarea id="kit-note" name="note" rows="3" placeholder="Напиши что-нибудь"></textarea>
+      </div>
+      <button class="btn btn-primary btn-block" type="button">Войти</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Уведомления</h2>
+    <div class="alert-error" role="alert">Неверный логин или пароль.</div>
+    <div class="alert-success" role="status">Пароль изменён.</div>
+  </section>
+
+  <section class="card">
+    <h2>Временный пароль</h2>
+    <p class="muted">Покажи ученику или запиши — больше его не будет видно.</p>
+    <div class="temp-password" data-temp-password="Kx7mPq2Lw9">Kx7mPq2Lw9</div>
+  </section>
+
+  <section class="card">
+    <h2>Аватары и значки</h2>
+    <div class="kit-row">
+      <span class="avatar" aria-hidden="true">ПК</span>
+      <span class="avatar avatar-lg" aria-hidden="true">ПК</span>
+      <span class="badge">Новичок</span>
+      <span class="badge badge-green">Пройдено</span>
+      <span class="badge badge-blue">В процессе</span>
+      <span class="badge badge-red">Заблокирован</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Прогресс</h2>
+    <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="60" aria-label="Пройдено 60%">
+      <div class="progress-fill" style="width:60%"></div>
+    </div>
+  </section>
+
+  <section class="kit-section">
+    <h2>Список</h2>
+    <ul class="list">
+      <li><a class="list-item" href="#">
+        <span class="avatar" aria-hidden="true">ПК</span>
+        <span class="list-item-main"><strong>Петя Котов</strong><small>petya.kotov</small></span>
+        <span class="badge badge-green">Пройдено</span>
+      </a></li>
+      <li><a class="list-item" href="#">
+        <span class="avatar" aria-hidden="true">МЛ</span>
+        <span class="list-item-main"><strong>Маша Лисицына</strong><small>masha.l</small></span>
+        <span class="badge">Не начато</span>
+      </a></li>
+      <li><div class="list-item">
+        <span class="avatar" aria-hidden="true">ЕС</span>
+        <span class="list-item-main"><strong>Егор Соколов</strong><small>egor.s</small></span>
+        <span class="badge badge-red">Заблокирован</span>
+      </div></li>
+    </ul>
+  </section>
+
+  <section class="kit-section">
+    <h2>Меню по ролям</h2>
+    <p class="muted">Настоящее меню этой страницы — как у ученика.</p>
+    {% for role, label in [("student", "Ученик"), ("teacher", "Учитель"), ("admin", "Админ")] %}
+    <h3>{{ label }}</h3>
+    <div class="kit-nav">{% with user = demo_users[role] %}{% include "partials/nav.html" %}{% endwith %}</div>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}
