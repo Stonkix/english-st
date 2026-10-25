@@ -77,7 +77,7 @@ def validate_payload(qtype: str, data: dict) -> dict:
         if not isinstance(raw, list):
             raise PayloadError("Лишние слова: нужен список")
         distractors = [_clean_str(d, 50, "Лишнее слово") for d in raw if not (isinstance(d, str) and not d.strip())]
-        if len(distractors) > 6 or any(" " in d for d in distractors):
+        if len(distractors) > 6 or any(len(d.split()) != 1 for d in distractors):
             raise PayloadError("Лишние слова: до 6 слов, по одному слову")
         return {"answer": answer, "distractors": distractors}
 
@@ -96,9 +96,31 @@ def validate_payload(qtype: str, data: dict) -> dict:
 
 def _shuffled(items: list, seed: str, salt: str) -> list:
     """Перемешивание, одинаковое при одинаковом seed (строковый seed, не hash())."""
+    original = list(items)
     items = list(items)
     random.Random(f"{seed}|{salt}").shuffle(items)
+    if len(items) >= 2 and items == original:
+        items = items[1:] + items[:1]  # порядок не должен совпасть с исходным
     return items
+
+
+def _perm(n: int, seed: str, question_id, salt: str) -> list[int]:
+    """Непрозрачные id: perm[i] — id элемента с исходным индексом i (зависит от seed)."""
+    perm = list(range(n))
+    random.Random(f"{seed}|{question_id}|ids|{salt}").shuffle(perm)
+    if n >= 2 and perm == list(range(n)):
+        perm = perm[1:] + perm[:1]
+    return perm
+
+
+def pair_ids(question: Question, seed: str) -> tuple[list[int], list[int]]:
+    """match_pairs: (id левой части пары i, id правой части пары i); перестановки независимы."""
+    n = len(question.payload["pairs"])
+    left = _perm(n, seed, question.id, "left")
+    right = _perm(n, seed, question.id, "right")
+    if left == right:
+        right = right[1:] + right[:1]
+    return left, right
 
 
 def _media(path: str | None) -> str | None:
@@ -125,23 +147,25 @@ def public_view(question: Question, seed: str, shuffle_options: bool) -> dict:
         ]
         view["options"] = _shuffled(options, seed, salt) if shuffle_options else options
     elif question.type == "word_bank":
-        # id плитки = индекс в «слова ответа + отвлекающие», не зависит от seed
+        # id плитки непрозрачный (перестановка по seed), иначе порядок id выдаёт ответ
         words = p["answer"].split() + p["distractors"]
-        tiles = [{"id": i, "word": w} for i, w in enumerate(words)]
+        ids = _perm(len(words), seed, question.id, "tiles")
+        tiles = [{"id": ids[i], "word": w} for i, w in enumerate(words)]
         view["tiles"] = _shuffled(tiles, seed, salt)
     elif question.type == "match_pairs":
-        view["left"] = [{"id": i, "text": pair[0]} for i, pair in enumerate(p["pairs"])]
-        right = [{"id": i, "text": pair[1]} for i, pair in enumerate(p["pairs"])]
+        left_ids, right_ids = pair_ids(question, seed)
+        view["left"] = [{"id": left_ids[i], "text": pair[0]} for i, pair in enumerate(p["pairs"])]
+        right = [{"id": right_ids[i], "text": pair[1]} for i, pair in enumerate(p["pairs"])]
         view["right"] = _shuffled(right, seed, salt)
     return view
 
 
 def normalize_text(s: str) -> str:
     s = s.lower().replace("ё", "е")
-    for ch in "’‘ʼ":
+    for ch in "’‘ʼ`´":
         s = s.replace(ch, "'")
     s = " ".join(s.split())
-    return s.rstrip(".!?").strip()
+    return s.rstrip(".,!?").strip()
 
 
 def _levenshtein(a: str, b: str) -> int:
@@ -168,8 +192,8 @@ def _correct_answer(question: Question) -> str:
     return "; ".join(f"{left} — {right}" for left, right in p["pairs"])
 
 
-def grade(question: Question, answer: dict) -> GradeResult:
-    """Проверка ответа. Некорректная форма ответа — просто неверно."""
+def grade(question: Question, answer: dict, seed: str) -> GradeResult:
+    """Проверка ответа (seed тот же, что у public_view). Некорректная форма ответа — просто неверно."""
     shown = _correct_answer(question)
     wrong = GradeResult(False, False, shown)
     if not isinstance(answer, dict):
@@ -185,12 +209,14 @@ def grade(question: Question, answer: dict) -> GradeResult:
         text = answer.get("text")
         if not isinstance(text, str):
             return wrong
+        if len(text) > 300:
+            return wrong
         given = normalize_text(text)
         accepted = [normalize_text(a) for a in p["accepted"]]
         if given in accepted:
             return GradeResult(True, False, shown)
-        # поблажка только для слов от 5 букв (по длине эталона: «aple» → «apple»)
-        if any(len(a) >= 5 and _levenshtein(given, a) == 1 for a in accepted):
+        # поблажка только для ответов от 5 символов (по длине эталона: «aple» → «apple»)
+        if any(len(a) >= 5 and abs(len(given) - len(a)) <= 1 and _levenshtein(given, a) == 1 for a in accepted):
             return GradeResult(True, True, shown)
         return wrong
 
@@ -199,11 +225,13 @@ def grade(question: Question, answer: dict) -> GradeResult:
         words = p["answer"].split() + p["distractors"]
         if not isinstance(ids, list):
             return wrong
+        perm = _perm(len(words), seed, question.id, "tiles")
+        index_of = {tile_id: i for i, tile_id in enumerate(perm)}
         picked = []
-        for i in ids:
-            if isinstance(i, bool) or not isinstance(i, int) or not 0 <= i < len(words):
+        for tile_id in ids:
+            if isinstance(tile_id, bool) or not isinstance(tile_id, int) or tile_id not in index_of:
                 return wrong
-            picked.append(words[i])
+            picked.append(words[index_of[tile_id]])
         ok = normalize_text(" ".join(picked)) == normalize_text(p["answer"])
         return GradeResult(ok, False, shown)
 

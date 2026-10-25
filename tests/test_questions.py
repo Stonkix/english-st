@@ -35,21 +35,21 @@ def test_normalize():
 
 def test_text_input_variants_and_typo():
     q = make_q("text_input", {"accepted": ["I am", "I'm"]})
-    assert grade(q, {"text": "i’m"}).correct and grade(q, {"text": " I AM. "}).correct
-    assert not grade(q, {"text": "you are"}).correct
-    assert grade(q, {"text": "you are"}).correct_answer == "I am"
+    assert grade(q, {"text": "i’m"}, "s").correct and grade(q, {"text": " I AM. "}, "s").correct
+    assert not grade(q, {"text": "you are"}, "s").correct
+    assert grade(q, {"text": "you are"}, "s").correct_answer == "I am"
 
 
 def test_typo_rule():
     q = make_q("text_input", {"accepted": ["apple"]})
-    r = grade(q, {"text": "aple"})
+    r = grade(q, {"text": "aple"}, "s")
     assert r.correct and r.typo
-    r = grade(q, {"text": "apple"})
+    r = grade(q, {"text": "apple"}, "s")
     assert r.correct and not r.typo
-    assert not grade(q, {"text": "aplle x"}).correct
+    assert not grade(q, {"text": "aplle x"}, "s").correct
     q2 = make_q("text_input", {"accepted": ["cat"]})
-    assert not grade(q2, {"text": "cot"}).correct  # короче 5 — без поблажек
-    assert not grade(q, {"text": "aplpe"}).correct  # расстояние 2
+    assert not grade(q2, {"text": "cot"}, "s").correct  # короче 5 — без поблажек
+    assert not grade(q, {"text": "aplpe"}, "s").correct  # расстояние 2
 
 
 def test_public_view_hides_answers():
@@ -78,38 +78,92 @@ def test_choice_shuffle_deterministic():
 
 def test_choice_grade():
     q = make_q("choice_text", {"options": ["a", "b"], "correct": 1})
-    assert grade(q, {"option": 1}).correct and grade(q, {"option": 1}).correct_answer == "b"
-    assert not grade(q, {"option": 0}).correct
-    assert not grade(q, {"option": 5}).correct and not grade(q, {"option": True}).correct
+    assert grade(q, {"option": 1}, "s").correct and grade(q, {"option": 1}, "s").correct_answer == "b"
+    assert not grade(q, {"option": 0}, "s").correct
+    assert not grade(q, {"option": 5}, "s").correct and not grade(q, {"option": True}, "s").correct
 
 
 def test_word_bank_grade():
     q = make_q("word_bank", {"answer": "I like cats", "distractors": ["dogs"]})
     v = public_view(q, "s", True)
     by_word = {t["word"]: t["id"] for t in v["tiles"]}
-    assert grade(q, {"tiles": [by_word["I"], by_word["like"], by_word["cats"]]}).correct
-    assert not grade(q, {"tiles": [by_word["I"], by_word["like"], by_word["dogs"]]}).correct
-    assert grade(q, {"tiles": [by_word["I"]]}).correct_answer == "I like cats"
-    assert not grade(q, {"tiles": [99, 0, 1]}).correct
-    assert not grade(q, {"tiles": "x"}).correct
+    assert grade(q, {"tiles": [by_word["I"], by_word["like"], by_word["cats"]]}, "s").correct
+    assert not grade(q, {"tiles": [by_word["I"], by_word["like"], by_word["dogs"]]}, "s").correct
+    assert grade(q, {"tiles": [by_word["I"]]}, "s").correct_answer == "I like cats"
+    assert not grade(q, {"tiles": [99, 0, 1]}, "s").correct
+    assert not grade(q, {"tiles": "x"}, "s").correct
 
 
-def test_word_bank_stable_ids_and_duplicates():
+def test_word_bank_ids_opaque_and_duplicates():
     q = make_q("word_bank", {"answer": "go go home", "distractors": ["now"]})
-    a = {t["id"]: t["word"] for t in public_view(q, "s1", True)["tiles"]}
-    b = {t["id"]: t["word"] for t in public_view(q, "s2", True)["tiles"]}
-    assert a == b == {0: "go", 1: "go", 2: "home", 3: "now"}
-    assert grade(q, {"tiles": [1, 0, 2]}).correct  # одинаковые слова взаимозаменяемы
+    tiles = public_view(q, "s1", True)["tiles"]
+    assert sorted(t["id"] for t in tiles) == [0, 1, 2, 3]
+    ids = {}
+    for t in tiles:
+        ids.setdefault(t["word"], []).append(t["id"])
+    go1, go2 = ids["go"]
+    assert grade(q, {"tiles": [go2, go1, ids["home"][0]]}, "s1").correct  # одинаковые слова взаимозаменяемы
+
+
+def test_word_bank_ids_do_not_leak_answer():
+    q = make_q("word_bank", {"answer": "I like cats very much", "distractors": ["dogs", "run"]})
+    for seed in ("a", "b", "c", "7:2026-10-26"):
+        tiles = public_view(q, seed, True)["tiles"]
+        by_id = " ".join(t["word"] for t in sorted(tiles, key=lambda t: t["id"]))
+        assert by_id != "I like cats very much dogs run"
+        assert [t["word"] for t in tiles] != "I like cats very much dogs run".split()
+    tiles = public_view(q, "a", True)["tiles"]
+    by_word = {t["word"]: t["id"] for t in tiles}
+    right = [by_word[w] for w in "I like cats very much".split()]
+    assert grade(q, {"tiles": right}, "a").correct
+    assert not grade(q, {"tiles": right}, "other-seed").correct
 
 
 def test_match_pairs_view_and_grade():
     q = make_q("match_pairs", {"pairs": [["a", "x"], ["b", "y"], ["c", "z"]]})
     v = public_view(q, "s", True)
-    assert [p["id"] for p in v["left"]] == [0, 1, 2]
-    assert {p["id"]: p["text"] for p in v["right"]} == {0: "x", 1: "y", 2: "z"}
+    assert [p["text"] for p in v["left"]] == ["a", "b", "c"]
+    assert sorted(p["id"] for p in v["left"]) == [0, 1, 2]
+    assert sorted(p["id"] for p in v["right"]) == [0, 1, 2]
+    left = {p["text"]: p["id"] for p in v["left"]}
+    right = {p["text"]: p["id"] for p in v["right"]}
+    assert any(left[a] != right[b] for a, b in (("a", "x"), ("b", "y"), ("c", "z")))
+    assert [p["text"] for p in v["right"]] != ["x", "y", "z"]
     assert grade_pairs(q, 0).correct and not grade_pairs(q, 1).correct
     assert not grade_pairs(q, 0).typo
     assert grade_pairs(q, 2).correct_answer == "a — x; b — y; c — z"
+
+
+def test_two_item_shuffles_change_order():
+    q = make_q("match_pairs", {"pairs": [["a", "x"], ["b", "y"]]})
+    for seed in ("a", "b", "c", "d"):
+        assert [p["text"] for p in public_view(q, seed, True)["right"]] == ["y", "x"]
+    q = make_q("word_bank", {"answer": "hi you", "distractors": []})
+    for seed in ("a", "b", "c", "d"):
+        assert [t["word"] for t in public_view(q, seed, True)["tiles"]] == ["you", "hi"]
+    q = make_q("choice_text", {"options": ["a", "b"], "correct": 0})
+    for seed in ("a", "b", "c", "d"):
+        assert [o["id"] for o in public_view(q, seed, True)["options"]] == [1, 0]
+
+
+def test_long_text_answer_is_fast_and_wrong():
+    import time
+
+    q = make_q("text_input", {"accepted": ["apple"]})
+    start = time.perf_counter()
+    assert not grade(q, {"text": "a" * 100_000}, "s").correct
+    assert not grade(q, {"text": "a" * 301}, "s").correct
+    assert time.perf_counter() - start < 0.5
+
+
+def test_normalize_extra_quotes_and_commas():
+    assert normalize_text("it`s fine,") == "it's fine"
+    assert normalize_text("it´s") == "it's"
+
+
+def test_distractor_must_be_single_word():
+    with pytest.raises(PayloadError):
+        validate_payload("word_bank", {"answer": "a b", "distractors": ["two words"]})
 
 
 def test_seeded_shuffle_is_deterministic():
@@ -143,7 +197,7 @@ def test_validate_normalizes():
 
 def test_malformed_answer_is_wrong_not_error():
     q = make_q("choice_text", {"options": ["a", "b"], "correct": 1})
-    assert not grade(q, {"option": "zzz"}).correct and not grade(q, {}).correct
-    assert not grade(q, None).correct
+    assert not grade(q, {"option": "zzz"}, "s").correct and not grade(q, {}, "s").correct
+    assert not grade(q, None, "s").correct
     t = make_q("text_input", {"accepted": ["apple"]})
-    assert not grade(t, {"text": 5}).correct and not grade(t, {}).correct
+    assert not grade(t, {"text": 5}, "s").correct and not grade(t, {}, "s").correct
