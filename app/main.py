@@ -15,6 +15,8 @@ from app.auth.sessions import COOKIE_NAME, set_session_cookie
 from app.config import BASE_DIR, Settings, settings
 from app.db import SessionLocal
 from app.routes.auth import router as auth_router
+from app.routes.media import router as media_router
+from app.routes.profile import router as profile_router
 from app.templating import templates
 
 logging.basicConfig(level=logging.INFO)
@@ -123,6 +125,8 @@ async def http_error(request: Request, exc: StarletteHTTPException):
 
 
 app.include_router(auth_router)
+app.include_router(profile_router)
+app.include_router(media_router)
 
 
 @app.get("/healthz")

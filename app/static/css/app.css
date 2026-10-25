@@ -346,6 +346,24 @@ a.list-item:active { background: var(--blue-light); }
   .tabbar-icon { width: 34px; height: 34px; }
 }
 
+/* ---------- Профиль ---------- */
+.profile-head { align-items: center; text-align: center; gap: 8px; }
+.profile-head .avatar-lg { margin-bottom: 8px; }
+.profile-note { font-size: 16px; }
+.profile-page input[type="file"]::file-selector-button {
+  margin-right: 12px;
+  padding: 8px 14px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--blue);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.profile-page .field { margin-bottom: 0; } /* промежутки задаёт gap карточки */
+.profile-page form .btn-block { margin-top: 4px; }
+
 /* ---------- Вход и смена пароля ---------- */
 .auth-page { padding-top: 8vh; }
 .auth-brand {

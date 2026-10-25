@@ -61,6 +61,16 @@ def validate_password(password: str) -> list[str]:
     return [code for code, ok in checks.items() if not ok]
 
 
+def new_password_errors(new: str, repeat: str) -> list[str]:
+    """Тексты ошибок для формы «новый пароль + повтор»; пустой список — можно сохранять."""
+    errors = [RULE_TEXT[code] for code in validate_password(new)]
+    if len(new) > MAX_LENGTH:
+        errors.append(f"Не длиннее {MAX_LENGTH} символов")
+    if new != repeat:
+        errors.append("Пароли не совпадают")
+    return errors
+
+
 def generate_temp_password(length: int = 12) -> str:
     if length < MIN_LENGTH:
         raise ValueError(f"Временный пароль короче {MIN_LENGTH} символов не подойдёт правилам")

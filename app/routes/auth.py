@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from app.auth.deps import client_ip, get_current_user, home_for, require_user
 from app.auth.login_guard import blocked_until, register_failure, register_success
-from app.auth.passwords import MAX_LENGTH, RULE_TEXT, hash_password, validate_password, verify_password
+from app.auth.passwords import MAX_LENGTH, hash_password, new_password_errors, verify_password
 from app.auth.sessions import (
     COOKIE_NAME,
     clear_session_cookie,
@@ -45,7 +45,7 @@ def _blocked_page(request: Request, login: str, until: datetime):
     return _login_page(request, login, f"Слишком много попыток. Попробуйте через {minutes} мин.", False, 429)
 
 
-def _check_password(password: str, stored: str) -> bool:
+def check_password(password: str, stored: str) -> bool:
     """Слишком длинный или не кодируемый в UTF-8 пароль — просто неверный пароль, а не ошибка сервера."""
     if len(password) > MAX_LENGTH:
         return False
@@ -80,9 +80,9 @@ def login(
 
     user = db.scalar(select(User).where(User.login == normalized)) if is_valid_login(normalized) else None
     if user is not None and user.is_active:
-        ok = _check_password(password, user.password_hash)
+        ok = check_password(password, user.password_hash)
     else:
-        _check_password(password, _DUMMY_HASH)
+        check_password(password, _DUMMY_HASH)
         ok = False
 
     if not ok:
@@ -134,11 +134,7 @@ def password_change(
 ):
     if not user.must_change_password:
         return RedirectResponse(home_for(user), status_code=303)
-    errors = [RULE_TEXT[code] for code in validate_password(new)]
-    if len(new) > MAX_LENGTH:
-        errors.append(f"Не длиннее {MAX_LENGTH} символов")
-    if new != repeat:
-        errors.append("Пароли не совпадают")
+    errors = new_password_errors(new, repeat)
     if errors:
         return _password_page(request, errors)
 

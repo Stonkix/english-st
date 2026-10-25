@@ -1,0 +1,261 @@
+from io import BytesIO
+
+import pytest
+from PIL import Image
+
+from app.config import settings
+from app.images import MAX_UPLOAD_BYTES, InvalidImage, read_limited
+from tests.factories import login_as, make_user
+
+BAD_IMAGE = "Не получилось открыть картинку. Попробуйте другое фото."
+
+
+def jpeg(w=3000, h=2000, **save_kwargs):
+    b = BytesIO()
+    Image.new("RGB", (w, h), "red").save(b, "JPEG", **save_kwargs)
+    return b.getvalue()
+
+
+def upload(client, data, name="a.jpg", mime="image/jpeg"):
+    return client.post("/profile/avatar", files={"photo": (name, data, mime)})
+
+
+def test_profile_requires_login(client):
+    r = client.get("/profile", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/login"
+
+
+def test_profile_shows_name_read_only(client, db):
+    make_user(db, login="kid", first_name="Маша", last_name="Лисицына")
+    login_as(client, "kid")
+    r = client.get("/profile")
+    assert r.status_code == 200
+    assert "Маша Лисицына" in r.text and "kid" in r.text
+    assert 'name="first_name"' not in r.text and 'name="last_name"' not in r.text
+    assert ">МЛ<" in r.text.replace(" ", "").replace("\n", "")  # без фото — кружок с инициалами
+    assert "Выйти" in r.text
+
+
+def test_avatar_upload_square_webp(client, db):
+    u = make_user(db, login="kid")
+    login_as(client, "kid")
+    r = upload(client, jpeg())
+    assert r.status_code in (200, 303)
+    db.refresh(u)
+    img = Image.open(settings.media_dir / u.avatar)
+    assert img.format == "WEBP" and img.size == (512, 512) and not img.getexif()
+    assert u.avatar.startswith(f"avatars/{u.id}/")
+    assert f'src="/media/{u.avatar}"' in client.get("/profile").text
+
+
+def test_avatar_strips_exif_gps(client, db):
+    u = make_user(db, login="kid")
+    login_as(client, "kid")
+    exif = Image.Exif()
+    exif[0x0112] = 6  # поворот
+    exif.get_ifd(0x8825)[2] = (55.0, 45.0, 0.0)  # GPS
+    exif.get_ifd(0x8825)[1] = "N"
+    upload(client, jpeg(400, 300, exif=exif))
+    db.refresh(u)
+    raw = (settings.media_dir / u.avatar).read_bytes()
+    assert b"EXIF" not in raw and b"XMP" not in raw
+    assert not Image.open(BytesIO(raw)).getexif()
+
+
+def test_avatar_replaced_removes_old_file(client, db):
+    u = make_user(db, login="kid")
+    login_as(client, "kid")
+    upload(client, jpeg(600, 600))
+    db.refresh(u)
+    old = settings.media_dir / u.avatar
+    assert old.exists()
+    upload(client, jpeg(600, 600))
+    db.refresh(u)
+    assert (settings.media_dir / u.avatar).exists() and not old.exists()
+
+
+def test_avatar_delete(client, db):
+    u = make_user(db, login="kid")
+    login_as(client, "kid")
+    upload(client, jpeg(600, 600))
+    db.refresh(u)
+    path = settings.media_dir / u.avatar
+    r = client.post("/profile/avatar/delete")
+    assert r.status_code == 200
+    db.refresh(u)
+    assert u.avatar is None and not path.exists()
+    assert "/media/" not in r.text
+
+
+def test_avatar_not_image(client, db):
+    make_user(db, login="kid")
+    login_as(client, "kid")
+    r = upload(client, b"not an image")
+    assert r.status_code == 200 and BAD_IMAGE in r.text
+
+
+def test_avatar_empty_file_and_no_file(client, db):
+    make_user(db, login="kid")
+    login_as(client, "kid")
+    assert BAD_IMAGE in upload(client, b"").text
+    r = client.post("/profile/avatar", data={"x": "1"})
+    assert r.status_code == 200 and BAD_IMAGE in r.text
+
+
+def test_avatar_truncated_image(client, db):
+    make_user(db, login="kid")
+    login_as(client, "kid")
+    r = upload(client, jpeg(2000, 2000)[:500])
+    assert r.status_code == 200 and BAD_IMAGE in r.text
+
+
+def test_avatar_too_big(client, db):
+    make_user(db, login="kid")
+    login_as(client, "kid")
+    r = upload(client, b"0" * (15 * 1024 * 1024 + 1))
+    assert r.status_code == 200 and BAD_IMAGE in r.text
+
+
+def test_avatar_decompression_bomb(client, db):
+    u = make_user(db, login="kid")
+    login_as(client, "kid")
+    b = BytesIO()
+    Image.new("1", (30000, 30000)).save(b, "PNG")  # мало байт, огромная картинка
+    assert len(b.getvalue()) < MAX_UPLOAD_BYTES
+    r = upload(client, b.getvalue(), "a.png", "image/png")
+    assert r.status_code == 200 and BAD_IMAGE in r.text
+    db.refresh(u)
+    assert u.avatar is None
+
+
+def test_avatar_failed_upload_keeps_old_avatar(client, db):
+    u = make_user(db, login="kid")
+    login_as(client, "kid")
+    upload(client, jpeg(600, 600))
+    db.refresh(u)
+    old = u.avatar
+    upload(client, b"garbage")
+    db.refresh(u)
+    assert u.avatar == old and (settings.media_dir / old).exists()
+
+
+def test_avatar_heic(client, db):
+    import pillow_heif
+
+    pillow_heif.register_heif_opener()
+    buf = BytesIO()
+    try:
+        Image.new("RGB", (300, 200), "blue").save(buf, "HEIF")
+    except Exception as exc:  # pragma: no cover — зависит от сборки pillow_heif
+        pytest.skip(f"pillow_heif не умеет сохранять HEIF в этом окружении: {exc}")
+    u = make_user(db, login="kid")
+    login_as(client, "kid")
+    r = upload(client, buf.getvalue(), "IMG_0001.HEIC", "image/heic")
+    assert r.status_code in (200, 303)
+    db.refresh(u)
+    assert u.avatar and Image.open(settings.media_dir / u.avatar).size == (512, 512)
+
+
+def test_read_limited_stops_after_limit():
+    class Endless:
+        read_total = 0
+
+        def read(self, n):
+            self.read_total += n
+            return b"0" * n
+
+    stream = Endless()
+    with pytest.raises(InvalidImage):
+        read_limited(stream)
+    assert stream.read_total == MAX_UPLOAD_BYTES + 1
+
+
+def test_read_limited_small():
+    assert read_limited(BytesIO(b"abc")) == b"abc"
+    assert len(read_limited(BytesIO(b"0" * MAX_UPLOAD_BYTES))) == MAX_UPLOAD_BYTES
+
+
+def test_avatar_url_filter(db):
+    from types import SimpleNamespace
+
+    from app.templating import templates
+
+    f = templates.env.filters["avatar_url"]
+    assert f(SimpleNamespace(avatar="avatars/1/abc.webp")) == "/media/avatars/1/abc.webp"
+    assert f(SimpleNamespace(avatar=None)) is None
+
+
+# ---------- смена пароля ----------
+
+def change(client, current="Passw0rd12", new="NewPassw0rd", repeat=None):
+    return client.post(
+        "/profile/password",
+        data={"current": current, "new": new, "repeat": new if repeat is None else repeat},
+    )
+
+
+def test_change_password_revokes_other_sessions(client, db):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    make_user(db, login="kid")
+    other = TestClient(app, headers={"Origin": "http://testserver"})
+    login_as(other, "kid")
+    login_as(client, "kid")
+    r = change(client)
+    assert "Пароль изменён" in r.text
+    assert other.get("/profile", follow_redirects=False).headers["location"] == "/login"
+    assert client.get("/profile").status_code == 200
+
+
+def test_change_password_new_works_old_does_not(client, db):
+    make_user(db, login="kid")
+    login_as(client, "kid")
+    change(client)
+    client.post("/logout")
+    assert login_as(client, "kid", "Passw0rd12").status_code == 200  # осталась форма входа
+    assert login_as(client, "kid", "NewPassw0rd").status_code == 303
+
+
+@pytest.mark.parametrize(
+    "kwargs, message",
+    [
+        ({"current": "Wrong0Password"}, "Текущий пароль указан неверно"),
+        ({"new": "short1A", "repeat": "short1A"}, "Не короче 10 символов"),
+        ({"new": "Привет12345"}, "Только латиница"),
+        ({"repeat": "Other0Password"}, "Пароли не совпадают"),
+        ({"new": "Passw0rd12"}, "Новый пароль совпадает с текущим"),
+        ({"new": "Aa1" + "x" * 254}, "Не длиннее 256 символов"),
+    ],
+)
+def test_change_password_errors(client, db, kwargs, message):
+    u = make_user(db, login="kid")
+    login_as(client, "kid")
+    old_hash = u.password_hash
+    r = change(client, **kwargs)
+    assert r.status_code == 200 and message in r.text
+    assert "Пароль изменён" not in r.text
+    db.refresh(u)
+    assert u.password_hash == old_hash
+
+
+def test_change_password_too_long_current_is_wrong_not_500(client, db):
+    make_user(db, login="kid")
+    login_as(client, "kid")
+    r = change(client, current="A1a" * 200)
+    assert r.status_code == 200 and "Текущий пароль указан неверно" in r.text
+
+
+def test_change_password_keeps_other_users_sessions(client, db):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    make_user(db, login="kid")
+    make_user(db, login="friend")
+    friend = TestClient(app, headers={"Origin": "http://testserver"})
+    login_as(friend, "friend")
+    login_as(client, "kid")
+    change(client)
+    assert friend.get("/profile").status_code == 200
