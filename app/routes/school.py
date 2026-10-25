@@ -13,6 +13,7 @@ from app.auth.sessions import revoke_user_sessions
 from app.db import get_db
 from app.logins import is_valid_login, normalize_login
 from app.models import User
+from app.params import Id
 from app.templating import templates
 
 router = APIRouter(prefix="/school")
@@ -87,7 +88,7 @@ def create_teacher(
 
 
 @router.post("/teachers/{teacher_id}/reset-password")
-def reset_password(teacher_id: int, request: Request, user: User = Depends(admin_only), db: DbSession = Depends(get_db)):
+def reset_password(teacher_id: Id, request: Request, user: User = Depends(admin_only), db: DbSession = Depends(get_db)):
     teacher = own_teacher(db, teacher_id)
     password = generate_temp_password()
     teacher.password_hash = hash_password(password)
@@ -97,7 +98,7 @@ def reset_password(teacher_id: int, request: Request, user: User = Depends(admin
 
 
 @router.post("/teachers/{teacher_id}/deactivate")
-def deactivate_teacher(teacher_id: int, user: User = Depends(admin_only), db: DbSession = Depends(get_db)):
+def deactivate_teacher(teacher_id: Id, user: User = Depends(admin_only), db: DbSession = Depends(get_db)):
     teacher = own_teacher(db, teacher_id)  # группы остаются за учителем, ученики не затронуты
     teacher.is_active = False
     revoke_user_sessions(db, teacher.id)
@@ -105,7 +106,7 @@ def deactivate_teacher(teacher_id: int, user: User = Depends(admin_only), db: Db
 
 
 @router.post("/teachers/{teacher_id}/activate")
-def activate_teacher(teacher_id: int, user: User = Depends(admin_only), db: DbSession = Depends(get_db)):
+def activate_teacher(teacher_id: Id, user: User = Depends(admin_only), db: DbSession = Depends(get_db)):
     teacher = own_teacher(db, teacher_id)
     teacher.is_active = True
     db.commit()

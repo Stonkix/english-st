@@ -35,6 +35,10 @@ _DUMMY_HASH = hash_password("dummy-password-for-timing")
 _NON_LATIN = re.compile(r"[^\x21-\x7E]")
 
 
+def _clean(value: str) -> str:
+    return value.encode("utf-8", "replace").decode()
+
+
 def _login_page(request: Request, login: str, error: str | None, hint: bool, status: int = 200):
     context = {"login": login, "error": error, "hint": hint}
     return templates.TemplateResponse(request, "auth/login.html", context, status_code=status)
@@ -59,6 +63,8 @@ def login(
     password: str = Form(""),
     db: DbSession = Depends(get_db),
 ):
+    # одинокий суррогат (multipart с charset=utf-7) не кодируется в UTF-8 и роняет запись в БД
+    login, password = _clean(login), _clean(password)
     normalized = normalize_login(login)
     key = normalized[:LOGIN_MAX_LEN]  # ключ блокировки не должен расти вместе со входной строкой
     ip = client_ip(request)

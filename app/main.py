@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
@@ -125,6 +126,22 @@ async def http_error(request: Request, exc: StarletteHTTPException):
         request, "error.html", {"code": exc.status_code, "user": user},
         status_code=exc.status_code, headers=exc.headers,
     )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    """Ошибка в адресе (не число, ноль, огромный id) — такой страницы нет; ошибка в форме — 400. Без сырого JSON."""
+    user = await run_in_threadpool(_error_page_user, request)
+    if any(err.get("loc") and err["loc"][0] == "path" for err in exc.errors()):
+        return templates.TemplateResponse(request, "404.html", {"user": user}, status_code=404)
+    return templates.TemplateResponse(request, "error.html", {"code": 400, "user": user}, status_code=400)
+
+
+@app.exception_handler(Exception)
+async def server_error(request: Request, exc: Exception):
+    """Неожиданный сбой: в журнал и на страницу сайта. К БД не обращаемся — она могла и упасть."""
+    logging.error("Необработанная ошибка: %s %s", request.method, request.url.path, exc_info=exc)
+    return templates.TemplateResponse(request, "error.html", {"code": 500, "user": None}, status_code=500)
 
 
 app.include_router(auth_router)

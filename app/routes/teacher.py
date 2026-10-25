@@ -34,6 +34,7 @@ from app.db import get_db
 from app.images import InvalidImage
 from app.logins import is_valid_login, normalize_login, suggest_login, unique_login
 from app.models import Group, User
+from app.params import MAX_ID, Id
 from app.templating import templates
 
 router = APIRouter(prefix="/teacher")
@@ -85,9 +86,12 @@ def _group_name_error(name: str) -> str | None:
 
 def _group_id_or_404(raw: str) -> int:
     try:
-        return int(raw)
+        value = int(raw)
     except ValueError:
         raise HTTPException(404) from None
+    if not 1 <= value <= MAX_ID:  # огромное число SQLite не переварит
+        raise HTTPException(404)
+    return value
 
 
 # ---------- страницы ----------
@@ -157,13 +161,13 @@ def create_group(
 
 
 @router.get("/groups/{group_id}")
-def group_page(group_id: int, request: Request, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
+def group_page(group_id: Id, request: Request, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
     return _group_page(request, db, user, own_group(db, user, group_id))
 
 
 @router.post("/groups/{group_id}/rename")
 def rename_group(
-    group_id: int,
+    group_id: Id,
     request: Request,
     name: str = Form(""),
     user: User = Depends(teacher_only),
@@ -199,14 +203,14 @@ def login_suggest(
 
 @router.get("/groups/{group_id}/students/new")
 def new_student_form(
-    group_id: int, request: Request, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)
+    group_id: Id, request: Request, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)
 ):
     return _student_form(request, user, own_group(db, user, group_id), {}, [])
 
 
 @router.post("/groups/{group_id}/students")
 def create_student(
-    group_id: int,
+    group_id: Id,
     request: Request,
     first_name: str = Form(""),
     last_name: str = Form(""),
@@ -250,13 +254,13 @@ def create_student(
 
 
 @router.get("/students/{student_id}")
-def student_page(student_id: int, request: Request, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
+def student_page(student_id: Id, request: Request, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
     return _student_page(request, db, user, own_student(db, user, student_id))
 
 
 @router.post("/students/{student_id}/edit")
 def edit_student(
-    student_id: int,
+    student_id: Id,
     request: Request,
     first_name: str = Form(""),
     last_name: str = Form(""),
@@ -277,7 +281,7 @@ def edit_student(
 
 @router.post("/students/{student_id}/reset-password")
 def reset_password(
-    student_id: int, request: Request, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)
+    student_id: Id, request: Request, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)
 ):
     student = own_student(db, user, student_id)
     password = generate_temp_password()
@@ -288,14 +292,14 @@ def reset_password(
 
 
 @router.post("/students/{student_id}/unlock")
-def unlock_student(student_id: int, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
+def unlock_student(student_id: Id, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
     student = own_student(db, user, student_id)
     unlock(db, student.login)
     return _to_student(student)
 
 
 @router.post("/students/{student_id}/deactivate")
-def deactivate_student(student_id: int, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
+def deactivate_student(student_id: Id, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
     student = own_student(db, user, student_id)
     student.is_active = False
     revoke_user_sessions(db, student.id)  # коммитит и флаг, и удаление сессий
@@ -303,7 +307,7 @@ def deactivate_student(student_id: int, user: User = Depends(teacher_only), db: 
 
 
 @router.post("/students/{student_id}/activate")
-def activate_student(student_id: int, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
+def activate_student(student_id: Id, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
     student = own_student(db, user, student_id)
     student.is_active = True
     db.commit()
@@ -315,7 +319,7 @@ def activate_student(student_id: int, user: User = Depends(teacher_only), db: Db
 
 @router.post("/students/{student_id}/avatar")
 def upload_student_avatar(
-    student_id: int,
+    student_id: Id,
     request: Request,
     photo: UploadFile | None = File(None),
     user: User = Depends(teacher_only),
@@ -330,7 +334,7 @@ def upload_student_avatar(
 
 
 @router.post("/students/{student_id}/avatar/delete")
-def delete_student_avatar(student_id: int, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
+def delete_student_avatar(student_id: Id, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
     student = own_student(db, user, student_id)
     teacher_remove_avatar(db, student)
     return _to_student(student)
@@ -338,7 +342,7 @@ def delete_student_avatar(student_id: int, user: User = Depends(teacher_only), d
 
 @router.post("/students/{student_id}/avatar/history/{item_id}/delete")
 def delete_student_avatar_history(
-    student_id: int, item_id: int, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)
+    student_id: Id, item_id: Id, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)
 ):
     student = own_student(db, user, student_id)
     try:
@@ -350,7 +354,7 @@ def delete_student_avatar_history(
 
 @router.post("/students/{student_id}/avatar/lock")
 def lock_student_avatar(
-    student_id: int, period: str = Form("off"), user: User = Depends(teacher_only), db: DbSession = Depends(get_db)
+    student_id: Id, period: str = Form("off"), user: User = Depends(teacher_only), db: DbSession = Depends(get_db)
 ):
     student = own_student(db, user, student_id)
     if period != "off" and period not in LOCK_PERIODS:
