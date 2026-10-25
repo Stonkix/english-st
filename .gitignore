@@ -1,2 +1,9 @@
 .claude/worktrees/
 .superpowers/
+.venv/
+__pycache__/
+*.pyc
+.env
+data/
+media/
+.pytest_cache/
