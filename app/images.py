@@ -58,13 +58,17 @@ def _shrink(img: Image.Image) -> Image.Image:
     Идём полосами: в любом режиме (1, P, RGBA…) вместо полноразмерных копий в памяти — только маленькая полоса.
     """
     w, h = img.size
-    k = max(1, min(w, h) // AVATAR_SIZE)
-    ow, oh = w // k, h // k
-    out = Image.new("RGBA", (ow, oh))
-    step = _BAND_ROWS  # выходных строк в полосе
-    for y in range(0, oh, step):
-        rows = min(step, oh - y)
-        band = img.crop((0, y * k, ow * k, (y + rows) * k)).convert("RGBA")
+    # Сразу берём центральный квадрат (в исходной ориентации — он «коммутирует» с поворотом по EXIF),
+    # поэтому буфер out не больше (короткая сторона)², даже для вытянутых кадров вроде 800x62000
+    side = min(w, h)
+    left, top = (w - side) // 2, (h - side) // 2
+    k = max(1, side // AVATAR_SIZE)
+    n = side // k
+    out = Image.new("RGBA", (n, n))
+    for y in range(0, n, _BAND_ROWS):
+        rows = min(_BAND_ROWS, n - y)
+        box = (left, top + y * k, left + n * k, top + (y + rows) * k)
+        band = img.crop(box).convert("RGBA")
         out.paste(band.reduce(k) if k > 1 else band, (0, y))
     return out
 

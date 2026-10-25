@@ -278,6 +278,29 @@ def test_decode_max_allowed_size_small_png_ok(client, db):
     assert Image.open(settings.media_dir / u.avatar).size == (512, 512)
 
 
+@pytest.mark.parametrize("size", [(800, 62000), (62000, 800)])
+def test_decode_elongated_max_pixel_png_ok(size):
+    from app.images import MAX_PIXELS, _decode_square
+
+    assert size[0] * size[1] <= MAX_PIXELS
+    b = BytesIO()
+    Image.new("L", size).save(b, "PNG")
+    assert len(b.getvalue()) < 100_000
+    assert _decode_square(b.getvalue()).size == (512, 512)
+
+
+def test_decode_elongated_takes_centre_square():
+    from app.images import _decode_square
+
+    src = Image.new("RGB", (800, 6000), "blue")
+    src.paste("red", (0, 2600, 800, 3000))  # центральный квадрат 800x800 — это строки 2600–3400
+    b = BytesIO()
+    src.save(b, "PNG")
+    img = _decode_square(b.getvalue())
+    top, bottom = img.getpixel((256, 60)), img.getpixel((256, 450))
+    assert top[0] > 200 and top[2] < 60 and bottom[2] > 200 and bottom[0] < 60
+
+
 def test_decode_over_pixel_cap_is_invalid():
     from app.images import MAX_PIXELS, _decode_square
 
