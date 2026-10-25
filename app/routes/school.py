@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from app.accounts import LOGIN_INVALID, LOGIN_TAKEN, login_taken, name_errors, temp_password_page
 from app.auth.deps import require_role
+from app.auth.login_guard import reset_all
 from app.auth.passwords import generate_temp_password, hash_password
 from app.auth.sessions import revoke_user_sessions
 from app.db import get_db
@@ -39,8 +40,15 @@ def _to_teachers() -> RedirectResponse:
 
 
 @router.get("")
-def index(request: Request, user: User = Depends(admin_only)):
-    return templates.TemplateResponse(request, "school/index.html", {"user": user})
+def index(request: Request, unlocked: bool = False, user: User = Depends(admin_only)):
+    return templates.TemplateResponse(request, "school/index.html", {"user": user, "unlocked": unlocked})
+
+
+@router.post("/login-blocks/reset")
+def reset_login_blocks(user: User = Depends(admin_only), db: DbSession = Depends(get_db)):
+    """Снимает все блокировки входа разом (например, заблокирован весь класс за одним IP)."""
+    reset_all(db)
+    return RedirectResponse("/school?unlocked=1", status_code=303)
 
 
 @router.get("/teachers")

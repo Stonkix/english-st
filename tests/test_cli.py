@@ -64,9 +64,9 @@ def test_unlock_by_login(db, capsys):
     register_failure(db, "kid", "1.2.3.4")
     register_failure(db, "other", "1.2.3.4")
     assert main(["unlock", "--login", "KID"]) == 0
-    assert "Снято блокировок: 1" in capsys.readouterr().out
+    assert "Снято блокировок: 2" in capsys.readouterr().out
     keys = {row.key for row in db.query(LoginAttempt).all()}
-    assert keys == {"other|1.2.3.4", "ip|1.2.3.4"}
+    assert keys == {"other|1.2.3.4"}  # счётчик IP снят вместе с логином
 
 
 def test_unlock_all(db, capsys):

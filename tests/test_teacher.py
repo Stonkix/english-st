@@ -269,6 +269,21 @@ def test_unlock(client, db):
     assert login_guard.blocked_until(db, "kid", "testclient") is None
 
 
+def test_unlock_clears_classroom_ip_block(client, db):
+    t, g = setup_teacher(client, db)
+    s = make_user(db, login="kid", group=g)
+    login_guard.register_failure(db, "kid", "testclient")
+    for i in range(19):
+        login_guard.register_failure(db, f"other{i}", "testclient")  # 20 неудач с одного IP: блок на весь класс
+    assert login_guard.blocked_until(db, "mate", "testclient") is not None
+    assert "заблокирован" in client.get(f"/teacher/students/{s.id}").text
+    assert "Разблокировать вход" in client.get(f"/teacher/students/{s.id}").text
+    client.post(f"/teacher/students/{s.id}/unlock")
+    db.expire_all()
+    assert login_guard.blocked_until(db, "mate", "testclient") is None
+    assert "Разблокировать вход" not in client.get(f"/teacher/students/{s.id}").text
+
+
 def test_edit_student_name(client, db):
     t, g = setup_teacher(client, db)
     s = make_user(db, login="kid", group=g)

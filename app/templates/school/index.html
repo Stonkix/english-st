@@ -12,5 +12,17 @@
       <span class="list-item-main"><strong>База данных</strong><small>Все записи: пользователи и группы</small></span>
     </a></li>
   </ul>
+
+  <div class="card">
+    <h2>Блокировки входа</h2>
+    {% if unlocked %}
+    <div class="alert-success" role="status"><p>Блокировки входа сняты</p></div>
+    {% endif %}
+    <p class="muted">Если из-за ошибок при входе не может войти целый класс, снимите все блокировки.</p>
+    <form method="post" action="/school/login-blocks/reset"
+          data-confirm="Снять все блокировки входа? Счётчики неудачных попыток обнулятся." data-once>
+      <button class="btn btn-secondary btn-block" type="submit">Снять все блокировки входа</button>
+    </form>
+  </div>
 </section>
 {% endblock %}

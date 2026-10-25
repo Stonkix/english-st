@@ -45,6 +45,40 @@ def test_school_index_and_list(client, db):
     assert "teach1" in page and "Анна Смирнова" in page
 
 
+def test_school_index_has_reset_login_blocks_button(client, db):
+    admin(client, db)
+    page = client.get("/school").text
+    assert 'action="/school/login-blocks/reset"' in page and "Снять все блокировки входа" in page
+    assert 'data-confirm="' in page.split('action="/school/login-blocks/reset"')[1].split(">")[0]
+
+
+def test_admin_resets_all_login_blocks(client, db):
+    from app.auth import login_guard
+    from app.models import LoginAttempt
+
+    admin(client, db)
+    for _ in range(20):
+        login_guard.register_failure(db, "kid", "9.9.9.9")
+    for _ in range(5):
+        login_guard.register_failure(db, "other", "8.8.8.8")
+    r = client.post("/school/login-blocks/reset", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/school?unlocked=1"
+    db.expire_all()
+    assert db.query(LoginAttempt).count() == 0
+    assert "Блокировки входа сняты" in client.get("/school?unlocked=1").text
+
+
+def test_teacher_cannot_reset_all_login_blocks(client, db):
+    from app.models import LoginAttempt
+
+    make_user(db, role="teacher", login="teach1")
+    login_as(client, "teach1")
+    db.add(LoginAttempt(key="ip|9.9.9.9", failures=3))
+    db.commit()
+    assert client.post("/school/login-blocks/reset", follow_redirects=False).status_code == 403
+    assert db.query(LoginAttempt).count() == 1
+
+
 def test_create_teacher_validation(client, db):
     admin(client, db)
     make_user(db, role="student", login="taken")

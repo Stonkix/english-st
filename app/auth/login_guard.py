@@ -40,15 +40,20 @@ def blocked_until(db: Session, login: str, ip: str, now: datetime | None = None)
     )
 
 
+def _login_ips(db: Session, login: str) -> list[str]:
+    """IP, с которых этот логин пытался войти (по ключам «логин|IP»)."""
+    # «_» в логине — подстановочный знак LIKE, поэтому autoescape (иначе a_b заденет axb)
+    keys = db.scalars(select(LoginAttempt.key).where(LoginAttempt.key.startswith(f"{login}|", autoescape=True)))
+    return [key[len(login) + 1 :] for key in keys]
+
+
 def is_locked(db: Session, login: str, now: datetime | None = None) -> bool:
-    """Заблокирован ли логин хотя бы на одном IP (для значка у учителя). Блок самого IP не считается."""
+    """Не может ли логин войти хотя бы с одного из своих IP: блок самого логина или блок IP (весь класс)."""
     now = now or utcnow()
+    ips = _login_ips(db, login)
+    keys = [f"{login}|{ip}" for ip in ips] + [f"ip|{ip}" for ip in ips]
     return (
-        db.scalar(
-            select(LoginAttempt.key)
-            .where(LoginAttempt.key.startswith(f"{login}|", autoescape=True), LoginAttempt.blocked_until > now)
-            .limit(1)
-        )
+        db.scalar(select(LoginAttempt.key).where(LoginAttempt.key.in_(keys), LoginAttempt.blocked_until > now).limit(1))
         is not None
     )
 
@@ -111,11 +116,14 @@ def register_success(db: Session, login: str, ip: str) -> None:
 
 
 def unlock(db: Session, login: str) -> int:
-    """Снимает блокировки логина со всех IP. Возвращает число удалённых ключей."""
-    # «_» в логине — подстановочный знак LIKE, поэтому autoescape (иначе a_b заденет axb)
+    """Снимает блокировки логина со всех его IP, включая блок самого IP (иначе ученик из класса так и не войдёт).
+
+    Возвращает число удалённых ключей.
+    """
+    ip_keys = [f"ip|{ip}" for ip in _login_ips(db, login)]
     result = db.execute(
         delete(LoginAttempt)
-        .where(LoginAttempt.key.startswith(f"{login}|", autoescape=True))
+        .where(or_(LoginAttempt.key.startswith(f"{login}|", autoescape=True), LoginAttempt.key.in_(ip_keys)))
         .execution_options(synchronize_session=False)
     )
     db.commit()

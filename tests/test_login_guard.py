@@ -75,14 +75,14 @@ def test_success_keeps_ip_key(db):
 def test_unlock(db):
     for _ in range(5):
         g.register_failure(db, "ivan", "1.1.1.1", now=T0)
-    assert g.unlock(db, "ivan") == 1
+    assert g.unlock(db, "ivan") == 2  # ключ логина и счётчик его IP
     assert g.blocked_until(db, "ivan", "1.1.1.1", now=T0) is None
 
 
 def test_unlock_underscore_is_not_a_wildcard(db):
     g.register_failure(db, "axb", "1.1.1.1", now=T0)
     g.register_failure(db, "a_b", "1.1.1.1", now=T0)
-    assert g.unlock(db, "a_b") == 1
+    assert g.unlock(db, "a_b") == 2  # ключ логина и счётчик IP
     assert db.get(LoginAttempt, "axb|1.1.1.1") is not None
     assert db.get(LoginAttempt, "a_b|1.1.1.1") is None
 
@@ -176,6 +176,37 @@ def test_is_locked_ignores_ip_block_and_similar_logins(db):
     for _ in range(5):
         g.register_failure(db, "a_b", "1.1.1.1", now=T0)
     assert g.is_locked(db, "axb", now=T0) is False  # «_» не подстановочный знак
+
+
+def _ip_block_with_ivan(db):
+    """Ученик ivan ошибся один раз, потом с того же IP набралось 20 неудач: заблокирован весь IP (класс)."""
+    g.register_failure(db, "ivan", "3.3.3.3", now=T0)
+    for i in range(19):
+        g.register_failure(db, f"user{i}", "3.3.3.3", now=T0)
+    assert g.blocked_until(db, "ivan", "3.3.3.3", now=T0) is not None
+
+
+def test_is_locked_reports_ip_block_for_ips_the_login_used(db):
+    _ip_block_with_ivan(db)
+    assert g.is_locked(db, "ivan", now=T0) is True
+    assert g.is_locked(db, "ivan", now=T0 + timedelta(minutes=10, seconds=1)) is False
+    assert g.is_locked(db, "stranger", now=T0) is False  # с этого IP логин не входил
+
+
+def test_unlock_also_clears_ip_block(db):
+    _ip_block_with_ivan(db)
+    g.unlock(db, "ivan")
+    assert g.blocked_until(db, "petya", "3.3.3.3", now=T0) is None
+    assert g.is_locked(db, "ivan", now=T0) is False
+    assert db.get(LoginAttempt, "ip|3.3.3.3") is None
+
+
+def test_unlock_keeps_ip_blocks_of_other_ips(db):
+    g.register_failure(db, "ivan", "1.1.1.1", now=T0)
+    for i in range(20):
+        g.register_failure(db, f"user{i}", "4.4.4.4", now=T0)
+    g.unlock(db, "ivan")
+    assert db.get(LoginAttempt, "ip|4.4.4.4") is not None
 
 
 def test_is_locked_cleared_by_unlock(db):
