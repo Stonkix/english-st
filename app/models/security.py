@@ -24,5 +24,6 @@ class LoginAttempt(Base):
 
     key: Mapped[str] = mapped_column(primary_key=True)  # «логин|IP» или «IP»
     failures: Mapped[int] = mapped_column(default=0)
+    window_started_at: Mapped[datetime | None]  # начало текущего 10-минутного окна подсчёта
     last_failure_at: Mapped[datetime | None]
     blocked_until: Mapped[datetime | None]

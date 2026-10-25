@@ -1,3 +1,4 @@
+import threading
 from datetime import datetime, timedelta
 
 from app.auth import login_guard as g
@@ -90,3 +91,67 @@ def test_reset_all(db):
     g.register_failure(db, "ivan", "1.1.1.1", now=T0)
     g.reset_all(db)
     assert db.query(LoginAttempt).count() == 0
+
+
+def test_ip_window_is_fixed_not_quiet_period(db):
+    # 25 неудач с разных логинов раз в 2 минуты: окно сменяется, старые неудачи не копятся
+    for i in range(25):
+        assert g.register_failure(db, f"user{i}", "4.4.4.4", now=T0 + timedelta(minutes=2 * i)) is None
+    assert g.blocked_until(db, "x", "4.4.4.4", now=T0 + timedelta(minutes=48)) is None
+    assert db.get(LoginAttempt, "ip|4.4.4.4").failures <= 6
+
+
+def test_ip_blocks_at_twenty_within_window(db):
+    for i in range(19):
+        assert g.register_failure(db, f"user{i}", "5.5.5.5", now=T0 + timedelta(seconds=30 * i)) is None
+    last = T0 + timedelta(seconds=30 * 19)  # 9.5 минут от начала окна
+    assert g.register_failure(db, "user19", "5.5.5.5", now=last) == last + timedelta(minutes=10)
+
+
+def test_concurrent_insert_race_is_handled(db, monkeypatch):
+    # «чужая» сессия уже вставила строку, а наше чтение ещё видело пустоту -> IntegrityError на вставке
+    g.register_failure(db, "ivan", "1.1.1.1", now=T0)
+    monkeypatch.setattr(g, "_row_exists", lambda db, key: False)
+    assert g.register_failure(db, "ivan", "1.1.1.1", now=T0) is None
+    monkeypatch.undo()
+    db.expire_all()
+    assert db.get(LoginAttempt, "ivan|1.1.1.1").failures == 2
+    assert db.get(LoginAttempt, "ip|1.1.1.1").failures == 2
+
+
+def _burst(n: int, login: str, ip: str) -> list:
+    """n потоков с отдельными сессиями одновременно регистрируют неудачу; возвращает результаты."""
+    from app.db import SessionLocal
+
+    barrier = threading.Barrier(n)
+    results: list = []
+
+    def work():
+        with SessionLocal() as session:
+            barrier.wait()
+            try:
+                results.append(g.register_failure(session, login, ip, now=T0))
+            except Exception as exc:  # noqa: BLE001 - тест должен увидеть любую ошибку
+                results.append(exc)
+
+    threads = [threading.Thread(target=work) for _ in range(n)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    return results
+
+
+def test_parallel_failures_are_counted_exactly(db):
+    results = _burst(4, "ivan", "6.6.6.6")
+    assert results == [None] * 4
+    assert db.get(LoginAttempt, "ivan|6.6.6.6").failures == 4
+    assert db.get(LoginAttempt, "ip|6.6.6.6").failures == 4
+
+
+def test_parallel_burst_does_not_exceed_limit(db):
+    results = _burst(12, "ivan", "7.7.7.7")
+    assert not [r for r in results if isinstance(r, Exception)]
+    assert results.count(None) == 4  # блок наступает на 5-й неудаче, остальные видят его
+    assert results.count(T0 + timedelta(minutes=10)) == 8
+    assert db.get(LoginAttempt, "ivan|7.7.7.7").failures == 5  # после блока счётчик не растёт

@@ -1,8 +1,9 @@
 """Защита входа от подбора пароля.
 
-Два счётчика в БД (общие для воркеров, переживают перезапуск):
+Два счётчика в БД (переживают перезапуск; обновляются атомарным UPDATE, так что
+параллельные запросы в потоках и воркерах считаются точно):
   • «логин|IP» — 5 неудач → блок на 10 минут;
-  • «ip|IP»    — 20 неудач за 10 минут (с любыми логинами) → блок IP на 10 минут.
+  • «ip|IP»    — 20 неудач в 10-минутном окне (с любыми логинами) → блок IP на 10 минут.
 Логин сюда приходит уже нормализованным (app.logins.normalize_login), иначе блок
 обходился бы сменой регистра.
 
@@ -12,7 +13,8 @@
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete
+from sqlalchemy import and_, case, delete, func, insert, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import LoginAttempt
@@ -21,7 +23,7 @@ from app.timeutil import utcnow
 MAX_FAILURES = 5
 BLOCK_FOR = timedelta(minutes=10)
 IP_MAX_FAILURES = 20
-IP_WINDOW = timedelta(minutes=10)  # окно «тишины»: после него счётчик любого ключа начинается с нуля
+IP_WINDOW = timedelta(minutes=10)  # фиксированное окно подсчёта: отсчитывается от первой неудачи в окне
 
 
 def _keys(login: str, ip: str) -> tuple[str, str]:
@@ -31,29 +33,51 @@ def _keys(login: str, ip: str) -> tuple[str, str]:
 def blocked_until(db: Session, login: str, ip: str, now: datetime | None = None) -> datetime | None:
     """Позднейший из действующих блоков (по логину+IP и по IP) или None."""
     now = now or utcnow()
-    ends = [
-        row.blocked_until
-        for key in _keys(login, ip)
-        if (row := db.get(LoginAttempt, key)) and row.blocked_until and row.blocked_until > now
-    ]
-    return max(ends, default=None)
+    return db.scalar(
+        select(func.max(LoginAttempt.blocked_until)).where(
+            LoginAttempt.key.in_(_keys(login, ip)), LoginAttempt.blocked_until > now
+        )
+    )
+
+
+def _row_exists(db: Session, key: str) -> bool:
+    return db.scalar(select(LoginAttempt.key).where(LoginAttempt.key == key)) is not None
 
 
 def _count_failure(db: Session, key: str, limit: int, now: datetime) -> datetime | None:
-    """Учитывает неудачу по одному ключу; возвращает конец действующего блока ключа."""
-    row = db.get(LoginAttempt, key)
-    if row is None:
-        row = LoginAttempt(key=key, failures=0)
-        db.add(row)
-    elif row.blocked_until and row.blocked_until > now:
-        return row.blocked_until  # блок уже действует: не продлеваем
-    elif (row.last_failure_at and now - row.last_failure_at > IP_WINDOW) or row.blocked_until:
-        row.failures, row.blocked_until = 0, None  # давно тихо или блок истёк: считаем заново
-    row.failures += 1
-    row.last_failure_at = now
-    if row.failures >= limit:
-        row.blocked_until = now + BLOCK_FOR
-    return row.blocked_until
+    """Атомарно учитывает неудачу по одному ключу; возвращает конец блока ключа (если он есть).
+
+    Всё решает один UPDATE на стороне БД, поэтому параллельные запросы (потоки и воркеры)
+    не теряют приращения и не дают лишних попыток сверх лимита.
+    """
+    if not _row_exists(db, key):
+        try:
+            db.execute(insert(LoginAttempt).values(key=key, failures=0))
+            db.flush()
+        except IntegrityError:
+            db.rollback()  # строку только что создал параллельный запрос: она нам и нужна
+
+    t = LoginAttempt
+    active = and_(t.blocked_until.is_not(None), t.blocked_until > now)
+    # новое окно: блок истёк, окна ещё нет или оно длится дольше IP_WINDOW
+    new_window = or_(
+        t.blocked_until.is_not(None), t.window_started_at.is_(None), t.window_started_at < now - IP_WINDOW
+    )
+    failures = case((active, t.failures), (new_window, 1), else_=t.failures + 1)
+    db.execute(
+        update(t)
+        .where(t.key == key)
+        .values(
+            failures=failures,
+            window_started_at=case((active, t.window_started_at), (new_window, now), else_=t.window_started_at),
+            last_failure_at=case((active, t.last_failure_at), else_=now),
+            blocked_until=case((active, t.blocked_until), (failures >= limit, now + BLOCK_FOR), else_=None),
+        )
+        .execution_options(synchronize_session=False)
+    )
+    end = db.scalar(select(t.blocked_until).where(t.key == key))
+    db.commit()
+    return end
 
 
 def register_failure(db: Session, login: str, ip: str, now: datetime | None = None) -> datetime | None:
@@ -64,7 +88,6 @@ def register_failure(db: Session, login: str, ip: str, now: datetime | None = No
         _count_failure(db, account_key, MAX_FAILURES, now),
         _count_failure(db, ip_key, IP_MAX_FAILURES, now),
     ]
-    db.commit()
     return max((e for e in ends if e), default=None)
 
 

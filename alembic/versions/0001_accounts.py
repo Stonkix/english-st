@@ -19,6 +19,7 @@ def upgrade() -> None:
     op.create_table('login_attempts',
     sa.Column('key', sa.String(), nullable=False),
     sa.Column('failures', sa.Integer(), nullable=False),
+    sa.Column('window_started_at', sa.DateTime(), nullable=True),
     sa.Column('last_failure_at', sa.DateTime(), nullable=True),
     sa.Column('blocked_until', sa.DateTime(), nullable=True),
     sa.PrimaryKeyConstraint('key')
