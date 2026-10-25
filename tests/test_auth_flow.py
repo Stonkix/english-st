@@ -1,5 +1,7 @@
+from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from app.main import app
 from app.models import LoginAttempt, Session as SessionRow
 from tests.factories import login_as, make_user
 
@@ -243,17 +245,33 @@ def test_password_new_page_has_rules_and_toggle(client, db):
     assert "Выйти" in r.text
 
 
-def test_password_new_voluntary_keeps_nav(client, db):
-    make_user(db, login="ivan")
+def test_password_new_only_for_forced_change(client, db):
+    """Без текущего пароля менять его нельзя: обычный пользователь уходит на главную (смена — в профиле)."""
+    user = make_user(db, login="ivan")
+    old_hash = user.password_hash
     login_as(client, "ivan")
-    assert "<nav" in client.get("/password/new").text
-
-
-def test_password_new_voluntary_redirects_to_home_for_role(client, db):
-    make_user(db, role="teacher", login="anna")
-    login_as(client, "anna")
+    r = client.get("/password/new", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/"
     r = client.post("/password/new", data={"new": "NewPassw0rd", "repeat": "NewPassw0rd"}, follow_redirects=False)
-    assert r.headers["location"] == "/teacher"
+    assert r.status_code == 303 and r.headers["location"] == "/"
+    db.refresh(user)
+    assert user.password_hash == old_hash
+    make_user(db, role="teacher", login="anna")
+    client.post("/logout")
+    login_as(client, "anna")
+    assert client.get("/password/new", follow_redirects=False).headers["location"] == "/teacher"
+
+
+def test_password_change_revokes_other_sessions(client, db):
+    make_user(db, login="kid", must_change=True)
+    login_as(client, "kid")
+    with TestClient(app, headers={"Origin": "http://testserver"}) as other:  # «другое устройство»
+        assert login_as(other, "kid").headers["location"] == "/password/new"
+        r = client.post("/password/new", data={"new": "NewPassw0rd", "repeat": "NewPassw0rd"}, follow_redirects=False)
+        assert r.status_code == 303
+        assert other.get("/password/new", follow_redirects=False).headers["location"] == "/login"
+    assert client.get("/", follow_redirects=False).status_code == 200  # текущая сессия жива
+    assert len(db.scalars(select(SessionRow)).all()) == 1
 
 
 # ---------- главная ----------

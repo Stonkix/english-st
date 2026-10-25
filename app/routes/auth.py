@@ -12,7 +12,14 @@ from sqlalchemy.orm import Session as DbSession
 from app.auth.deps import client_ip, get_current_user, home_for, require_user
 from app.auth.login_guard import blocked_until, register_failure, register_success
 from app.auth.passwords import MAX_LENGTH, RULE_TEXT, hash_password, validate_password, verify_password
-from app.auth.sessions import COOKIE_NAME, clear_session_cookie, create_session, revoke_session, set_session_cookie
+from app.auth.sessions import (
+    COOKIE_NAME,
+    clear_session_cookie,
+    create_session,
+    revoke_session,
+    revoke_user_sessions,
+    set_session_cookie,
+)
 from app.db import get_db
 from app.logins import MAX_LEN as LOGIN_MAX_LEN
 from app.logins import is_valid_login, normalize_login
@@ -104,16 +111,17 @@ def logout(request: Request, db: DbSession = Depends(get_db)):
     return response
 
 
-def _password_page(request: Request, user: User, errors: list[str]):
-    # Пока пароль временный, идти больше некуда: меню не показываем
-    forced = user.must_change_password
-    context = {"user": None if forced else user, "errors": errors, "forced": forced}
-    return templates.TemplateResponse(request, "auth/password_new.html", context)
+def _password_page(request: Request, errors: list[str]):
+    # Пока пароль временный, идти больше некуда: меню не показываем (user в шаблон не передаём)
+    return templates.TemplateResponse(request, "auth/password_new.html", {"errors": errors})
 
 
+# Этот экран — только для замены временного пароля. Добровольная смена (с текущим паролем) — в профиле.
 @router.get("/password/new")
 def password_form(request: Request, user: User = Depends(require_user)):
-    return _password_page(request, user, [])
+    if not user.must_change_password:
+        return RedirectResponse(home_for(user), status_code=303)
+    return _password_page(request, [])
 
 
 @router.post("/password/new")
@@ -124,17 +132,20 @@ def password_change(
     user: User = Depends(require_user),
     db: DbSession = Depends(get_db),
 ):
+    if not user.must_change_password:
+        return RedirectResponse(home_for(user), status_code=303)
     errors = [RULE_TEXT[code] for code in validate_password(new)]
     if len(new) > MAX_LENGTH:
         errors.append(f"Не длиннее {MAX_LENGTH} символов")
     if new != repeat:
         errors.append("Пароли не совпадают")
     if errors:
-        return _password_page(request, user, errors)
+        return _password_page(request, errors)
 
     user.password_hash = hash_password(new)
     user.must_change_password = False
-    db.commit()
+    # временный пароль мог увидеть кто-то ещё и войти с другого устройства: чужие сессии завершаем (одним коммитом)
+    revoke_user_sessions(db, user.id, keep_token=request.cookies.get(COOKIE_NAME))
     return RedirectResponse(home_for(user), status_code=303)
 
 
