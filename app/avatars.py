@@ -9,6 +9,8 @@ from app.images import InvalidImage, delete_media, read_limited, save_avatar
 from app.models import AvatarHistory, User
 from app.timeutil import moscow_str, utcnow
 
+BAD_IMAGE = "Не получилось открыть картинку. Попробуйте другое фото."
+
 LOCK_PERIODS: dict[str, timedelta | None] = {
     "1": timedelta(days=1),
     "7": timedelta(days=7),

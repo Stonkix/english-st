@@ -5,18 +5,16 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session as DbSession
 
 from app.auth.deps import require_user
-from app.auth.passwords import hash_password, new_password_errors
+from app.auth.passwords import check_password, hash_password, new_password_errors
 from app.auth.sessions import COOKIE_NAME, revoke_user_sessions
 from app.db import get_db
-from app.avatars import avatar_locked, lock_message, read_photo, replace_avatar, student_remove_avatar
+from app.avatars import BAD_IMAGE, avatar_locked, lock_message, read_photo, replace_avatar, student_remove_avatar
 from app.images import InvalidImage
 from app.models import User
-from app.routes.auth import check_password
 from app.templating import templates
 
 router = APIRouter()
 
-BAD_IMAGE = "Не получилось открыть картинку. Попробуйте другое фото."
 WRONG_CURRENT = "Текущий пароль указан неверно"
 SAME_PASSWORD = "Новый пароль совпадает с текущим"
 

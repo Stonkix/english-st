@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from app.auth.deps import client_ip, get_current_user, home_for, require_user
 from app.auth.login_guard import blocked_until, register_failure, register_success
-from app.auth.passwords import MAX_LENGTH, hash_password, new_password_errors, verify_password
+from app.auth.passwords import check_password, hash_password, new_password_errors
 from app.auth.sessions import (
     COOKIE_NAME,
     clear_session_cookie,
@@ -43,16 +43,6 @@ def _login_page(request: Request, login: str, error: str | None, hint: bool, sta
 def _blocked_page(request: Request, login: str, until: datetime):
     minutes = max(1, math.ceil((until - utcnow()).total_seconds() / 60))
     return _login_page(request, login, f"Слишком много попыток. Попробуйте через {minutes} мин.", False, 429)
-
-
-def check_password(password: str, stored: str) -> bool:
-    """Слишком длинный или не кодируемый в UTF-8 пароль — просто неверный пароль, а не ошибка сервера."""
-    if len(password) > MAX_LENGTH:
-        return False
-    try:
-        return verify_password(password, stored)
-    except (UnicodeError, ValueError):
-        return False
 
 
 @router.get("/login")

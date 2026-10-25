@@ -69,21 +69,22 @@ def test_inactive_user_same_as_wrong_password(client, db):
 def test_unknown_and_inactive_login_still_verify_password(client, db, monkeypatch):
     """Время ответа не должно выдавать, есть ли такой логин: хеш сверяется всегда."""
     calls = []
-    import app.routes.auth as mod
+    import app.auth.passwords as mod
+    import app.routes.auth as routes_auth
 
     original = mod.verify_password
     monkeypatch.setattr(mod, "verify_password", lambda p, h: calls.append(h) or original(p, h))
     make_user(db, login="off", is_active=False)
     login_as(client, "nobody")
     login_as(client, "off")
-    assert len(calls) == 2 and calls[0] == mod._DUMMY_HASH
+    assert len(calls) == 2 and calls[0] == routes_auth._DUMMY_HASH
 
 
 def test_blocked_login_skips_password_check(client, db, monkeypatch):
     make_user(db, login="ivan")
     for _ in range(5):
         login_as(client, "ivan", "Wrong12345a")
-    import app.routes.auth as mod
+    import app.auth.passwords as mod
 
     def boom(*a):
         raise AssertionError("пароль не должен проверяться при блоке")
@@ -111,7 +112,7 @@ def test_unencodable_password_is_just_wrong(client, db):
 
 def test_verify_error_is_just_wrong(client, db, monkeypatch):
     make_user(db, login="ivan")
-    import app.routes.auth as mod
+    import app.auth.passwords as mod
 
     def boom(*a):
         raise UnicodeEncodeError("utf-8", "x", 0, 1, "surrogate")

@@ -15,6 +15,7 @@ from app.accounts import (
     temp_password_page,
 )
 from app.avatars import (
+    BAD_IMAGE,
     LOCK_PERIODS,
     avatar_locked,
     history,
@@ -41,7 +42,6 @@ teacher_only = require_role("teacher")  # админ проходит тоже
 GROUP_NAME_MAX = 50
 GROUP_NAME_REQUIRED = "Введите название группы"
 GROUP_NAME_TOO_LONG = f"Название группы — не длиннее {GROUP_NAME_MAX} символов"
-BAD_IMAGE = "Не получилось открыть картинку. Попробуйте другое фото."
 
 
 # ---------- доступ ----------

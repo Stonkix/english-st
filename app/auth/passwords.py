@@ -49,6 +49,16 @@ def verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(_scrypt(password, salt), expected)
 
 
+def check_password(password: str, stored: str) -> bool:
+    """Слишком длинный или не кодируемый в UTF-8 пароль — просто неверный пароль, а не ошибка сервера."""
+    if len(password) > MAX_LENGTH:
+        return False
+    try:
+        return verify_password(password, stored)
+    except (UnicodeError, ValueError):
+        return False
+
+
 def validate_password(password: str) -> list[str]:
     """Коды невыполненных правил; пустой список — пароль подходит."""
     checks = {
