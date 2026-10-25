@@ -10,6 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import models  # noqa: F401 — регистрирует таблицы в metadata
 from app.auth.deps import LoginRequired, PasswordChangeRequired
+from app.auth.sessions import COOKIE_NAME, set_session_cookie
 from app.config import BASE_DIR, Settings, settings
 from app.templating import templates
 
@@ -61,6 +62,19 @@ async def check_origin(request: Request, call_next):
         if source is None or source != _origin_of(settings.base_url):
             return templates.TemplateResponse(request, "error.html", {"code": 403}, status_code=403)
     return await call_next(request)
+
+
+@app.middleware("http")
+async def refresh_session_cookie(request: Request, call_next):
+    """Продлевает cookie вместе с сессией в БД (раз в час, см. TOUCH_EVERY)."""
+    response = await call_next(request)
+    token = getattr(request.state, "refresh_session_token", None)
+    if token:
+        own = f"{COOKIE_NAME}="
+        # вход и выход сами ставят/снимают cookie — их значение главнее
+        if not any(h.startswith(own) for h in response.headers.getlist("set-cookie")):
+            set_session_cookie(response, token)
+    return response
 
 
 def _redirect(request: Request, url: str) -> Response:

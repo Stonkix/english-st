@@ -194,6 +194,12 @@ def probe():
     def t_maybe(user=Depends(deps.get_current_user)):
         return {"login": user.login if user else None}
 
+    @router.get("/_t/bye")
+    def t_bye(user=Depends(deps.require_user)):
+        response = Response("bye")
+        s.clear_session_cookie(response)
+        return response
+
     before = len(app.router.routes)
     app.include_router(router)
     added = app.router.routes[before:]
@@ -288,3 +294,44 @@ def test_home_for(db):
     assert deps.home_for(make_user(db, role="student")) == "/"
     assert deps.home_for(make_user(db, role="teacher")) == "/teacher"
     assert deps.home_for(make_user(db, role="admin")) == "/teacher"
+
+
+# ---------- скольжение cookie ----------
+
+def age_session(db, hours):
+    """Делает вид, что сессию в последний раз продлевали hours часов назад."""
+    row = db.scalars(select(SessionRow)).one()
+    row.last_seen_at = utcnow() - timedelta(hours=hours)
+    db.commit()
+
+
+def test_cookie_reissued_after_touch(client, db, probe):
+    login_cookie(client, db)
+    token = client.cookies.get(s.COOKIE_NAME)
+    age_session(db, hours=2)
+    r = client.get("/_t/user")
+    assert r.status_code == 200
+    c = r.headers["set-cookie"].lower()
+    assert f"est_session={token}".lower() in c and f"max-age={30 * 24 * 3600}" in c and "httponly" in c
+
+
+def test_cookie_not_reissued_within_the_hour(client, db, probe):
+    login_cookie(client, db)
+    age_session(db, hours=0)
+    r = client.get("/_t/user")
+    assert r.status_code == 200 and "set-cookie" not in r.headers
+
+
+def test_cookie_reissued_once_per_hour(client, db, probe):
+    login_cookie(client, db)
+    age_session(db, hours=2)
+    assert "set-cookie" in client.get("/_t/user").headers
+    assert "set-cookie" not in client.get("/_t/user").headers  # только что продлили
+
+
+def test_clearing_cookie_wins_over_refresh(client, db, probe):
+    login_cookie(client, db)
+    age_session(db, hours=2)
+    r = client.get("/_t/bye")
+    cookies = r.headers.get_list("set-cookie")
+    assert len(cookies) == 1 and "max-age=0" in cookies[0].lower()

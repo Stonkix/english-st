@@ -44,26 +44,36 @@ def create_session(db: DbSession, user: User, ip: str, user_agent: str, now: dat
     return token
 
 
-def get_session_user(db: DbSession, token: str | None, now: datetime | None = None) -> User | None:
-    """Пользователь по токену или None: нет токена, сессия истекла, аккаунт отключён."""
+def resolve_session(db: DbSession, token: str | None, now: datetime | None = None) -> tuple[User | None, bool]:
+    """(пользователь, продлена ли сессия). Продление не чаще TOUCH_EVERY.
+
+    Если сессия продлена, вызывающий должен заново выдать cookie (set_session_cookie),
+    иначе браузер забудет её по исходному max_age, а на сервере сессия останется.
+    """
     if not token:
-        return None
+        return None, False
     now = now or utcnow()
     row = db.get(Session, _hash(token))
     if row is None:
-        return None
+        return None, False
     if row.expires_at <= now:
         db.delete(row)
         db.commit()
-        return None
+        return None, False
     user = db.get(User, row.user_id)
     if user is None or not user.is_active:
-        return None
-    if now - row.last_seen_at >= TOUCH_EVERY:
+        return None, False
+    touched = now - row.last_seen_at >= TOUCH_EVERY
+    if touched:
         row.last_seen_at = now
         row.expires_at = now + SESSION_TTL
         db.commit()
-    return user
+    return user, touched
+
+
+def get_session_user(db: DbSession, token: str | None, now: datetime | None = None) -> User | None:
+    """Пользователь по токену или None: нет токена, сессия истекла, аккаунт отключён."""
+    return resolve_session(db, token, now)[0]
 
 
 def revoke_session(db: DbSession, token: str) -> None:

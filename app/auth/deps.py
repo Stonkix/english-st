@@ -3,7 +3,7 @@
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session as DbSession
 
-from app.auth.sessions import COOKIE_NAME, get_session_user
+from app.auth.sessions import COOKIE_NAME, resolve_session
 from app.db import get_db
 from app.models import User
 
@@ -25,8 +25,12 @@ def client_ip(request: Request) -> str:
 
 
 def get_current_user(request: Request, db: DbSession = Depends(get_db)) -> User | None:
-    user = get_session_user(db, request.cookies.get(COOKIE_NAME))
+    token = request.cookies.get(COOKIE_NAME)
+    user, touched = resolve_session(db, token)
     request.state.user = user
+    if touched:
+        # middleware в main.py заново выдаст cookie, чтобы срок в браузере тоже скользил
+        request.state.refresh_session_token = token
     return user
 
 
