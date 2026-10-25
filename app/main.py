@@ -30,7 +30,7 @@ _UNRESOLVED = object()
 
 def check_production_secrets(s: Settings) -> None:
     """В проде не даём стартовать с секретом-заглушкой."""
-    if not s.debug and s.secret_key in _PLACEHOLDERS:
+    if not s.debug and (not s.secret_key.strip() or s.secret_key in _PLACEHOLDERS):
         raise RuntimeError("Задайте SECRET_KEY в .env (или DEBUG=true для локальной разработки)")
 
 

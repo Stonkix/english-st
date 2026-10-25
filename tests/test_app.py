@@ -18,3 +18,12 @@ def test_prod_refuses_placeholder_secret():
     with pytest.raises(RuntimeError):
         check_production_secrets(Settings(debug=False, secret_key="change-me"))
     check_production_secrets(Settings(debug=False, secret_key="x" * 48))  # не бросает
+
+
+@pytest.mark.parametrize("secret", ["", "   "])
+def test_prod_refuses_empty_secret(secret):
+    from app.config import Settings
+    from app.main import check_production_secrets
+
+    with pytest.raises(RuntimeError):
+        check_production_secrets(Settings(debug=False, secret_key=secret))
