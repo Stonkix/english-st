@@ -354,7 +354,7 @@ def delete_student_avatar_history(
 
 @router.post("/students/{student_id}/avatar/lock")
 def lock_student_avatar(
-    student_id: Id, period: str = Form("off"), user: User = Depends(teacher_only), db: DbSession = Depends(get_db)
+    student_id: Id, period: str = Form(""), user: User = Depends(teacher_only), db: DbSession = Depends(get_db)
 ):
     student = own_student(db, user, student_id)
     if period == "":
