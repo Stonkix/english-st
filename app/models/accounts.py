@@ -43,6 +43,9 @@ class User(Base):
     def full_name(self) -> str:
         return f"{self.first_name} {self.last_name}"
 
+    def __str__(self) -> str:  # подпись в списках админки
+        return f"{self.full_name} ({self.login})"
+
 
 class Group(Base):
     __tablename__ = "groups"
@@ -54,6 +57,9 @@ class Group(Base):
 
     students: Mapped[list[User]] = relationship(back_populates="group", foreign_keys=[User.group_id])
     teacher: Mapped[User] = relationship(foreign_keys=[teacher_id])
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class AvatarHistory(Base):
