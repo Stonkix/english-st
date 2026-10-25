@@ -76,3 +76,31 @@ def test_temp_password():
 def test_temp_password_too_short():
     with pytest.raises(ValueError):
         generate_temp_password(9)
+
+
+def test_scrypt_concurrency_is_capped(monkeypatch):
+    """scrypt занимает 16 МиБ на вызов: одновременно считается не больше двух хешей."""
+    import threading
+    import time
+
+    from app.auth import passwords
+
+    lock = threading.Lock()
+    state = {"now": 0, "peak": 0}
+
+    def slow_scrypt(password, **kwargs):
+        with lock:
+            state["now"] += 1
+            state["peak"] = max(state["peak"], state["now"])
+        time.sleep(0.05)
+        with lock:
+            state["now"] -= 1
+        return b"\x00" * 32
+
+    monkeypatch.setattr(passwords.hashlib, "scrypt", slow_scrypt)
+    threads = [threading.Thread(target=passwords.hash_password, args=("Passw0rd12",)) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert state["peak"] == 2

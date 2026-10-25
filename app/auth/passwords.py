@@ -5,6 +5,7 @@ import hmac
 import re
 import secrets
 import string
+import threading
 
 _SCRYPT = {"n": 2**14, "r": 8, "p": 1, "dklen": 32}
 _SALT_BYTES = 16
@@ -25,8 +26,14 @@ RULE_TEXT = {
 _TEMP_ALPHABET = "".join(c for c in string.ascii_letters + string.digits if c not in "0O1lI")
 
 
+# scrypt n=2^14, r=8 — 16 МиБ на вызов, GIL при этом отпускается: без ограничения 40 потоков съели бы ~640 МиБ
+_HASH_SLOTS = threading.BoundedSemaphore(2)
+
+
 def _scrypt(password: str, salt: bytes) -> bytes:
-    return hashlib.scrypt(password.encode(), salt=salt, **_SCRYPT)
+    data = password.encode()  # не кодируется в UTF-8 — ошибка до захвата слота
+    with _HASH_SLOTS:
+        return hashlib.scrypt(data, salt=salt, **_SCRYPT)
 
 
 def hash_password(password: str) -> str:
