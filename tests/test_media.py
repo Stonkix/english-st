@@ -135,7 +135,7 @@ def test_media_not_mounted_statically(client, db):
 
     from app.main import app
 
-    assert not [r for r in app.routes if isinstance(r, Mount) and not r.path.startswith("/static")]
+    assert not [r for r in app.routes if isinstance(r, Mount) and not r.path.startswith(("/static", "/admin"))]  # /admin — sqladmin
     u = make_user(db, login="kid")
     give_avatar(client, db, u)
     assert client.get(f"/static/{u.avatar}").status_code == 404

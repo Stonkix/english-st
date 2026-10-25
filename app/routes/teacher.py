@@ -6,6 +6,14 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
+from app.accounts import (
+    LOGIN_INVALID,
+    LOGIN_TAKEN,
+    NAME_MAX,
+    login_taken,
+    name_errors,
+    temp_password_page,
+)
 from app.avatars import (
     LOCK_PERIODS,
     avatar_locked,
@@ -30,14 +38,9 @@ from app.templating import templates
 router = APIRouter(prefix="/teacher")
 teacher_only = require_role("teacher")  # админ проходит тоже
 
-NAME_MAX = 50
 GROUP_NAME_MAX = 50
 GROUP_NAME_REQUIRED = "Введите название группы"
 GROUP_NAME_TOO_LONG = f"Название группы — не длиннее {GROUP_NAME_MAX} символов"
-NAME_REQUIRED = "Введите имя и фамилию"
-NAME_TOO_LONG = f"Имя и фамилия — не длиннее {NAME_MAX} символов"
-LOGIN_INVALID = "Логин: латинские буквы, цифры, точка, дефис, подчёркивание; от 3 до 32 символов"
-LOGIN_TAKEN = "Логин уже занят"
 BAD_IMAGE = "Не получилось открыть картинку. Попробуйте другое фото."
 
 
@@ -69,19 +72,7 @@ def _groups_of(db: DbSession, user: User) -> list[Group]:
     return list(db.scalars(stmt))
 
 
-def login_taken(db: DbSession, login: str) -> bool:
-    return db.scalar(select(User.id).where(User.login == login)) is not None
-
-
 # ---------- проверка введённого ----------
-
-
-def _name_errors(first_name: str, last_name: str) -> list[str]:
-    if not first_name or not last_name:
-        return [NAME_REQUIRED]
-    if len(first_name) > NAME_MAX or len(last_name) > NAME_MAX:
-        return [NAME_TOO_LONG]
-    return []
 
 
 def _group_name_error(name: str) -> str | None:
@@ -134,14 +125,6 @@ def _student_page(request: Request, db: DbSession, user: User, student: User, **
         photo_locked=avatar_locked(student),
     )
     return templates.TemplateResponse(request, "teacher/student.html", context)
-
-
-def _temp_password_page(request: Request, user: User, student: User, password: str, created: bool):
-    """Пароль показывается только в этом ответе: ни в БД открытым текстом, ни в адресе, ни в кэше."""
-    context = {"user": user, "student": student, "password": password, "created": created}
-    response = templates.TemplateResponse(request, "teacher/temp_password.html", context)
-    response.headers["Cache-Control"] = "no-store"
-    return response
 
 
 def _to_student(student: User) -> RedirectResponse:
@@ -235,7 +218,7 @@ def create_student(
     first_name, last_name, login = first_name.strip(), last_name.strip(), normalize_login(login)
     values = {"first_name": first_name, "last_name": last_name, "login": login}
 
-    errors = _name_errors(first_name, last_name)
+    errors = name_errors(first_name, last_name)
     if not is_valid_login(login):
         errors.append(LOGIN_INVALID)
     elif login_taken(db, login):
@@ -260,7 +243,7 @@ def create_student(
         # двойное нажатие: параллельный запрос успел занять логин между проверкой и вставкой
         db.rollback()
         return _student_form(request, user, group, values, [LOGIN_TAKEN])
-    return _temp_password_page(request, user, student, password, created=True)
+    return temp_password_page(request, user, student, password, created=True)
 
 
 # ---------- карточка ученика ----------
@@ -284,7 +267,7 @@ def edit_student(
     student = own_student(db, user, student_id)
     new_group = own_group(db, user, _group_id_or_404(group_id))  # перенос — только в группы этого учителя
     first_name, last_name = first_name.strip(), last_name.strip()
-    errors = _name_errors(first_name, last_name)
+    errors = name_errors(first_name, last_name)
     if errors:
         return _student_page(request, db, user, student, errors=errors)
     student.first_name, student.last_name, student.group_id = first_name, last_name, new_group.id
@@ -301,7 +284,7 @@ def reset_password(
     student.password_hash = hash_password(password)
     student.must_change_password = True
     revoke_user_sessions(db, student.id)  # коммитит вместе с новым хешем: старый пароль и сессии умирают разом
-    return _temp_password_page(request, user, student, password, created=False)
+    return temp_password_page(request, user, student, password, created=False)
 
 
 @router.post("/students/{student_id}/unlock")

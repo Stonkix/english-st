@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Учителя — English ST{% endblock %}
+
+{% block content %}
+<section class="page teacher-page">
+  <a class="back-link" href="/school">← Школа</a>
+  <h1>Учителя</h1>
+
+  {% if teachers %}
+  <ul class="list">
+    {% for t in teachers %}
+    <li class="card" data-login="{{ t.login }}">
+      <div class="list-item-main">
+        <strong>{{ t.full_name }}</strong>
+        <small>{{ t.login }}</small>
+        {% if not t.is_active %}<span class="list-item-badges"><span class="badge">не активен</span></span>{% endif %}
+      </div>
+      <form method="post" action="/school/teachers/{{ t.id }}/reset-password"
+            data-confirm="Сбросить пароль? Учитель выйдет из аккаунта на всех устройствах." data-once>
+        <button class="btn btn-secondary btn-block" type="submit">Сбросить пароль</button>
+      </form>
+      {% if t.is_active %}
+      <form method="post" action="/school/teachers/{{ t.id }}/deactivate"
+            data-confirm="Деактивировать учителя? Он сразу выйдет из аккаунта и не сможет войти. Его группы сохранятся.">
+        <button class="btn btn-danger btn-block" type="submit">Деактивировать</button>
+      </form>
+      {% else %}
+      <form method="post" action="/school/teachers/{{ t.id }}/activate">
+        <button class="btn btn-primary btn-block" type="submit">Активировать</button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="card"><p class="lead">Учителей пока нет. Добавьте первого.</p></div>
+  {% endif %}
+
+  <form class="card" method="post" action="/school/teachers" data-once>
+    <h2>Новый учитель</h2>
+    {% if errors %}
+    <div class="alert-error" role="alert">
+      {% for e in errors %}<p>{{ e }}</p>{% endfor %}
+    </div>
+    {% endif %}
+    <div class="field">
+      <label for="first-name">Имя</label>
+      <input id="first-name" name="first_name" value="{{ values.first_name }}" maxlength="50" autocomplete="off" required>
+    </div>
+    <div class="field">
+      <label for="last-name">Фамилия</label>
+      <input id="last-name" name="last_name" value="{{ values.last_name }}" maxlength="50" autocomplete="off" required>
+    </div>
+    <div class="field">
+      <label for="login">Логин для входа</label>
+      <input id="login" name="login" value="{{ values.login }}" maxlength="32" autocomplete="off" autocapitalize="none" required>
+      <small class="muted">Латиницей, цифры, точка, дефис, подчёркивание.</small>
+    </div>
+    <button class="btn btn-primary btn-block" type="submit">Создать учителя</button>
+  </form>
+</section>
+{% endblock %}

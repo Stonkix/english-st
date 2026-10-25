@@ -10,6 +10,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import models  # noqa: F401 — регистрирует таблицы в metadata
+from app.admin import setup_admin
 from app.auth.deps import LoginRequired, PasswordChangeRequired, get_current_user
 from app.auth.sessions import COOKIE_NAME, set_session_cookie
 from app.config import BASE_DIR, Settings, settings
@@ -17,6 +18,7 @@ from app.db import SessionLocal
 from app.routes.auth import router as auth_router
 from app.routes.media import router as media_router
 from app.routes.profile import router as profile_router
+from app.routes.school import router as school_router
 from app.routes.teacher import router as teacher_router
 from app.templating import templates
 
@@ -129,6 +131,8 @@ app.include_router(auth_router)
 app.include_router(profile_router)
 app.include_router(media_router)
 app.include_router(teacher_router)
+app.include_router(school_router)
+setup_admin(app)  # /admin — sqladmin, вход по сессии сайта (только admin)
 
 
 @app.get("/healthz")
