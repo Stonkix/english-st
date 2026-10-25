@@ -1,11 +1,15 @@
 import logging
 from types import SimpleNamespace
 
+from urllib.parse import urlsplit
+
 from fastapi import FastAPI, Request
+from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import models  # noqa: F401 — регистрирует таблицы в metadata
+from app.auth.deps import LoginRequired, PasswordChangeRequired
 from app.config import BASE_DIR, Settings, settings
 from app.templating import templates
 
@@ -26,6 +30,54 @@ app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 # В проде /static отдаёт nginx, mount работает для локальной разработки
 app.mount("/static", StaticFiles(directory=BASE_DIR / "app" / "static"), name="static")
+
+
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+_UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _origin_of(value: str) -> str | None:
+    """«схема://хост[:порт]» из Origin или полного URL (Referer); None, если не разобрать."""
+    try:
+        parts = urlsplit(value.strip())
+        scheme, host, port = parts.scheme.lower(), parts.hostname, parts.port
+    except ValueError:
+        return None
+    if scheme not in _DEFAULT_PORTS or not host:
+        return None  # в том числе «Origin: null»
+    host = f"[{host}]" if ":" in host else host
+    return f"{scheme}://{host}" + (f":{port}" if port and port != _DEFAULT_PORTS[scheme] else "")
+
+
+@app.middleware("http")
+async def check_origin(request: Request, call_next):
+    """Защита от CSRF: изменяющие запросы принимаем только со своего сайта."""
+    if request.method in _UNSAFE_METHODS:
+        # Origin главнее Referer; если он есть, но битый или «null» — отказ, без запасного пути
+        header = request.headers.get("origin")
+        if header is None:
+            header = request.headers.get("referer")
+        source = _origin_of(header) if header is not None else None
+        if source is None or source != _origin_of(settings.base_url):
+            return templates.TemplateResponse(request, "error.html", {"code": 403}, status_code=403)
+    return await call_next(request)
+
+
+def _redirect(request: Request, url: str) -> Response:
+    """303 на url; для HTMX-запросов — 200 с HX-Redirect, иначе страница встроится во фрагмент."""
+    if request.headers.get("hx-request") == "true":
+        return Response(status_code=200, headers={"HX-Redirect": url})
+    return RedirectResponse(url, status_code=303)
+
+
+@app.exception_handler(LoginRequired)
+async def login_required(request: Request, exc: LoginRequired):
+    return _redirect(request, "/login")
+
+
+@app.exception_handler(PasswordChangeRequired)
+async def password_change_required(request: Request, exc: PasswordChangeRequired):
+    return _redirect(request, "/password/new")
 
 
 @app.exception_handler(StarletteHTTPException)
