@@ -1,6 +1,6 @@
 """Профиль: фото, смена пароля."""
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session as DbSession
 
@@ -19,9 +19,9 @@ WRONG_CURRENT = "Текущий пароль указан неверно"
 SAME_PASSWORD = "Новый пароль совпадает с текущим"
 
 
-def _page(request: Request, user: User, **context):
+def _page(request: Request, user: User, status: int = 200, **context):
     lock = lock_message(user) if user.role == "student" else None  # запрет касается только учеников
-    return templates.TemplateResponse(request, "profile.html", {"user": user, "avatar_lock": lock, **context})
+    return templates.TemplateResponse(request, "profile.html", {"user": user, "avatar_lock": lock, **context}, status_code=status)
 
 
 @router.get("/profile")
@@ -52,10 +52,9 @@ def change_password(
     return _page(request, user, password_ok=True)
 
 
-def _require_unlocked(user: User) -> None:
+def _is_locked(user: User) -> bool:
     """Запрет учителя действует только на ученика; проверка на сервере, не только скрытые формы."""
-    if user.role == "student" and avatar_locked(user):
-        raise HTTPException(403, "Учитель запретил менять фото")
+    return user.role == "student" and avatar_locked(user)
 
 
 @router.post("/profile/avatar")
@@ -65,7 +64,8 @@ def upload_avatar(
     user: User = Depends(require_user),
     db: DbSession = Depends(get_db),
 ):
-    _require_unlocked(user)
+    if _is_locked(user):  # страница была открыта до запрета: показываем профиль с причиной, а не голую ошибку
+        return _page(request, user, 403)
     try:
         replace_avatar(db, user, read_photo(photo))
     except InvalidImage:
@@ -74,7 +74,8 @@ def upload_avatar(
 
 
 @router.post("/profile/avatar/delete")
-def delete_avatar(user: User = Depends(require_user), db: DbSession = Depends(get_db)):
-    _require_unlocked(user)
+def delete_avatar(request: Request, user: User = Depends(require_user), db: DbSession = Depends(get_db)):
+    if _is_locked(user):
+        return _page(request, user, 403)
     student_remove_avatar(db, user)  # прежнее фото сохраняется для учителя
     return RedirectResponse("/profile", status_code=303)

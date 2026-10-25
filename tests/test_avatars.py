@@ -188,6 +188,8 @@ def test_lock_blocks_student(client, db):
     as_user(client, "kid")
     assert upload(client).status_code == 403
     assert client.post("/profile/avatar/delete").status_code == 403
+    for r in (upload(client), client.post("/profile/avatar/delete")):  # устаревшая страница: объясняем, а не «Сюда нельзя»
+        assert "Учитель запретил менять фото до" in r.text and "Сюда нельзя" not in r.text
     page = client.get("/profile").text
     assert "Учитель запретил менять фото до" in page and 'action="/profile/avatar"' not in page
     as_user(client, "teach")
