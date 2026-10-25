@@ -75,11 +75,12 @@
       <div class="field">
         <label for="lock-period">Срок запрета</label>
         <select id="lock-period" name="period">
+          <option value=""{% if photo_locked %} selected{% endif %}>Оставить как есть</option>
           <option value="off"{% if not photo_locked %} selected{% endif %}>Не запрещать</option>
           <option value="1">На 1 день</option>
           <option value="7">На 7 дней</option>
           <option value="30">На 30 дней</option>
-          <option value="forever"{% if student.avatar_locked_forever %} selected{% endif %}>Навсегда</option>
+          <option value="forever">Навсегда</option>
         </select>
       </div>
       <button class="btn btn-secondary btn-block" type="submit">Применить</button>

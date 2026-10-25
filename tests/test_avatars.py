@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime, timedelta
 from io import BytesIO
 
@@ -195,6 +196,35 @@ def test_lock_blocks_student(client, db):
     assert upload(client).status_code == 200  # после редиректа — страница профиля
     db.refresh(s)
     assert s.avatar
+
+
+def selected_lock_option(page: str) -> str:
+    select = re.search(r'<select id="lock-period".*?</select>', page, re.S).group(0)
+    return re.search(r'<option value="([^"]*)"[^>]* selected', select).group(1)
+
+
+def test_lock_dropdown_keeps_timed_lock_by_default(client, db):
+    t, s = setup(db)
+    as_user(client, "teach")
+    url = f"/teacher/students/{s.id}"
+    assert selected_lock_option(client.get(url).text) == "off"  # запрета нет
+    for period in ("7", "forever"):
+        client.post(f"{url}/avatar/lock", data={"period": period})
+        page = client.get(url).text
+        assert selected_lock_option(page) == ""
+        assert "Оставить как есть" in page.split('id="lock-period"')[1].split("<option", 2)[1]  # первый вариант
+
+
+def test_lock_empty_period_changes_nothing(client, db):
+    t, s = setup(db)
+    as_user(client, "teach")
+    client.post(f"/teacher/students/{s.id}/avatar/lock", data={"period": "7"})
+    db.refresh(s)
+    until = s.avatar_locked_until
+    r = client.post(f"/teacher/students/{s.id}/avatar/lock", data={"period": ""}, follow_redirects=False)
+    assert r.status_code == 303
+    db.refresh(s)
+    assert s.avatar_locked_until == until and not s.avatar_locked_forever
 
 
 def test_lock_forever_message_and_teacher_upload_ignores_lock(client, db):

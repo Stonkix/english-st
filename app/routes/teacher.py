@@ -357,6 +357,8 @@ def lock_student_avatar(
     student_id: Id, period: str = Form("off"), user: User = Depends(teacher_only), db: DbSession = Depends(get_db)
 ):
     student = own_student(db, user, student_id)
+    if period == "":
+        return _to_student(student)  # «Оставить как есть»: действующий запрет не трогаем
     if period != "off" and period not in LOCK_PERIODS:
         raise HTTPException(422, "Неизвестный срок")
     set_avatar_lock(db, student, period)
