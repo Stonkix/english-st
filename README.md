@@ -70,16 +70,23 @@ sudo adduser --system --group --home /srv/englishst englishst
 # 2. Код: клонируется от имени englishst в его (пока пустую) домашнюю папку
 cd /srv/englishst
 sudo -u englishst git clone <АДРЕС_РЕПОЗИТОРИЯ> .
+# Приватный репозиторий: нужен доступ без пароля - токен в адресе (https://<токен>@github.com/...) или deploy-ключ в /srv/englishst/.ssh.
+# Тот же доступ нужен update.sh (git pull от имени englishst).
 sudo -u englishst python3 -m venv .venv
 sudo -u englishst .venv/bin/pip install -r requirements.txt
 sudo -u englishst mkdir -p data media
+# Права: БД и фото детей закрыты от посторонних пользователей сервера; nginx (www-data) читает media через группу
+sudo chmod 711 /srv/englishst
+sudo chmod 700 /srv/englishst/data
+sudo chown englishst:www-data /srv/englishst/media && sudo chmod 2750 /srv/englishst/media
+sudo chmod -R g+rX,o-rwx /srv/englishst/media     # если в media уже были файлы
 
 # 3. Настройки: .env создаётся из примера, секрет генерируется сразу
 sudo -u englishst cp .env.example .env
+sudo chmod 600 /srv/englishst/.env
 SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))")
 sudo -u englishst sed -i "s|^SECRET_KEY=.*|SECRET_KEY=$SECRET|; s|^BASE_URL=.*|BASE_URL=https://english-st.ru|" .env
-sudo chmod 600 /srv/englishst/.env
-grep -E '^(DEBUG|BASE_URL)=' .env     # должно быть: DEBUG=false и BASE_URL=https://english-st.ru
+sudo grep -E '^(DEBUG|BASE_URL)=' /srv/englishst/.env     # должно быть: DEBUG=false и BASE_URL=https://english-st.ru
 
 # 4. База и первый администратор (пароль печатается один раз — запишите)
 sudo -u englishst .venv/bin/alembic upgrade head
@@ -88,7 +95,7 @@ sudo -u englishst .venv/bin/python -m app.cli create-admin --login admin --first
 # 5. Сервис
 sudo cp deploy/englishst.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now englishst
-systemctl is-active englishst && curl -s http://127.0.0.1:8002/healthz   # active и {"ok":true}
+sleep 2; systemctl is-active englishst && curl -s http://127.0.0.1:8002/healthz   # active и {"ok":true}
 
 # 6. nginx рядом с соседними сайтами
 sudo cp deploy/nginx.conf /etc/nginx/sites-available/englishst
@@ -111,7 +118,7 @@ sudo crontab -e     # добавьте строку:  40 3 * * * /srv/englishst/
 - **Шаг 6.** Файл `/etc/nginx/sites-enabled/default` удаляйте, только если он ещё есть **и** соседние сайты не выложены (на этом сервере они уже работают — не трогайте). Если `nginx -t` ругается на `proxy_params` — это файл из пакета nginx Ubuntu (`/etc/nginx/proxy_params`); его используют и соседние сайты.
 - **Шаг 7.** Вход возможен только по HTTPS: cookie сессии помечена `Secure`, поэтому до certbot по http войти не получится.
 - Проверка после выкладки: https://english-st.ru/login открывается; `http://english-st.online/login` ведёт на `https://english-st.ru/login`; `https://english-st.ru/_protected/x` и `/media/x` отвечают 404.
-- Обновление делает `git pull` от имени `englishst`, поэтому у этого пользователя должен быть доступ к репозиторию без пароля (публичный репозиторий или deploy-ключ в `/srv/englishst/.ssh`). Проверка: `cd /srv/englishst && sudo -u englishst git pull --ff-only`.
+- Обновление делает `git pull` от имени `englishst`, поэтому у этого пользователя должен быть доступ к репозиторию без пароля (см. шаг 2). Проверка: `cd /srv/englishst && sudo -u englishst git pull --ff-only`.
 - Воркер ровно один (на VDS с 1 ГБ памяти это и экономно, а чат на этапе 3 живёт в памяти процесса, ему нужен один процесс). Не увеличивайте `--workers` в `englishst.service`.
 
 ### Обновление
@@ -173,6 +180,6 @@ docs/            спецификация и планы
 ## Безопасность в двух словах
 
 - CSP без внешних источников; для `/admin` (sqladmin с встроенным скриптом уведомлений) в nginx отдельная, более мягкая политика только для этого адреса.
-- nginx ограничивает частоту входа (5 в минуту на IP) и загрузок аватара; приложение дополнительно блокирует подбор паролей по логину.
+- nginx ограничивает частоту входа (20 попыток в минуту на IP: класс входит с одного школьного Wi-Fi; при превышении показывается страница «Слишком много попыток») и загрузок аватара; приложение дополнительно блокирует подбор паролей по логину.
 - Лимит загрузки — 10 МБ (в nginx `client_max_body_size 11m`).
 - При `DEBUG=false` приложение не стартует с `SECRET_KEY=change-me`.

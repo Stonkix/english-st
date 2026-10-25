@@ -14,6 +14,8 @@ WorkingDirectory=/srv/englishst
 ExecStart=/srv/englishst/.venv/bin/uvicorn app.main:app \
     --host 127.0.0.1 --port 8002 --workers 1 \
     --proxy-headers --forwarded-allow-ips 127.0.0.1
+# Файлы и каталоги, которые создаёт приложение (БД, фото), недоступны посторонним на общем сервере
+UMask=0027
 Restart=always
 RestartSec=3
 
