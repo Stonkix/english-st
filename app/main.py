@@ -16,6 +16,8 @@ from app.config import BASE_DIR, Settings, settings
 from app.db import SessionLocal
 from app.origin import same_site
 from app.routes.auth import router as auth_router
+from app.routes.chat import is_json_path as is_chat_json_path
+from app.routes.chat import router as chat_router
 from app.routes.daily import JSON_PATHS
 from app.routes.daily import router as daily_router
 from app.routes.media import router as media_router
@@ -38,6 +40,7 @@ def check_production_secrets(s: Settings) -> None:
 
 
 check_production_secrets(settings)
+logging.info("English ST: DEBUG=%s, BASE_URL=%s, база %s", settings.debug, settings.base_url, settings.database_url)
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -57,6 +60,10 @@ async def check_origin(request: Request, call_next):
         if header is None:
             header = request.headers.get("referer")
         if not same_site(header):
+            logging.warning(
+                "403: запрос %s %s пришёл с адреса %r, а BASE_URL=%r — откройте сайт по адресу из BASE_URL",
+                request.method, request.url.path, header, settings.base_url,
+            )
             return templates.TemplateResponse(request, "error.html", {"code": 403}, status_code=403)
     return await call_next(request)
 
@@ -106,7 +113,7 @@ def _error_page_user(request: Request):
 
 @app.exception_handler(StarletteHTTPException)
 async def http_error(request: Request, exc: StarletteHTTPException):
-    if request.url.path in JSON_PATHS:  # плеер ждёт JSON, а не страницу
+    if request.url.path in JSON_PATHS or is_chat_json_path(request.url.path):  # плеер и чат ждут JSON
         return JSONResponse({"error": "Ошибка"}, status_code=exc.status_code, headers=exc.headers)
     user = await run_in_threadpool(_error_page_user, request)  # обращение к БД не блокирует цикл событий
     if exc.status_code == 404:
@@ -120,7 +127,7 @@ async def http_error(request: Request, exc: StarletteHTTPException):
 @app.exception_handler(RequestValidationError)
 async def validation_error(request: Request, exc: RequestValidationError):
     """Ошибка в адресе (не число, ноль, огромный id) — такой страницы нет; ошибка в форме — 400. Без сырого JSON."""
-    if request.url.path in JSON_PATHS:  # JSON-запрос плеера: короткий JSON без подробностей
+    if request.url.path in JSON_PATHS or is_chat_json_path(request.url.path):  # короткий JSON без подробностей
         return JSONResponse({"error": "Некорректный запрос"}, status_code=422)
     user = await run_in_threadpool(_error_page_user, request)
     if any(err.get("loc") and err["loc"][0] == "path" for err in exc.errors()):
@@ -137,6 +144,7 @@ async def server_error(request: Request, exc: Exception):
 
 app.include_router(auth_router)
 app.include_router(daily_router)
+app.include_router(chat_router)
 app.include_router(profile_router)
 app.include_router(media_router)
 app.include_router(teacher_router)

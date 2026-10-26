@@ -25,6 +25,7 @@ from app import accounts
 from app.auth import login_guard
 from app.auth.passwords import generate_temp_password, hash_password
 from app.auth.sessions import revoke_user_sessions
+from app.config import settings
 from app.db import SessionLocal
 from app.logins import is_valid_login, normalize_login
 from app.models import LoginAttempt, User
@@ -46,6 +47,7 @@ def _print_credentials(login: str, password: str) -> None:
     print(f"Логин: {login}")
     print(f"Временный пароль: {password}")
     print("При первом входе пароль нужно сменить.")
+    print(f"База: {settings.database_url}")  # сервер должен смотреть в ту же (её путь он пишет при старте)
 
 
 def _create_admin(args: argparse.Namespace) -> int:

@@ -1,5 +1,6 @@
 """Вход, выход и смена пароля. Главная страница — в routes/daily.py."""
 
+import logging
 import math
 import re
 from datetime import datetime
@@ -28,6 +29,7 @@ from app.templating import templates
 from app.timeutil import utcnow
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 WRONG_CREDENTIALS = "Неверный логин или пароль"
 # Для несуществующего логина пароль сверяется с этим хешем, чтобы время ответа не выдавало, есть ли такой логин
@@ -72,6 +74,7 @@ def login(
     # Блок проверяем до пароля: заблокированному не даём даже пытаться
     until = blocked_until(db, key, ip)
     if until:
+        logger.info("Вход заблокирован до %s UTC: %r (IP %s)", until, key, ip)
         return _blocked_page(request, login, until)
 
     user = db.scalar(select(User).where(User.login == normalized)) if is_valid_login(normalized) else None
@@ -82,6 +85,9 @@ def login(
         ok = False
 
     if not ok:
+        # причина — только в журнал сервера (пользователю всегда одно и то же сообщение)
+        reason = "нет такого логина" if user is None else ("аккаунт отключён" if not user.is_active else "неверный пароль")
+        logger.info("Вход не удался: %r — %s (IP %s)", normalized[:LOGIN_MAX_LEN], reason, ip)
         until = register_failure(db, key, ip)
         if until:
             return _blocked_page(request, login, until)
