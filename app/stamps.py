@@ -6,6 +6,7 @@
 
 import random
 import threading
+from datetime import timedelta
 from dataclasses import dataclass, field
 
 from sqlalchemy import func, select
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from app.models import Attempt, ConversionRule, DailyReward, StampTransaction, StampType, StampVariant, User
 from app.params import MAX_ID
+from app.timeutil import utcnow
 
 # Иконки — Fluent Emoji (Flat), MIT: app/static/stamps
 ICONS = {
@@ -24,9 +26,11 @@ COLORS = {
     "red": ("Красный", "#FFDFE0"), "purple": ("Фиолетовый", "#F3E3FF"), "orange": ("Оранжевый", "#FFE7CC"),
 }
 REASON_TEXT = {
-    "manual": "От учителя", "daily": "За задание", "order": "Обмен в магазине", "refund": "Возврат",
+    "manual": "От учителя", "penalty": "Учитель забрал", "daily": "За задание", "order": "Обмен в магазине", "refund": "Возврат",
     "conversion": "Обмен",
 }
+# подсказки причины в форме «Забрать штампики» (учитель может написать свою)
+PENALTY_HINTS = ("За поведение на уроке", "За грубость", "За опоздание", "За невыполненное домашнее задание", "За списывание")
 NAME_MAX = 30
 AMOUNT_MAX = 1000  # за одну операцию
 RULE_AMOUNT_MAX = 1000
@@ -103,28 +107,65 @@ def history(db: DbSession, student_id: int, limit: int = 50) -> list[StampTransa
 
 
 def give(db: DbSession, actor: User, student: User, stamp_type_id: int, amount: int, comment: str = "") -> StampTransaction:
-    """Ручная выдача (amount > 0) или списание (amount < 0). Списать больше, чем есть, нельзя."""
+    """Ручная выдача: amount > 0 штампиков активного вида, комментарий необязателен."""
     stamp_type = db.get(StampType, stamp_type_id) if 0 < stamp_type_id <= MAX_ID else None
     if stamp_type is None or not stamp_type.is_active:
         raise StampError("Выберите вид штампиков")
-    if amount == 0 or abs(amount) > AMOUNT_MAX:
+    if not 1 <= amount <= AMOUNT_MAX:
         raise StampError(f"Количество — от 1 до {AMOUNT_MAX}")
-    comment = " ".join(comment.split())
-    if len(comment) > COMMENT_MAX:
-        raise StampError(f"Комментарий — не длиннее {COMMENT_MAX} символов")
+    comment = _clean_comment(comment)
     with BALANCE_LOCK:
-        if amount < 0:
-            have = balance_of(db, student.id, stamp_type.id)
-            if have + amount < 0:
-                raise StampError(f"Столько списать нельзя: у ученика {have}")
         tx = StampTransaction(
             student_id=student.id, stamp_type_id=stamp_type.id, amount=amount, reason="manual",
-            comment=comment or None, actor_id=actor.id,
-            variant_id=pick_variant(db, stamp_type.id) if amount > 0 else None,
+            comment=comment or None, actor_id=actor.id, variant_id=pick_variant(db, stamp_type.id),
         )
         db.add(tx)
         db.commit()
     return tx
+
+
+def take(db: DbSession, actor: User, student: User, stamp_type_id: int, amount: int, reason: str) -> StampTransaction:
+    """Учитель забирает штампики любого вида (в том числе выключенного) с обязательной причиной — ученик её увидит.
+
+    Забрать больше, чем есть, нельзя.
+    """
+    stamp_type = db.get(StampType, stamp_type_id) if 0 < stamp_type_id <= MAX_ID else None
+    if stamp_type is None:
+        raise StampError("Выберите вид штампиков")
+    if not 1 <= amount <= AMOUNT_MAX:
+        raise StampError(f"Количество — от 1 до {AMOUNT_MAX}")
+    reason = _clean_comment(reason)
+    if not reason:
+        raise StampError("Напишите, за что забираете штампики — ученик это увидит")
+    with BALANCE_LOCK:
+        have = balance_of(db, student.id, stamp_type.id)
+        if have < amount:
+            raise StampError(f"Столько забрать нельзя: у ученика {have} ({stamp_type.name})")
+        tx = StampTransaction(
+            student_id=student.id, stamp_type_id=stamp_type.id, amount=-amount, reason="penalty",
+            comment=reason, actor_id=actor.id,
+        )
+        db.add(tx)
+        db.commit()
+    return tx
+
+
+def _clean_comment(text: str) -> str:
+    text = " ".join(text.split())
+    if len(text) > COMMENT_MAX:
+        raise StampError(f"Комментарий — не длиннее {COMMENT_MAX} символов")
+    return text
+
+
+def recent_penalties(db: DbSession, student_id: int, days: int = 3) -> list[StampTransaction]:
+    """Что учитель забрал за последние дни — показывается ученику на главной."""
+    since = utcnow() - timedelta(days=days)
+    return list(db.scalars(
+        select(StampTransaction)
+        .where(StampTransaction.student_id == student_id, StampTransaction.reason == "penalty",
+               StampTransaction.created_at >= since)
+        .order_by(StampTransaction.id.desc())
+    ))
 
 
 def award_daily(db: DbSession, attempt: Attempt, group_id: int | None) -> None:

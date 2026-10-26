@@ -6,21 +6,53 @@ from tests.test_stamps import _types
 
 
 def test_teacher_gives_and_takes(client, db):
-    star, _ = _types(db)
+    star, gem = _types(db)
     t = make_user(db, role="teacher", login="teach")
     kid = make_user(db, login="kid", group=make_group(db, t))
     login_as(client, "teach")
     r = client.post(f"/teacher/students/{kid.id}/stamps",
-                    data={"stamp_type_id": star.id, "amount": "5", "action": "give", "comment": "за урок"},
-                    follow_redirects=False)
+                    data={"stamp_type_id": star.id, "amount": "5", "comment": "за урок"}, follow_redirects=False)
     assert r.status_code == 303 and stamps.balance_of(db, kid.id, star.id) == 5
-    r = client.post(f"/teacher/students/{kid.id}/stamps", data={"stamp_type_id": star.id, "amount": "9", "action": "take"})
-    assert "Столько списать нельзя: у ученика 5" in r.text
-    client.post(f"/teacher/students/{kid.id}/stamps", data={"stamp_type_id": star.id, "amount": "2", "action": "take"})
-    assert stamps.balance_of(db, kid.id, star.id) == 3
+    r = client.post(f"/teacher/students/{kid.id}/stamps/take", data={"stamp_type_id": star.id, "amount": "9", "reason": "за поведение"})
+    assert "Столько забрать нельзя: у ученика 5" in r.text
+    r = client.post(f"/teacher/students/{kid.id}/stamps/take", data={"stamp_type_id": star.id, "amount": "2", "reason": "  "})
+    assert "Напишите, за что" in r.text and stamps.balance_of(db, kid.id, star.id) == 5
+    r = client.post(f"/teacher/students/{kid.id}/stamps/take",
+                    data={"stamp_type_id": star.id, "amount": "2", "reason": "За поведение на уроке"}, follow_redirects=False)
+    assert r.status_code == 303 and stamps.balance_of(db, kid.id, star.id) == 3
     page = client.get(f"/teacher/students/{kid.id}").text
-    assert "От учителя: за урок" in page
+    assert "От учителя: за урок" in page and "Учитель забрал: За поведение на уроке" in page
     assert "Звезда" in client.get(f"/teacher/groups/{kid.group_id}").text
+
+
+def test_student_sees_why_stamps_were_taken(client, db):
+    star, gem = _types(db)
+    t = make_user(db, role="teacher", login="teach")
+    kid = make_user(db, login="kid", group=make_group(db, t))
+    stamps.give(db, t, kid, gem.id, 3)
+    gem.is_active = False  # выключенный вид тоже можно забрать, если он у ученика есть
+    db.commit()
+    stamps.take(db, t, kid, gem.id, 1, "За грубость")
+    login_as(client, "kid")
+    home = client.get("/").text
+    assert "Учитель забрал штампики" in home and "За грубость" in home
+    assert "Учитель забрал: За грубость" in client.get("/stamps").text
+    assert stamps.balance_of(db, kid.id, gem.id) == 2
+
+
+def test_old_penalties_leave_home_page(client, db):
+    from datetime import timedelta
+    from app.timeutil import utcnow
+    star, _ = _types(db)
+    t = make_user(db, role="teacher", login="teach")
+    kid = make_user(db, login="kid", group=make_group(db, t))
+    stamps.give(db, t, kid, star.id, 3)
+    tx = stamps.take(db, t, kid, star.id, 1, "За опоздание")
+    tx.created_at = utcnow() - timedelta(days=4)
+    db.commit()
+    login_as(client, "kid")
+    assert "Учитель забрал штампики" not in client.get("/").text
+    assert "За опоздание" in client.get("/stamps").text
 
 
 def test_teacher_cannot_stamp_foreign_student(client, db):

@@ -61,7 +61,10 @@ def _own_attempt(db: DbSession, student: User, attempt_id: int) -> Attempt | Non
 def _home_page(request: Request, db: DbSession, user: User, notice: str | None = None):
     status = todays_status(db, user)
     left = max(0, status["max_attempts"] - status["attempts_used"])
-    context = {"user": user, "status": status, "left": left, "notice": notice, "balances": stamps.balances(db, user.id)}
+    context = {
+        "user": user, "status": status, "left": left, "notice": notice, "balances": stamps.balances(db, user.id),
+        "penalties": stamps.recent_penalties(db, user.id),
+    }
     return templates.TemplateResponse(request, "student/home.html", context)
 
 

@@ -32,14 +32,17 @@ def test_give_and_take(db):
     t = make_user(db, role="teacher", login="teach")
     s = make_user(db, login="kid")
     stamps.give(db, t, s, star.id, 5, "  молодец  ")
-    stamps.give(db, t, s, star.id, -2)
+    stamps.take(db, t, s, star.id, 2, "  за   поведение ")
     assert stamps.balance_of(db, s.id, star.id) == 3
     with pytest.raises(stamps.StampError, match="у ученика 3"):
-        stamps.give(db, t, s, star.id, -4)
-    with pytest.raises(stamps.StampError):
-        stamps.give(db, t, s, star.id, 0)
-    with pytest.raises(stamps.StampError):
-        stamps.give(db, t, s, star.id, 1001)
+        stamps.take(db, t, s, star.id, 4, "за поведение")
+    with pytest.raises(stamps.StampError, match="за что"):
+        stamps.take(db, t, s, star.id, 1, "   ")
+    for bad in (0, -1, 1001):
+        with pytest.raises(stamps.StampError):
+            stamps.give(db, t, s, star.id, bad)
+        with pytest.raises(stamps.StampError):
+            stamps.take(db, t, s, star.id, bad, "за поведение")
     gem.is_active = False
     db.commit()
     with pytest.raises(stamps.StampError):
@@ -47,6 +50,8 @@ def test_give_and_take(db):
     rows = stamps.history(db, s.id)
     assert [r.amount for r in rows] == [-2, 5] and rows[1].comment == "молодец" and rows[1].actor_id == t.id
     assert stamps.describe(rows[1]) == "От учителя: молодец"
+    assert (rows[0].reason, stamps.describe(rows[0])) == ("penalty", "Учитель забрал: за поведение")
+    assert [p.id for p in stamps.recent_penalties(db, s.id)] == [rows[0].id]
 
 
 def test_balances_show_active_and_leftovers(db):
@@ -180,7 +185,7 @@ def test_variants_drop_randomly_and_collect(db):
     kid = make_user(db, login="kid")
     for _ in range(30):
         stamps.give(db, t, kid, common.id, 1)
-    stamps.give(db, t, kid, common.id, -1)  # списание — без рисовки
+    stamps.take(db, t, kid, common.id, 1, "за поведение")  # списание — без рисовки
     assert stamps.history(db, kid.id)[0].variant_id is None
     rows = {r.stamp_type.name: r for r in stamps.collection(db, kid.id)}
     assert rows["Обычный"].owned == 2  # за 30 выдач выпали обе рисовки (вероятность промаха ~1e-9)

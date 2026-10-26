@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
 from app.timeutil import utcnow
 
-REASONS = ("manual", "daily", "order", "refund", "conversion")
+REASONS = ("manual", "penalty", "daily", "order", "refund", "conversion")
 
 
 class StampType(Base):
@@ -60,7 +60,7 @@ class StampTransaction(Base):
     student_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     stamp_type_id: Mapped[int] = mapped_column(ForeignKey("stamp_types.id", ondelete="RESTRICT"))
     amount: Mapped[int]
-    reason: Mapped[str]  # manual | daily | order | refund | conversion
+    reason: Mapped[str]  # manual | penalty (учитель забрал) | daily | order | refund | conversion
     comment: Mapped[str | None]
     actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     attempt_id: Mapped[int | None] = mapped_column(ForeignKey("attempts.id", ondelete="SET NULL"))

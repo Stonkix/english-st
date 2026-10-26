@@ -21,6 +21,13 @@
   </a>
   {% endif %}
 
+  {% for tx in penalties %}
+  <div class="card penalty-card" role="status">
+    <span class="penalty-amount">{{ chip(tx.stamp_type, tx.amount) }}</span>
+    <div><strong>Учитель забрал штампики</strong><small>{{ tx.comment }} · {{ tx.created_at|msk }}</small></div>
+  </div>
+  {% endfor %}
+
   {% if notice %}<p class="alert-error" role="alert">{{ notice }}</p>{% endif %}
 
   <div class="card today-card">

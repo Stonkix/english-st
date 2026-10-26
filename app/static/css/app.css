@@ -1013,3 +1013,10 @@ a.stamp-balances:active { background: var(--bg-soft); }
 .rule-form .field { display: grid; grid-template-columns: 96px 1fr; gap: 8px; }
 .rule-form .field label { grid-column: 1 / -1; }
 .item-row-main.exchange-formula { flex-direction: row; justify-content: flex-start; flex-wrap: wrap; gap: 6px; }
+
+/* ---------- Учитель забрал штампики ---------- */
+.penalty-card { flex-direction: row; align-items: center; gap: 12px; padding: 14px 16px; border-color: var(--red-light); background: #FFF6F6; }
+.penalty-card div { display: flex; flex-direction: column; min-width: 0; }
+.penalty-card small { color: var(--muted); font-size: 15px; overflow-wrap: anywhere; }
+.penalty-amount { flex: none; }
+.stamp-history .item-row:has(.is-minus) strong:first-child { overflow-wrap: anywhere; }

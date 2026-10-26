@@ -132,6 +132,7 @@ def _student_page(request: Request, db: DbSession, user: User, student: User, **
         photo_lock=lock_message(student),
         photo_locked=avatar_locked(student),
         stamp_types=stamps.active_types(db),
+        penalty_hints=stamps.PENALTY_HINTS,
         balances=stamps.balances(db, student.id),
         stamp_rows=stamps.history(db, student.id, limit=20),
         describe=stamps.describe,
@@ -263,7 +264,7 @@ def create_student(
 
 @router.get("/students/{student_id}")
 def student_page(
-    student_id: Id, request: Request, stamped: bool = False, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)
+    student_id: Id, request: Request, stamped: str = "", user: User = Depends(teacher_only), db: DbSession = Depends(get_db)
 ):
     return _student_page(request, db, user, own_student(db, user, student_id), stamped=stamped)
 
@@ -381,18 +382,35 @@ def give_stamps(
     request: Request,
     stamp_type_id: str = Form(""),
     amount: str = Form(""),
-    action: str = Form("give"),
     comment: str = Form(""),
     user: User = Depends(teacher_only),
     db: DbSession = Depends(get_db),
 ):
-    """Выдать (action=give) или списать (action=take) штампики ученику своей группы."""
+    """Выдать штампики ученику своей группы."""
     student = own_student(db, user, student_id)
-    count = form_int(amount, 1, stamps.AMOUNT_MAX) or 0
-    type_id = form_int(stamp_type_id, 1) or 0
     try:
-        stamps.give(db, user, student, type_id, -count if action == "take" else count, comment)
+        stamps.give(db, user, student, form_int(stamp_type_id, 1) or 0, form_int(amount, 1, stamps.AMOUNT_MAX) or 0, comment)
     except stamps.StampError as exc:
         values = {"stamp_type_id": stamp_type_id, "amount": amount, "comment": comment}
         return _student_page(request, db, user, student, stamp_error=str(exc), stamp_values=values)
-    return RedirectResponse(f"/teacher/students/{student.id}?stamped=1#stamps", status_code=303)
+    return RedirectResponse(f"/teacher/students/{student.id}?stamped=given#stamps", status_code=303)
+
+
+@router.post("/students/{student_id}/stamps/take")
+def take_stamps(
+    student_id: Id,
+    request: Request,
+    stamp_type_id: str = Form(""),
+    amount: str = Form(""),
+    reason: str = Form(""),
+    user: User = Depends(teacher_only),
+    db: DbSession = Depends(get_db),
+):
+    """Забрать штампики любого вида с причиной — ученик увидит её в истории и на главной."""
+    student = own_student(db, user, student_id)
+    try:
+        stamps.take(db, user, student, form_int(stamp_type_id, 1) or 0, form_int(amount, 1, stamps.AMOUNT_MAX) or 0, reason)
+    except stamps.StampError as exc:
+        values = {"stamp_type_id": stamp_type_id, "amount": amount, "reason": reason}
+        return _student_page(request, db, user, student, take_error=str(exc), take_values=values)
+    return RedirectResponse(f"/teacher/students/{student.id}?stamped=taken#take", status_code=303)
