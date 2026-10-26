@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "partials/stamps.html" import chip %}
+{% block title %}Магазин — English ST{% endblock %}
+
+{% block content %}
+<section class="page shop-page">
+  <h1>Магазин</h1>
+  {% if balances %}<div class="stamp-balances">{% for b in balances %}{{ chip(b.stamp_type, b.amount, big=true) }}{% endfor %}</div>{% endif %}
+  {% if ok %}<div class="alert-success" role="status"><p>{{ ok }}</p></div>{% endif %}
+  {% if error %}<div class="alert-error" role="alert"><p>{{ error }}</p></div>{% endif %}
+
+  {% if items %}
+  <div class="shop-grid">
+    {% for item in items %}
+    {% set enough = have.get(item.price_type_id, 0) >= item.price_amount and item.price_type.is_active %}
+    <article class="card shop-item">
+      {% if item.image %}<img class="shop-img" src="/media/{{ item.image }}" alt="" loading="lazy">{% else %}<div class="shop-img shop-img-empty" aria-hidden="true"><img src="/static/stamps/sparkles.svg" alt="" width="56" height="56"></div>{% endif %}
+      <h2>{{ item.title }}</h2>
+      {% if item.description %}<p class="muted">{{ item.description }}</p>{% endif %}
+      <div class="shop-buy">
+        {{ chip(item.price_type, item.price_amount) }}
+        <form method="post" action="/shop/items/{{ item.id }}/order" data-once data-confirm="Обменять {{ item.price_amount }} ({{ item.price_type.name }}) на «{{ item.title }}»?">
+          <button class="btn btn-primary" type="submit"{% if not enough %} disabled{% endif %}>Обменять</button>
+        </form>
+      </div>
+      {% if not enough %}<small class="muted">Не хватает: ещё {{ item.price_amount - have.get(item.price_type_id, 0) }}</small>{% endif %}
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card"><p class="lead">{% if user.group_id %}В магазине пока ничего нет. Скоро учитель что-нибудь добавит!{% else %}Магазин появится, когда учитель добавит тебя в группу.{% endif %}</p></div>
+  {% endif %}
+
+  {% if orders %}
+  <h2>Мои заявки</h2>
+  <ul class="list">
+    {% for o in orders %}
+    <li class="item-row">
+      <span class="item-row-main">
+        <strong>{{ o.item.title }}</strong>
+        <small>{{ o.created_at|msk }} · {{ o.price_amount }} {{ o.price_type.name }}{% if o.teacher_comment %} · «{{ o.teacher_comment }}»{% endif %}</small>
+      </span>
+      <span class="badge {{ {'pending': 'badge-blue', 'issued': 'badge-green', 'rejected': 'badge-red'}.get(o.status, '') }}">{{ status_text[o.status] }}</span>
+      {% if o.status == "pending" %}
+      <form method="post" action="/shop/orders/{{ o.id }}/cancel" data-once data-confirm="Отменить заявку? Штампики вернутся.">
+        <button class="btn btn-secondary mini-btn" type="submit" aria-label="Отменить заявку">×</button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endblock %}

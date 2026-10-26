@@ -1,0 +1,24 @@
+{# Поля позиции магазина: values, stamp_types, errors #}
+{% if errors %}<div class="alert-error" role="alert">{% for e in errors %}<p>{{ e }}</p>{% endfor %}</div>{% endif %}
+<div class="field">
+  <label for="item-title">Название</label>
+  <input id="item-title" name="title" value="{{ values.title }}" maxlength="60" autocomplete="off" required>
+</div>
+<div class="field">
+  <label for="item-description">Описание (необязательно)</label>
+  <textarea id="item-description" name="description" maxlength="300" rows="3">{{ values.description }}</textarea>
+</div>
+<div class="field">
+  <label for="item-type">Цена: вид штампиков</label>
+  <select id="item-type" name="price_type_id">
+    {% for t in stamp_types %}<option value="{{ t.id }}"{% if values.price_type_id|string == t.id|string %} selected{% endif %}>{{ t.name }}</option>{% endfor %}
+  </select>
+</div>
+<div class="field">
+  <label for="item-price">Цена: сколько</label>
+  <input id="item-price" name="price_amount" type="number" inputmode="numeric" min="1" max="10000" value="{{ values.price_amount }}" required>
+</div>
+<div class="field">
+  <label for="item-image">Картинка (необязательно, до 10 МБ)</label>
+  <input id="item-image" name="image" type="file" accept="image/*">
+</div>

@@ -200,3 +200,8 @@ def delete_media(rel_path: str | None) -> None:
         target.unlink(missing_ok=True)
     except OSError:
         logging.exception("Не удалось удалить файл %s", target)
+
+
+def save_shop_image(group_id: int, data: bytes) -> str:
+    """Картинка позиции магазина (как у вопросов): shop/<group_id>/<12 hex>.webp."""
+    return _save_fitted(f"shop/{group_id}", data, MAX_UPLOAD_BYTES)

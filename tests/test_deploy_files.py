@@ -85,3 +85,9 @@ def test_nginx_chat():
     assert n.count("connect-src 'self' wss://english-st.ru") == 2  # основная CSP и CSP админки
     ws = n[n.index("location /ws/ {"):]
     assert "Upgrade $http_upgrade" in ws.split("}")[0]
+
+
+def test_nginx_shop_items_limited():
+    n = _read("deploy/nginx.conf")
+    block = n[n.index("location ~ ^/shop/"):]
+    assert "zone=englishst_editor" in block[:block.index("}")]

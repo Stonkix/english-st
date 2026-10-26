@@ -9,6 +9,7 @@ from app.models.chat import (
     ReplacementWord,
 )
 from app.models.security import LoginAttempt, Session
+from app.models.shop import Order, ShopItem
 from app.models.stamps import ConversionRule, DailyReward, StampTransaction, StampType
 from app.models.tasks import (
     LEVELS,
@@ -42,10 +43,12 @@ __all__ = [
     "Group",
     "GroupPool",
     "LoginAttempt",
+    "Order",
     "Pool",
     "Question",
     "ReplacementWord",
     "Session",
+    "ShopItem",
     "StampTransaction",
     "StampType",
     "Test",

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Заявки — English ST{% endblock %}
+
+{% macro order_head(o) %}
+<span class="item-row-main">
+  <strong>{{ o.student.full_name }} — {{ o.item.title }}</strong>
+  <small>{{ o.created_at|msk }} · {{ o.price_amount }} {{ o.price_type.name }}</small>
+</span>
+{% endmacro %}
+
+{% block content %}
+<section class="page teacher-page">
+  <h1>Заявки</h1>
+  {% if error %}<div class="alert-error" role="alert"><p>{{ error }}</p></div>{% endif %}
+  {% if pending %}
+  {% for o in pending %}
+  <div class="card order-card">
+    <div class="item-row">{{ order_head(o) }}</div>
+    <div class="stamp-actions">
+      <form method="post" action="/orders/{{ o.id }}/issue" data-once>
+        <button class="btn btn-primary btn-block" type="submit">Выдано</button>
+      </form>
+      <details class="order-reject">
+        <summary class="btn btn-secondary btn-block">Отклонить</summary>
+        <form method="post" action="/orders/{{ o.id }}/reject" data-once>
+          <div class="field">
+            <label for="comment-{{ o.id }}">Почему (ученик увидит)</label>
+            <input id="comment-{{ o.id }}" name="comment" maxlength="200" autocomplete="off">
+          </div>
+          <button class="btn btn-danger btn-block" type="submit">Отклонить и вернуть штампики</button>
+        </form>
+      </details>
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="card"><p class="lead">Новых заявок нет.</p></div>
+  {% endif %}
+
+  {% if done %}
+  <h2>Обработанные</h2>
+  <ul class="list">
+    {% for o in done %}
+    <li class="item-row">
+      {{ order_head(o) }}
+      <span class="badge {{ {'issued': 'badge-green', 'rejected': 'badge-red'}.get(o.status, '') }}">{{ status_text[o.status] }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endblock %}

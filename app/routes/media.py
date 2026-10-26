@@ -16,7 +16,7 @@ from app.auth.deps import require_user
 from app.config import settings
 from app.db import get_db
 from app.chat import can_access
-from app.models import AvatarHistory, ChatMessage, ChatRoom, Question, User
+from app.models import AvatarHistory, ChatMessage, ChatRoom, Group, Question, ShopItem, User
 from app.questions import picture_paths
 
 router = APIRouter()
@@ -84,5 +84,22 @@ def chat_image(room_id: str, name: str, viewer: User = Depends(require_user), db
     if room is None or not can_access(db, viewer, room):
         raise HTTPException(404)
     if db.scalar(select(ChatMessage.id).where(ChatMessage.room_id == room.id, ChatMessage.image == rel)) is None:
+        raise HTTPException(404)
+    return _file_response(rel)
+
+
+@router.get("/media/shop/{group_id}/{name}")
+def shop_image(group_id: str, name: str, viewer: User = Depends(require_user), db: DbSession = Depends(get_db)):
+    """Картинка позиции магазина — ученикам группы, её учителю и админу; только пока на неё ссылается позиция."""
+    if not _USER_ID.fullmatch(group_id) or not _NAME.fullmatch(name):
+        raise HTTPException(404)
+    group = db.get(Group, int(group_id))
+    if group is None:
+        raise HTTPException(404)
+    allowed = viewer.role == "admin" or viewer.id == group.teacher_id or (
+        viewer.role == "student" and viewer.group_id == group.id
+    )
+    rel = f"shop/{group_id}/{name}"
+    if not allowed or db.scalar(select(ShopItem.id).where(ShopItem.group_id == group.id, ShopItem.image == rel)) is None:
         raise HTTPException(404)
     return _file_response(rel)

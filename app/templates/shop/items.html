@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "partials/stamps.html" import chip %}
+{% block title %}Магазин группы — English ST{% endblock %}
+
+{% block content %}
+<section class="page teacher-page">
+  <a class="back-link" href="/teacher/groups/{{ group.id }}">← {{ group.name }}</a>
+  <h1>Магазин группы</h1>
+  <p class="muted">Ученики группы меняют штампики на эти призы. Заявки приходят во вкладку «Заявки».</p>
+  {% if items %}
+  <ul class="list">
+    {% for item in items %}
+    <li class="item-row{% if not item.is_active %} is-hidden-item{% endif %}">
+      {% if item.image %}<img class="thumb" src="/media/{{ item.image }}" alt="" width="56" height="56">{% endif %}
+      <span class="item-row-main">
+        <strong>{{ item.title }}</strong>
+        <small>{{ chip(item.price_type, item.price_amount) }}{% if not item.is_active %} · скрыта{% endif %}</small>
+      </span>
+      <a class="btn btn-secondary mini-btn" href="/shop/items/{{ item.id }}/edit" aria-label="Изменить «{{ item.title }}»">✎</a>
+      <form method="post" action="/shop/items/{{ item.id }}/toggle">
+        <button class="btn btn-secondary mini-btn shop-toggle" type="submit">{% if item.is_active %}Скрыть{% else %}Показать{% endif %}</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="card"><p class="lead">Позиций пока нет. Добавьте первый приз.</p></div>
+  {% endif %}
+
+  {% if stamp_types %}
+  <form class="card" method="post" action="/shop/groups/{{ group.id }}/items" enctype="multipart/form-data" data-once>
+    <h2>Новая позиция</h2>
+    {% include "shop/_item_fields.html" %}
+    <button class="btn btn-primary btn-block" type="submit">Добавить</button>
+  </form>
+  {% else %}
+  <div class="card"><p class="muted">Видов штампиков нет — их заводит администратор.</p></div>
+  {% endif %}
+</section>
+{% endblock %}
