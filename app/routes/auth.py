@@ -64,7 +64,7 @@ def login(
     db: DbSession = Depends(get_db),
 ):
     # одинокий суррогат (multipart с charset=utf-7) не кодируется в UTF-8 и роняет запись в БД
-    login, password = _clean(login), _clean(password)
+    login, password = _clean(login), _clean(password).strip()  # пробел, прихваченный при копировании, — не ошибка
     normalized = normalize_login(login)
     key = normalized[:LOGIN_MAX_LEN]  # ключ блокировки не должен расти вместе со входной строкой
     ip = client_ip(request)
@@ -130,6 +130,7 @@ def password_change(
 ):
     if not user.must_change_password:
         return RedirectResponse(home_for(user), status_code=303)
+    new, repeat = new.strip(), repeat.strip()
     errors = new_password_errors(new, repeat)
     if errors:
         return _password_page(request, errors)

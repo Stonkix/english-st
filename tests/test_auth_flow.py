@@ -323,3 +323,23 @@ def test_403_page_keeps_nav_for_logged_in(client, db):
     finally:
         for route in added:
             app.router.routes.remove(route)
+
+
+def test_password_with_spaces_from_copy_paste(client, db):
+    """Временный пароль скопирован из консоли вместе с пробелом — вход всё равно проходит."""
+    make_user(db, login="admin1", role="admin", password="Passw0rd12", must_change=True)
+    r = login_as(client, "admin1", "  Passw0rd12 \t")
+    assert r.status_code == 303 and r.headers["location"] == "/password/new"
+    r = client.post("/password/new", data={"new": "NewPassw0rd1 ", "repeat": "NewPassw0rd1 "}, follow_redirects=False)
+    assert r.status_code == 303
+    client.post("/logout")
+    assert login_as(client, "admin1", "NewPassw0rd1").status_code == 303
+
+
+def test_loopback_aliases_only_in_debug(monkeypatch):
+    from app import origin
+    monkeypatch.setattr(origin.settings, "base_url", "http://127.0.0.1:8002")
+    assert origin.same_site("http://localhost:8002") and origin.same_site("http://[::1]:8002")
+    assert not origin.same_site("http://localhost:8003") and not origin.same_site("http://evil.test:8002")
+    monkeypatch.setattr(origin.settings, "debug", False)
+    assert not origin.same_site("http://localhost:8002") and origin.same_site("http://127.0.0.1:8002")

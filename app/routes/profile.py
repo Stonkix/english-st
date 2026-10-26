@@ -40,8 +40,9 @@ def change_password(
 ):
     if not check_password(current, user.password_hash):
         return _page(request, user, password_errors=[WRONG_CURRENT])
+    new, repeat = new.strip(), repeat.strip()
     errors = new_password_errors(new, repeat)
-    if new == current:
+    if new == current.strip():
         errors.append(SAME_PASSWORD)
     if errors:
         return _page(request, user, password_errors=errors)

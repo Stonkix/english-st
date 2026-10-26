@@ -1,8 +1,6 @@
 import logging
 from types import SimpleNamespace
 
-from urllib.parse import urlsplit
-
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse, Response
@@ -16,6 +14,7 @@ from app.auth.deps import LoginRequired, PasswordChangeRequired, get_current_use
 from app.auth.sessions import COOKIE_NAME, set_session_cookie
 from app.config import BASE_DIR, Settings, settings
 from app.db import SessionLocal
+from app.origin import same_site
 from app.routes.auth import router as auth_router
 from app.routes.daily import JSON_PATHS
 from app.routes.daily import router as daily_router
@@ -46,21 +45,7 @@ app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "app" / "static"), name="static")
 
 
-_DEFAULT_PORTS = {"http": 80, "https": 443}
 _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
-
-
-def _origin_of(value: str) -> str | None:
-    """«схема://хост[:порт]» из Origin или полного URL (Referer); None, если не разобрать."""
-    try:
-        parts = urlsplit(value.strip())
-        scheme, host, port = parts.scheme.lower(), parts.hostname, parts.port
-    except ValueError:
-        return None
-    if scheme not in _DEFAULT_PORTS or not host:
-        return None  # в том числе «Origin: null»
-    host = f"[{host}]" if ":" in host else host
-    return f"{scheme}://{host}" + (f":{port}" if port and port != _DEFAULT_PORTS[scheme] else "")
 
 
 @app.middleware("http")
@@ -71,8 +56,7 @@ async def check_origin(request: Request, call_next):
         header = request.headers.get("origin")
         if header is None:
             header = request.headers.get("referer")
-        source = _origin_of(header) if header is not None else None
-        if source is None or source != _origin_of(settings.base_url):
+        if not same_site(header):
             return templates.TemplateResponse(request, "error.html", {"code": 403}, status_code=403)
     return await call_next(request)
 
