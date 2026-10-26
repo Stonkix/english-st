@@ -728,3 +728,178 @@ details > summary { font-weight: 800; cursor: pointer; padding: 6px 0; }
   .confetti { display: none; }
   .option:active:not(:disabled), .tile:active { transform: none; }
 }
+
+/* ---------- Чат: список комнат ---------- */
+.chat-list-page h1 { margin-bottom: 16px; }
+.avatar-group { background: var(--green); }
+.avatar-sm { width: 36px; height: 36px; font-size: 14px; }
+.chat-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-list-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+.chat-list-meta small { color: var(--faint); font-size: 14px; font-weight: 700; }
+.chat-unread, .tabbar-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+}
+.tabbar-item { position: relative; }
+.tabbar-badge { position: absolute; top: 2px; left: calc(50% + 6px); min-width: 20px; height: 20px; padding: 0 5px; font-size: 12px; letter-spacing: 0; }
+@media (min-width: 900px) {
+  .tabbar-badge { position: static; margin-left: auto; }
+}
+
+/* ---------- Чат: переписка на весь экран ---------- */
+.chat { display: flex; flex-direction: column; height: 100vh; height: 100dvh; max-width: 720px; margin: 0 auto; }
+.chat-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px 8px 4px;
+  border-bottom: 2px solid var(--border);
+  background: #fff;
+}
+.chat-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 28px;
+}
+.chat-back:hover, .chat-back:active { background: var(--bg-soft); }
+.chat-title { flex: 1; min-width: 0; font-size: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-status { flex: none; color: var(--red-dark); font-size: 14px; font-weight: 800; }
+.chat-status[hidden], .chat-error[hidden], .chat-stickers[hidden] { display: none; }
+
+.chat-messages {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 12px 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--bg-soft);
+}
+.chat-messages > :first-child { margin-top: auto; } /* мало сообщений — прижаты к низу */
+.chat-empty { color: var(--muted); text-align: center; padding: 24px 16px; }
+.chat-day {
+  align-self: center;
+  margin: 10px 0 4px;
+  padding: 2px 12px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.msg { display: flex; align-items: flex-end; gap: 8px; max-width: 85%; }
+.msg.is-mine { align-self: flex-end; }
+.msg-body {
+  min-width: 0;
+  padding: 8px 12px 6px;
+  border: 2px solid var(--border);
+  border-radius: 18px 18px 18px 6px;
+  background: #fff;
+}
+.msg.is-mine .msg-body { border-color: var(--blue-border); border-radius: 18px 18px 6px 18px; background: var(--blue-light); }
+.msg-body.is-media { padding: 6px; }
+.msg-name { color: var(--blue-dark); font-size: 14px; font-weight: 800; }
+.msg-teacher { padding: 0 6px; border-radius: 999px; background: var(--green-light); color: var(--green-dark); font-size: 12px; }
+.msg-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 17px; line-height: 1.4; }
+.msg.is-deleted .msg-text { color: var(--faint); font-style: italic; }
+.msg-original { margin-top: 4px; padding: 4px 8px; border-radius: 8px; background: var(--red-light); color: var(--red-dark); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg-sticker { width: 112px; height: 112px; }
+.msg-image { max-width: min(280px, 100%); max-height: 320px; border-radius: 12px; object-fit: cover; }
+.msg-meta { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 2px; color: var(--faint); font-size: 12px; font-weight: 700; }
+.msg-delete {
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.msg-delete:hover { color: var(--red-dark); }
+
+.chat-stickers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+  max-height: 40vh;
+  padding: 10px 12px;
+  overflow-y: auto;
+  border-top: 2px solid var(--border);
+  background: #fff;
+}
+.chat-sticker { padding: 4px; border: 0; border-radius: var(--radius-sm); background: none; cursor: pointer; touch-action: manipulation; }
+.chat-sticker img { width: 56px; height: 56px; margin: 0 auto; }
+.chat-sticker:hover, .chat-sticker:active { background: var(--bg-soft); }
+.chat-sticker:active img { transform: scale(.9); }
+
+.chat-bottom { padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); border-top: 2px solid var(--border); background: #fff; }
+.chat-error { margin: 0 8px 6px; color: var(--red-dark); font-size: 15px; font-weight: 700; }
+.chat-form { display: flex; align-items: flex-end; gap: 4px; margin: 0; }
+.chat-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.chat-tool:hover, .chat-tool:active, .chat-tool[aria-expanded="true"] { background: var(--bg-soft); }
+.chat-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  max-height: 140px;
+  padding: 9px 14px;
+  border: 2px solid var(--border);
+  border-radius: 22px;
+  background: var(--bg-soft);
+  color: var(--text);
+  font: inherit;
+  font-size: 17px;
+  line-height: 1.4;
+  resize: none;
+}
+.chat-input:focus { outline: none; border-color: var(--blue-border); background: #fff; }
+.chat-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: var(--blue);
+  box-shadow: 0 3px 0 var(--blue-dark);
+  color: #fff;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.chat-send:active:not(:disabled) { transform: translateY(3px); box-shadow: none; }
+.chat-send:disabled { background: var(--border); box-shadow: none; color: var(--faint); cursor: default; }
+
+/* ---------- Школа: словарь фильтра ---------- */
+.filter-page textarea { min-height: 220px; font-size: 16px; }

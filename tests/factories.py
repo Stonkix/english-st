@@ -52,6 +52,8 @@ def seed_filter(db) -> None:
     from app.profanity import is_cyrillic
     from app.profanity_defaults import BAD_WORDS, EXCEPTIONS, REPLACEMENTS
 
+    for model in (BadWord, BadWordException, ReplacementWord):  # первый тест сессии видит словарь из миграции
+        db.query(model).delete()
     db.add_all([BadWord(pattern=w, lang="ru" if is_cyrillic(w) else "en") for w in BAD_WORDS])
     db.add_all([BadWordException(word=w) for w in EXCEPTIONS])
     db.add_all([ReplacementWord(word=w) for w in REPLACEMENTS])

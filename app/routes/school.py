@@ -1,8 +1,8 @@
-"""Админ: раздел «Школа» — учителя (создание, временный пароль, сброс, отключение)."""
+"""Админ: раздел «Школа» — учителя (создание, временный пароль, сброс, отключение), словарь фильтра мата."""
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
@@ -13,7 +13,8 @@ from app.auth.passwords import generate_temp_password, hash_password
 from app.auth.sessions import revoke_user_sessions
 from app.db import get_db
 from app.logins import is_valid_login, normalize_login
-from app.models import User
+from app.models import BadWord, BadWordException, ReplacementWord, User
+from app.profanity import clean_text, compile_filter, contains_profanity, is_cyrillic, load_filter
 from app.params import Id
 from app.templating import templates
 
@@ -119,3 +120,72 @@ def activate_teacher(teacher_id: Id, user: User = Depends(admin_only), db: DbSes
     teacher.is_active = True
     db.commit()
     return _to_teachers()
+
+
+# ---------- словарь фильтра мата ----------
+
+FILTER_WORD_MAX = 40
+FILTER_LIST_MAX = 2000
+
+
+def _words(text: str) -> list[str]:
+    """Слова по одному в строке: без пустых строк и повторов, в нижнем регистре, порядок сохраняется."""
+    seen: dict[str, None] = {}
+    for line in text.splitlines():
+        word = " ".join(line.split()).lower()
+        if word:
+            seen.setdefault(word, None)
+    return list(seen)
+
+
+def _filter_page(request: Request, db: DbSession, user: User, values: dict | None = None,
+                 errors: list[str] | None = None, saved: bool = False, check: str = ""):
+    if values is None:
+        values = {
+            "bad_words": "\n".join(db.scalars(select(BadWord.pattern).order_by(BadWord.id))),
+            "exceptions": "\n".join(db.scalars(select(BadWordException.word).order_by(BadWordException.id))),
+            "replacements": "\n".join(db.scalars(select(ReplacementWord.word).order_by(ReplacementWord.id))),
+        }
+    checked = clean_text(check[:1000], load_filter(db))[0] if check.strip() else None
+    context = {"user": user, "values": values, "errors": errors or [], "saved": saved, "check": check, "checked": checked}
+    return templates.TemplateResponse(request, "school/filter.html", context)
+
+
+@router.get("/filter")
+def filter_form(request: Request, saved: bool = False, check: str = "", user: User = Depends(admin_only),
+                db: DbSession = Depends(get_db)):
+    return _filter_page(request, db, user, saved=saved, check=check)
+
+
+@router.post("/filter")
+def filter_save(
+    request: Request,
+    bad_words: str = Form(""),
+    exceptions: str = Form(""),
+    replacements: str = Form(""),
+    user: User = Depends(admin_only),
+    db: DbSession = Depends(get_db),
+):
+    values = {"bad_words": bad_words, "exceptions": exceptions, "replacements": replacements}
+    bad, exc, rep = _words(bad_words), _words(exceptions), _words(replacements)
+    errors = []
+    if any(len(w) > FILTER_WORD_MAX for w in bad + exc + rep):
+        errors.append(f"Каждое слово — не длиннее {FILTER_WORD_MAX} символов")
+    if max(len(bad), len(exc), len(rep)) > FILTER_LIST_MAX:
+        errors.append(f"В каждом списке — не больше {FILTER_LIST_MAX} слов")
+    if not rep:
+        errors.append("Нужно хотя бы одно слово-замена")
+    flt = compile_filter(bad, exc, rep)
+    rude = [w for w in rep if contains_profanity(w, flt)]
+    if rude:
+        errors.append("Слова-замены сами попадают под фильтр: " + ", ".join(rude))
+    if errors:
+        return _filter_page(request, db, user, values=values, errors=errors)
+    db.execute(delete(BadWord))
+    db.execute(delete(BadWordException))
+    db.execute(delete(ReplacementWord))
+    db.add_all([BadWord(pattern=w, lang="ru" if is_cyrillic(w) else "en") for w in bad])
+    db.add_all([BadWordException(word=w) for w in exc])
+    db.add_all([ReplacementWord(word=w) for w in rep])
+    db.commit()
+    return RedirectResponse("/school/filter?saved=1", status_code=303)
