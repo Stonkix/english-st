@@ -1,11 +1,46 @@
 {% extends "base.html" %}
+{% from "student/macros.html" import days %}
 {% block title %}Главная — English ST{% endblock %}
 
 {% block content %}
 <section class="page">
-  <div class="card">
-    <h1>Привет, {{ user.first_name }}! Скоро здесь появятся ежедневные задания.</h1>
-    <p class="lead">Пока можно отдохнуть. Мы готовим для тебя что-то интересное!</p>
+  <h1>Привет, {{ user.first_name }}!</h1>
+
+  <div class="streak-card{% if status.streak %} is-on{% endif %}">
+    <span class="streak-flame" aria-hidden="true"></span>
+    <div>
+      <strong>{{ days(status.streak) }} подряд</strong>
+      <small>{% if status.streak %}Так держать! Не пропускай ни дня.{% else %}Пройди задание сегодня — и начнётся серия.{% endif %}</small>
+    </div>
+  </div>
+
+  {% if notice %}<p class="alert-error" role="alert">{{ notice }}</p>{% endif %}
+
+  <div class="card today-card">
+    <h2>Задание на сегодня</h2>
+    {% if status.state == "none" %}
+      <p class="lead">Сегодня заданий нет. Отдыхай!</p>
+    {% elif status.state == "ready" %}
+      <p class="lead">Новое задание уже ждёт тебя.</p>
+      <form method="post" action="/daily/start" data-once>
+        <button class="btn btn-primary btn-block btn-big" type="submit">Начать</button>
+      </form>
+    {% elif status.state == "in_progress" %}
+      <p class="lead">Задание уже начато — продолжим с того же места?</p>
+      <form method="post" action="/daily/start" data-once>
+        <button class="btn btn-primary btn-block btn-big" type="submit">Продолжить</button>
+      </form>
+    {% else %}
+      {% if status.best %}<p class="lead">Пройдено {{ status.best[0] }} из {{ status.best[1] }}</p>{% endif %}
+      {% if left > 0 %}
+        <p class="muted">Осталось попыток: {{ left }}</p>
+        <form method="post" action="/daily/start" data-once>
+          <button class="btn btn-secondary btn-block btn-big" type="submit">Ещё раз</button>
+        </form>
+      {% else %}
+        <p class="muted">Попытки на сегодня закончились. Новое задание — завтра!</p>
+      {% endif %}
+    {% endif %}
   </div>
 </section>
 {% endblock %}

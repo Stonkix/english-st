@@ -161,3 +161,41 @@ def test_can_view_avatar_rules(db):
     assert not can_view_avatar(a, x) and not can_view_avatar(a, t2) and not can_view_avatar(a, admin)
     assert not can_view_avatar(loner, a) and not can_view_avatar(a, loner)
     assert not can_view_avatar(loner, make_user(db, login="loner2"))  # оба без группы — не одногруппники
+
+
+# ---------- картинки вопросов ----------
+
+def test_can_view_question_image_rules(db):
+    from app.auth.access import can_view_question_image
+
+    t = make_user(db, role="teacher", login="teach1")
+    t2 = make_user(db, role="teacher", login="teach2")
+    admin = make_user(db, role="admin", login="adm")
+    g, g2 = make_group(db, t), make_group(db, t2)
+    a = make_user(db, login="pupil-a", group=g)
+    x = make_user(db, login="pupil-x", group=g2)
+    loner = make_user(db, login="loner")
+
+    assert can_view_question_image(t, t.id, db) and can_view_question_image(admin, t.id, db)
+    assert can_view_question_image(a, t.id, db)
+    assert not can_view_question_image(x, t.id, db) and not can_view_question_image(t2, t.id, db)
+    assert not can_view_question_image(loner, t.id, db)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "questions/{id}/abc.webp",
+        "questions/{id}/{name}.png",
+        "questions/{id}/{NAME}.webp",
+        "questions/{id}/..%2f..%2fapp%2fmain.py",
+        "questions/abc/{name}.webp",
+        "questions/007/{name}.webp",
+        "questions/99999999999999999999999/{name}.webp",
+    ],
+)
+def test_question_media_rejects_bad_paths(client, db, path):
+    t = make_user(db, role="teacher", login="teach1")
+    login_as(client, "teach1")
+    r = client.get("/media/" + path.format(id=t.id, name="0123456789ab", NAME="0123456789AB"))
+    assert r.status_code == 404

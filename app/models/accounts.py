@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -28,6 +28,9 @@ class User(Base):
     avatar_locked_forever: Mapped[bool] = mapped_column(default=False)
     must_change_password: Mapped[bool] = mapped_column(default=False)
     is_active: Mapped[bool] = mapped_column(default=True)
+    current_streak: Mapped[int] = mapped_column(default=0)
+    best_streak: Mapped[int] = mapped_column(default=0)
+    last_completed_date: Mapped[date | None]  # дата по Москве, когда ученик последний раз прошёл ежедневку
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
     group: Mapped["Group | None"] = relationship(back_populates="students", foreign_keys=[group_id])

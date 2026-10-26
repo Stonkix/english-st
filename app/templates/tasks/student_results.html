@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Результаты — {{ student.first_name }} {{ student.last_name }} — English ST{% endblock %}
+
+{% block content %}
+<section class="page teacher-page">
+  <a class="back-link" href="/teacher/students/{{ student.id }}">← {{ student.first_name }} {{ student.last_name }}</a>
+  <div>
+    <h1>Результаты заданий</h1>
+    <p class="muted">Последние 14 дней</p>
+  </div>
+
+  {% if entries %}
+  {% for e in entries %}
+  <details class="card">
+    <summary>
+      <strong>{{ e.attempt.date.strftime("%d.%m.%Y") }}</strong> · {{ e.source }} ·
+      {% if e.finished %}{{ e.attempt.correct_count }} из {{ e.attempt.total_count }}{% else %}не завершена{% endif %}
+    </summary>
+    <ol>
+      {% for i in e.answers %}
+      <li>
+        <strong>{{ i.prompt }}</strong><br>
+        {% if not i.answered %}
+        <span class="muted">не отвечено</span>
+        {% else %}
+        {% if i.correct %}<span class="badge badge-green">верно</span>{% else %}<span class="badge badge-red">неверно</span>{% endif %}
+        Ответ ученика: {{ i.shown or "—" }}{% if i.typo %} <span class="badge badge-blue">опечатка засчитана</span>{% endif %}
+        {% if not i.correct %}<br>Правильный ответ: {{ i.right }}{% endif %}
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+  </details>
+  {% endfor %}
+  {% else %}
+  <div class="card"><p class="lead">За последние 14 дней попыток нет.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

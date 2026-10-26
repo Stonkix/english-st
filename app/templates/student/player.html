@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Задание — English ST{% endblock %}
+
+{% block content %}
+{# Плеер на весь экран: меню нет. Вопросы рисует player.js по данным из #player-data (правильных ответов там нет). #}
+<div class="player" id="player">
+  <header class="player-top">
+    <form method="get" action="/" data-confirm="Выйти из задания? Ответы сохранятся, потом можно продолжить.">
+      <button class="player-exit" type="submit" aria-label="Выйти из задания">&times;</button>
+    </form>
+    <div class="progress player-progress" role="progressbar" aria-label="Пройдено вопросов" aria-valuemin="0" aria-valuemax="{{ data.questions|length }}" aria-valuenow="{{ data.index }}">
+      <div class="progress-fill" id="player-progress" style="width: 0%"></div>
+    </div>
+  </header>
+
+  <main class="player-stage" id="player-stage" aria-live="polite">
+    <noscript><p class="alert-error">Для заданий нужен JavaScript. Включи его в браузере.</p></noscript>
+  </main>
+
+  <footer class="player-bottom">
+    <p class="player-net" id="player-net" role="alert" hidden>Нет связи. Проверь интернет и нажми ещё раз.</p>
+    <button class="btn btn-primary btn-block btn-big" id="player-check" type="button" disabled>Проверить</button>
+  </footer>
+
+  <section class="sheet" id="player-sheet" role="status" hidden>
+    <div class="sheet-inner">
+      <p class="sheet-title" id="sheet-title"></p>
+      <p class="sheet-text" id="sheet-text"></p>
+      <button class="btn btn-block btn-big" id="player-next" type="button">Дальше</button>
+    </div>
+  </section>
+</div>
+<script type="application/json" id="player-data">{{ data|tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/player.js?v={{ static_v }}" defer></script>
+{% endblock %}
