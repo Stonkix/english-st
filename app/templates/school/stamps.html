@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "partials/stamps.html" import chip %}
+{% block title %}Штампики — English ST{% endblock %}
+
+{# Форма вида: новый (key="new") или существующий (key=id) #}
+{% macro type_form(key, action, v, errs, existing) %}
+<form class="card" method="post" action="{{ action }}" data-once>
+  {% if existing %}<h2>{{ chip(existing, existing.name) }}</h2>{% else %}<h2>Новый вид</h2>{% endif %}
+  {% if errs %}<div class="alert-error" role="alert">{% for e in errs %}<p>{{ e }}</p>{% endfor %}</div>{% endif %}
+  <div class="field">
+    <label for="name-{{ key }}">Название</label>
+    <input id="name-{{ key }}" name="name" value="{{ v.name }}" maxlength="30" autocomplete="off" required>
+  </div>
+  <div class="field">
+    <span class="field-label">Картинка</span>
+    <div class="icon-pick">
+      {% for k, label in icons.items() %}
+      <label class="icon-pick-item"><input type="radio" name="icon" value="{{ k }}"{% if v.icon == k %} checked{% endif %} required><img src="/static/stamps/{{ k }}.svg" alt="{{ label }}" width="36" height="36"></label>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="field">
+    <label for="color-{{ key }}">Цвет</label>
+    <select id="color-{{ key }}" name="color">
+      {% for k, c in colors.items() %}<option value="{{ k }}"{% if v.color == k %} selected{% endif %}>{{ c[0] }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="order-{{ key }}">Порядок (меньше — левее)</label>
+    <input id="order-{{ key }}" name="sort_order" type="number" inputmode="numeric" value="{{ v.sort_order }}" required>
+  </div>
+  {% if existing %}
+  <div class="field"><label class="pick"><input type="checkbox" name="is_active" value="1"{% if v.is_active %} checked{% endif %}> Включён (выключенный не выдаётся и не начисляется; заработанное остаётся)</label></div>
+  {% endif %}
+  <button class="btn btn-primary btn-block" type="submit">{% if existing %}Сохранить{% else %}Добавить вид{% endif %}</button>
+</form>
+{% endmacro %}
+
+{% block content %}
+<section class="page teacher-page">
+  <a class="back-link" href="/school">← Школа</a>
+  <h1>Штампики</h1>
+  <p class="muted">Каждый вид — отдельная «валюта» со своим балансом. Удалить вид нельзя, только выключить.</p>
+  {% for t in types %}
+  {% set v = values.get(t.id) or {"name": t.name, "icon": t.icon, "color": t.color, "sort_order": t.sort_order, "is_active": t.is_active} %}
+  {{ type_form(t.id, "/school/stamps/" ~ t.id, v, errors.get(t.id), t) }}
+  {% endfor %}
+  {{ type_form("new", "/school/stamps", values.get("new") or {"name": "", "icon": "star", "color": "yellow", "sort_order": types|length + 1}, errors.get("new"), none) }}
+</section>
+{% endblock %}

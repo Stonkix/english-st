@@ -11,9 +11,12 @@ from starlette.datastructures import FormData, UploadFile
 
 from app.avatars import read_photo
 from app.daily import settings_for
+from app import stamps
 from app.db import get_db
 from app.images import InvalidImage, delete_media, is_picture_of, save_picture
-from app.models import Assignment, AttemptAnswer, Group, GroupPool, Pool, Question, Test, TestQuestion, User
+from app.models import (
+    Assignment, AttemptAnswer, DailyReward, Group, GroupPool, Pool, Question, StampType, Test, TestQuestion, User,
+)
 from app.models.tasks import LEVELS, QUESTION_TYPES
 from app.params import MAX_ID, Id
 from app.questions import PayloadError, picture_paths, validate_payload
@@ -680,6 +683,8 @@ def _group_tasks_page(request: Request, db: DbSession, user: User, group: Group,
         titles={t.id: t.title for t in tests}, by_id=by_id,
         pools=_pools_of(db, group.teacher_id),
         connected=set(db.scalars(select(GroupPool.pool_id).where(GroupPool.group_id == group.id))),
+        rewards=list(db.scalars(select(DailyReward).where(DailyReward.group_id == group.id).order_by(DailyReward.id))),
+        stamp_types=stamps.active_types(db),
     )
     return templates.TemplateResponse(request, "tasks/group_daily.html", context)
 
@@ -832,3 +837,43 @@ def student_results(student_id: Id, request: Request, user: User = Depends(teach
     student = own_student(db, user, student_id)
     context = {"user": user, "student": student, "entries": history(db, student, moscow_today())}
     return templates.TemplateResponse(request, "tasks/student_results.html", context)
+
+
+# ---------- награды за ежедневное задание ----------
+
+REWARD_INVALID = f"Награда: выберите вид, количество от 1 до {stamps.REWARD_MAX} и порог от 0 до 100%"
+
+
+@router.post("/groups/{group_id}/rewards")
+def add_reward(
+    group_id: Id,
+    request: Request,
+    stamp_type_id: str = Form(""),
+    amount: str = Form(""),
+    min_score_percent: str = Form("0"),
+    user: User = Depends(teacher_only),
+    db: DbSession = Depends(get_db),
+):
+    group = own_group(db, user, group_id)
+    try:
+        type_id, count, percent = int(stamp_type_id), int(amount), int(min_score_percent or 0)
+    except ValueError:
+        type_id = count = percent = -1
+    stamp_type = db.get(StampType, type_id) if type_id > 0 else None
+    if stamp_type is None or not stamp_type.is_active or not 1 <= count <= stamps.REWARD_MAX or not 0 <= percent <= 100:
+        values = {"stamp_type_id": stamp_type_id, "amount": amount, "min_score_percent": min_score_percent}
+        return _group_tasks_page(request, db, user, group, reward_error=REWARD_INVALID, reward_values=values)
+    db.add(DailyReward(group_id=group.id, stamp_type_id=stamp_type.id, amount=count, min_score_percent=percent))
+    db.commit()
+    return _to_group_tasks(group)
+
+
+@router.post("/groups/{group_id}/rewards/{reward_id}/delete")
+def delete_reward(group_id: Id, reward_id: Id, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
+    group = own_group(db, user, group_id)
+    reward = db.get(DailyReward, reward_id)
+    if reward is None or reward.group_id != group.id:
+        raise HTTPException(404)
+    db.delete(reward)  # начисленное остаётся в журнале (reward_id станет пустым)
+    db.commit()
+    return _to_group_tasks(group)

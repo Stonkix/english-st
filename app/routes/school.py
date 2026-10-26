@@ -1,4 +1,4 @@
-"""Админ: раздел «Школа» — учителя (создание, временный пароль, сброс, отключение), словарь фильтра мата."""
+"""Админ: раздел «Школа» — учителя (создание, временный пароль, сброс, отключение), словарь фильтра мата, виды штампиков."""
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -13,7 +13,8 @@ from app.auth.passwords import generate_temp_password, hash_password
 from app.auth.sessions import revoke_user_sessions
 from app.db import get_db
 from app.logins import is_valid_login, normalize_login
-from app.models import BadWord, BadWordException, ReplacementWord, User
+from app import stamps
+from app.models import BadWord, BadWordException, ReplacementWord, StampType, User
 from app.profanity import clean_text, compile_filter, contains_profanity, is_cyrillic, load_filter
 from app.params import Id
 from app.templating import templates
@@ -189,3 +190,79 @@ def filter_save(
     db.add_all([ReplacementWord(word=w) for w in rep])
     db.commit()
     return RedirectResponse("/school/filter?saved=1", status_code=303)
+
+
+# ---------- виды штампиков ----------
+
+
+def _stamps_page(request: Request, db: DbSession, user: User, errors: dict | None = None, values: dict | None = None):
+    context = {
+        "user": user, "types": stamps.all_types(db), "icons": stamps.ICONS, "colors": stamps.COLORS,
+        "errors": errors or {}, "values": values or {},
+    }
+    return templates.TemplateResponse(request, "school/stamps.html", context)
+
+
+def _stamp_errors(db: DbSession, name: str, icon: str, color: str, sort_order: str, own_id: int | None) -> list[str]:
+    errors = []
+    if not name or len(name) > stamps.NAME_MAX:
+        errors.append(f"Название — от 1 до {stamps.NAME_MAX} символов")
+    elif db.scalar(select(StampType.id).where(StampType.name == name, StampType.id != (own_id or 0))) is not None:
+        errors.append("Такое название уже есть")
+    if icon not in stamps.ICONS or color not in stamps.COLORS:
+        errors.append("Выберите картинку и цвет")
+    if not sort_order.strip().lstrip("-").isdigit() or abs(int(sort_order)) > 1000:
+        errors.append("Порядок — число от -1000 до 1000")
+    return errors
+
+
+@router.get("/stamps")
+def stamp_types(request: Request, user: User = Depends(admin_only), db: DbSession = Depends(get_db)):
+    return _stamps_page(request, db, user)
+
+
+@router.post("/stamps")
+def create_stamp_type(
+    request: Request,
+    name: str = Form(""),
+    icon: str = Form(""),
+    color: str = Form(""),
+    sort_order: str = Form("0"),
+    user: User = Depends(admin_only),
+    db: DbSession = Depends(get_db),
+):
+    name = " ".join(name.split())
+    errors = _stamp_errors(db, name, icon, color, sort_order, None)
+    if errors:
+        values = {"name": name, "icon": icon, "color": color, "sort_order": sort_order}
+        return _stamps_page(request, db, user, errors={"new": errors}, values={"new": values})
+    db.add(StampType(name=name, icon=icon, color=color, sort_order=int(sort_order)))
+    db.commit()
+    return RedirectResponse("/school/stamps", status_code=303)
+
+
+@router.post("/stamps/{type_id}")
+def edit_stamp_type(
+    type_id: Id,
+    request: Request,
+    name: str = Form(""),
+    icon: str = Form(""),
+    color: str = Form(""),
+    sort_order: str = Form("0"),
+    is_active: str = Form(""),
+    user: User = Depends(admin_only),
+    db: DbSession = Depends(get_db),
+):
+    """Удалять виды нельзя (на них ссылается журнал) — только отключать: отключённый не выдаётся и не начисляется."""
+    stamp_type = db.get(StampType, type_id)
+    if stamp_type is None:
+        raise HTTPException(404)
+    name = " ".join(name.split())
+    errors = _stamp_errors(db, name, icon, color, sort_order, stamp_type.id)
+    if errors:
+        values = {"name": name, "icon": icon, "color": color, "sort_order": sort_order, "is_active": bool(is_active)}
+        return _stamps_page(request, db, user, errors={stamp_type.id: errors}, values={stamp_type.id: values})
+    stamp_type.name, stamp_type.icon, stamp_type.color = name, icon, color
+    stamp_type.sort_order, stamp_type.is_active = int(sort_order), bool(is_active)
+    db.commit()
+    return RedirectResponse("/school/stamps", status_code=303)

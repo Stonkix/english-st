@@ -907,3 +907,46 @@ details > summary { font-weight: 800; cursor: pointer; padding: 6px 0; }
 
 /* ---------- Школа: словарь фильтра ---------- */
 .filter-page textarea { min-height: 220px; font-size: 16px; }
+
+/* ---------- Штампики ---------- */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.stamp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px 2px 4px;
+  border-radius: 999px;
+  background: var(--tint, var(--bg-soft));
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.stamp-chip img { width: 22px; height: 22px; }
+.stamp-chip-big { gap: 6px; padding: 4px 14px 4px 6px; font-size: 20px; }
+.stamp-chip-big img { width: 32px; height: 32px; }
+.stamp-balances { display: flex; flex-flow: row wrap; gap: 8px; align-items: center; }
+a.stamp-balances { color: var(--text); }
+a.stamp-balances:active { background: var(--bg-soft); }
+.stamp-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.stamp-history img { flex: none; }
+.stamp-delta { flex: none; color: var(--green-dark); font-size: 18px; }
+.stamp-delta.is-minus { color: var(--red-dark); }
+.stamp-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.stamp-award { align-items: center; text-align: center; gap: 8px; }
+.stamp-award .stamp-balances { justify-content: center; }
+#stamps details { margin-top: 4px; }
+#stamps summary { cursor: pointer; font-weight: 800; color: var(--blue); }
+#stamps details .list { margin-top: 12px; }
+.field-label { font-weight: 800; }
+.icon-pick { display: flex; flex-wrap: wrap; gap: 8px; }
+.icon-pick-item { display: inline-flex; padding: 6px; border: 2px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
+.icon-pick-item input { position: absolute; opacity: 0; pointer-events: none; }
+.icon-pick-item:has(input:checked) { border-color: var(--blue-border); background: var(--blue-light); }
+.icon-pick-item:has(input:focus-visible) { outline: 3px solid var(--blue); }

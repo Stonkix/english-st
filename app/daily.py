@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from app.models import Assignment, Attempt, AttemptAnswer, DailySettings, GroupPool, Question, Test, User
 from app.questions import grade, grade_pairs, pair_ids, public_view
+from app.stamps import award_daily
 from app.streak import effective_streak, register_completion
 from app.timeutil import moscow_today, utcnow
 
@@ -216,8 +217,10 @@ def _finish(db: DbSession, attempt: Attempt, live: list[Question], answers: dict
     attempt.finished_at = utcnow()
     attempt.total_count = len(live)
     attempt.correct_count = sum(1 for q in live if q.id in answers and answers[q.id].is_correct)
+    student = db.get(User, attempt.student_id)
     if first:
-        register_completion(db, db.get(User, attempt.student_id), attempt.date)
+        register_completion(db, student, attempt.date)
+    award_daily(db, attempt, student.group_id)
 
 
 def _current(db: DbSession, attempt: Attempt) -> tuple[list[Question], dict[int, AttemptAnswer], Question | None]:

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "partials/stamps.html" import chip, history_list %}
+{% block title %}Мои штампики — English ST{% endblock %}
+
+{% block content %}
+<section class="page">
+  <a class="back-link" href="/">← Главная</a>
+  <h1>Мои штампики</h1>
+  {% if balances %}
+  <div class="card stamp-balances">
+    {% for b in balances %}{{ chip(b.stamp_type, b.amount, big=true) }}{% endfor %}
+  </div>
+  {% endif %}
+  <h2>История</h2>
+  {% if rows %}
+  {{ history_list(rows, describe) }}
+  {% else %}
+  <div class="card"><p class="lead">Пока пусто. Проходи задания — за них дают штампики!</p></div>
+  {% endif %}
+</section>
+{% endblock %}

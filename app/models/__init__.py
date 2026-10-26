@@ -9,6 +9,7 @@ from app.models.chat import (
     ReplacementWord,
 )
 from app.models.security import LoginAttempt, Session
+from app.models.stamps import ConversionRule, DailyReward, StampTransaction, StampType
 from app.models.tasks import (
     LEVELS,
     QUESTION_TYPES,
@@ -35,6 +36,8 @@ __all__ = [
     "ChatMessage",
     "ChatReadMark",
     "ChatRoom",
+    "ConversionRule",
+    "DailyReward",
     "DailySettings",
     "Group",
     "GroupPool",
@@ -43,6 +46,8 @@ __all__ = [
     "Question",
     "ReplacementWord",
     "Session",
+    "StampTransaction",
+    "StampType",
     "Test",
     "TestQuestion",
     "User",

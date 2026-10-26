@@ -1,0 +1,22 @@
+{# Штампик: иконка вида и число на фоне его цвета #}
+{% macro chip(t, amount, big=false) -%}
+<span class="stamp-chip{% if big %} stamp-chip-big{% endif %}" style="--tint: {{ t|stamp_tint }}" title="{{ t.name }}">
+  <img src="{{ t|stamp_icon }}" alt="" width="{{ 32 if big else 22 }}" height="{{ 32 if big else 22 }}"><strong>{{ amount }}</strong><span class="visually-hidden"> {{ t.name }}</span>
+</span>
+{%- endmacro %}
+
+{# История операций: список записей журнала #}
+{% macro history_list(rows, describe) -%}
+<ul class="list stamp-history">
+  {% for tx in rows %}
+  <li class="item-row">
+    <img src="{{ tx.stamp_type|stamp_icon }}" alt="" width="28" height="28">
+    <span class="item-row-main">
+      <strong>{{ describe(tx) }}</strong>
+      <small>{{ tx.created_at|msk }} · {{ tx.stamp_type.name }}</small>
+    </span>
+    <strong class="stamp-delta{% if tx.amount < 0 %} is-minus{% endif %}">{{ "%+d"|format(tx.amount) }}</strong>
+  </li>
+  {% endfor %}
+</ul>
+{%- endmacro %}

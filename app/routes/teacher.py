@@ -30,6 +30,7 @@ from app.auth.deps import require_role
 from app.auth.login_guard import is_locked, unlock
 from app.auth.passwords import generate_temp_password, hash_password
 from app.auth.sessions import revoke_user_sessions
+from app import stamps
 from app.db import get_db
 from app.images import InvalidImage
 from app.logins import is_valid_login, normalize_login, suggest_login, unique_login
@@ -109,7 +110,10 @@ def _groups_page(request: Request, db: DbSession, user: User, name: str = "", er
 def _group_page(request: Request, db: DbSession, user: User, group: Group, **context):
     students = group_students(group)
     flags = {s.id: {"locked": is_locked(db, s.login)} for s in students}
-    context.update(user=user, group=group, students=students, flags=flags, done=done_today(db, students, moscow_today()))
+    context.update(
+        user=user, group=group, students=students, flags=flags, done=done_today(db, students, moscow_today()),
+        stamp_types=stamps.active_types(db), stamp_totals=stamps.balances_by_student(db, [s.id for s in students]),
+    )
     return templates.TemplateResponse(request, "teacher/group.html", context)
 
 
@@ -127,6 +131,10 @@ def _student_page(request: Request, db: DbSession, user: User, student: User, **
         photo_history=history(db, student),
         photo_lock=lock_message(student),
         photo_locked=avatar_locked(student),
+        stamp_types=stamps.active_types(db),
+        balances=stamps.balances(db, student.id),
+        stamp_rows=stamps.history(db, student.id, limit=20),
+        describe=stamps.describe,
     )
     return templates.TemplateResponse(request, "teacher/student.html", context)
 
@@ -254,8 +262,10 @@ def create_student(
 
 
 @router.get("/students/{student_id}")
-def student_page(student_id: Id, request: Request, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
-    return _student_page(request, db, user, own_student(db, user, student_id))
+def student_page(
+    student_id: Id, request: Request, stamped: bool = False, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)
+):
+    return _student_page(request, db, user, own_student(db, user, student_id), stamped=stamped)
 
 
 @router.post("/students/{student_id}/edit")
@@ -363,3 +373,29 @@ def lock_student_avatar(
         raise HTTPException(422, "Неизвестный срок")
     set_avatar_lock(db, student, period)
     return _to_student(student)
+
+
+@router.post("/students/{student_id}/stamps")
+def give_stamps(
+    student_id: Id,
+    request: Request,
+    stamp_type_id: str = Form(""),
+    amount: str = Form(""),
+    action: str = Form("give"),
+    comment: str = Form(""),
+    user: User = Depends(teacher_only),
+    db: DbSession = Depends(get_db),
+):
+    """Выдать (action=give) или списать (action=take) штампики ученику своей группы."""
+    student = own_student(db, user, student_id)
+    try:
+        count = int(amount.strip())
+        type_id = int(stamp_type_id)
+    except ValueError:
+        count, type_id = 0, 0
+    try:
+        stamps.give(db, user, student, type_id, -abs(count) if action == "take" else abs(count), comment)
+    except stamps.StampError as exc:
+        values = {"stamp_type_id": stamp_type_id, "amount": amount, "comment": comment}
+        return _student_page(request, db, user, student, stamp_error=str(exc), stamp_values=values)
+    return RedirectResponse(f"/teacher/students/{student.id}?stamped=1#stamps", status_code=303)

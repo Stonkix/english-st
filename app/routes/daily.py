@@ -20,6 +20,7 @@ from app.daily import (
     submit_answer,
     todays_status,
 )
+from app import stamps
 from app.db import get_db
 from app.models import Attempt, User
 from app.params import MAX_ID, Id
@@ -60,7 +61,7 @@ def _own_attempt(db: DbSession, student: User, attempt_id: int) -> Attempt | Non
 def _home_page(request: Request, db: DbSession, user: User, notice: str | None = None):
     status = todays_status(db, user)
     left = max(0, status["max_attempts"] - status["attempts_used"])
-    context = {"user": user, "status": status, "left": left, "notice": notice}
+    context = {"user": user, "status": status, "left": left, "notice": notice, "balances": stamps.balances(db, user.id)}
     return templates.TemplateResponse(request, "student/home.html", context)
 
 
@@ -141,5 +142,17 @@ def result(attempt_id: Id, request: Request, user: User = Depends(student_only),
         return RedirectResponse("/daily/play", status_code=303)
     status = todays_status(db, user)
     can_retry = attempt.date == moscow_today() and status["state"] == "done" and status["attempts_used"] < status["max_attempts"]
-    context = {"attempt": attempt, "streak": status["streak"], "can_retry": can_retry}
+    awarded = stamps.awarded_for(db, attempt.id)
+    context = {"attempt": attempt, "streak": status["streak"], "can_retry": can_retry, "awarded": awarded}
     return templates.TemplateResponse(request, "student/result.html", context)
+
+
+@router.get("/stamps")
+def my_stamps(request: Request, user: User = Depends(student_only), db: DbSession = Depends(get_db)):
+    context = {
+        "user": user,
+        "balances": stamps.balances(db, user.id),
+        "rows": stamps.history(db, user.id, limit=100),
+        "describe": stamps.describe,
+    }
+    return templates.TemplateResponse(request, "student/stamps.html", context)

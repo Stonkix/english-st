@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "student/macros.html" import days %}
+{% from "partials/stamps.html" import chip %}
 {% block title %}Главная — English ST{% endblock %}
 
 {% block content %}
@@ -13,6 +14,12 @@
       <small>{% if status.streak %}Так держать! Не пропускай ни дня.{% else %}Пройди задание сегодня — и начнётся серия.{% endif %}</small>
     </div>
   </div>
+
+  {% if balances %}
+  <a class="card stamp-balances" href="/stamps" aria-label="Мои штампики">
+    {% for b in balances %}{{ chip(b.stamp_type, b.amount, big=true) }}{% endfor %}
+  </a>
+  {% endif %}
 
   {% if notice %}<p class="alert-error" role="alert">{{ notice }}</p>{% endif %}
 

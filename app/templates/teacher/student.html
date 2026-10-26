@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/stamps.html" import chip, history_list %}
 {% block title %}{{ student.first_name }} {{ student.last_name }} — English ST{% endblock %}
 
 {% block content %}
@@ -22,6 +23,42 @@
   </div>
 
   <a class="btn btn-secondary btn-block" href="/tasks/students/{{ student.id }}/results">Результаты заданий</a>
+
+  <form class="card" id="stamps" method="post" action="/teacher/students/{{ student.id }}/stamps" data-once>
+    <h2>Штампики</h2>
+    {% if balances %}<div class="stamp-balances">{% for b in balances %}{{ chip(b.stamp_type, b.amount, big=true) }}{% endfor %}</div>{% endif %}
+    {% if stamped %}<div class="alert-success" role="status"><p>Готово</p></div>{% endif %}
+    {% if stamp_error %}<div class="alert-error" role="alert"><p>{{ stamp_error }}</p></div>{% endif %}
+    {% if stamp_types %}
+    {% set v = stamp_values if stamp_values is defined else {"stamp_type_id": "", "amount": "1", "comment": ""} %}
+    <div class="field">
+      <label for="stamp-type">Вид</label>
+      <select id="stamp-type" name="stamp_type_id">
+        {% for t in stamp_types %}<option value="{{ t.id }}"{% if v.stamp_type_id|string == t.id|string %} selected{% endif %}>{{ t.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="stamp-amount">Сколько</label>
+      <input id="stamp-amount" name="amount" type="number" inputmode="numeric" min="1" max="1000" value="{{ v.amount }}" required>
+    </div>
+    <div class="field">
+      <label for="stamp-comment">Комментарий (ученик его увидит)</label>
+      <input id="stamp-comment" name="comment" value="{{ v.comment }}" maxlength="200" autocomplete="off" placeholder="Например: за активность на уроке">
+    </div>
+    <div class="stamp-actions">
+      <button class="btn btn-primary" type="submit" name="action" value="give">Выдать</button>
+      <button class="btn btn-secondary" type="submit" name="action" value="take">Списать</button>
+    </div>
+    {% else %}
+    <p class="muted">Видов штампиков нет — их заводит администратор.</p>
+    {% endif %}
+    {% if stamp_rows %}
+    <details>
+      <summary>Последние операции</summary>
+      {{ history_list(stamp_rows, describe) }}
+    </details>
+    {% endif %}
+  </form>
 
   <form class="card" method="post" action="/teacher/students/{{ student.id }}/edit" data-once>
     <h2>Данные ученика</h2>

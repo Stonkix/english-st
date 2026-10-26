@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "student/macros.html" import days %}
+{% from "partials/stamps.html" import chip %}
 {% block title %}Результат — English ST{% endblock %}
 
 {% block content %}
@@ -11,6 +12,12 @@
   <p class="result-badge{% if all_right %} is-perfect{% endif %}" aria-hidden="true">{{ attempt.correct_count }}/{{ attempt.total_count }}</p>
   <h1>{% if all_right %}Идеально!{% elif attempt.correct_count * 2 >= attempt.total_count %}Молодец!{% else %}Задание пройдено!{% endif %}</h1>
   <p class="lead">Верно {{ attempt.correct_count }} из {{ attempt.total_count }}</p>
+  {% if awarded %}
+  <div class="card stamp-award">
+    <strong>Награда</strong>
+    <div class="stamp-balances">{% for tx in awarded %}{{ chip(tx.stamp_type, "+" ~ tx.amount, big=true) }}{% endfor %}</div>
+  </div>
+  {% endif %}
   <div class="streak-card{% if streak %} is-on{% endif %}">
     <span class="streak-flame" aria-hidden="true"></span>
     <div><strong>Серия: {{ days(streak) }}</strong><small>Возвращайся завтра, чтобы её продолжить.</small></div>

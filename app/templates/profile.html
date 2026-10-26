@@ -37,6 +37,8 @@
   {% endif %}
   {% endif %}
 
+  {% if user.role == "student" %}<a class="btn btn-secondary btn-block" href="/stamps">Мои штампики и история</a>{% endif %}
+
   <form class="card" method="post" action="/profile/password">
     <h2>Сменить пароль</h2>
     {% if password_ok %}
