@@ -91,6 +91,13 @@ function initLoginSuggest() {
   });
 }
 
+// ---------- PWA: service worker кэширует только статику (см. static/js/sw.js) ----------
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {}); // без него сайт работает так же
+  });
+}
+
 initPasswordToggles();
 initPasswordRules();
 initLoginSuggest();

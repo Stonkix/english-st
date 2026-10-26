@@ -13,7 +13,7 @@ from app.auth.sessions import COOKIE_NAME, get_session_user
 from app.config import BASE_DIR, settings
 from app.db import SessionLocal, engine
 from app.logins import is_valid_login, normalize_login
-from app.models import Group, User
+from app.models import ChatMessage, Group, Order, StampTransaction, User
 
 
 class SchoolAuth(AuthenticationBackend):
@@ -109,6 +109,46 @@ class GroupAdmin(ModelView, model=Group):
             return [(str(u.id), str(u)) for u in db.scalars(stmt)]
 
 
+class _ReadOnly(ModelView):
+    """Только просмотр: журналы меняются через сайт (у каждой правки есть свои проверки и возвраты)."""
+
+    can_create = False
+    can_edit = False
+    can_delete = False
+    page_size = 50
+
+
+class StampTransactionAdmin(_ReadOnly, model=StampTransaction):
+    name = "Операция со штампиками"
+    name_plural = "Штампики: журнал"
+    icon = "fa-solid fa-star"
+    column_list = [
+        StampTransaction.id, StampTransaction.created_at, StampTransaction.student_id, StampTransaction.stamp_type,
+        StampTransaction.amount, StampTransaction.reason, StampTransaction.comment,
+    ]
+    column_default_sort = [(StampTransaction.id, True)]
+
+
+class OrderAdmin(_ReadOnly, model=Order):
+    name = "Заявка"
+    name_plural = "Магазин: заявки"
+    icon = "fa-solid fa-gift"
+    column_list = [Order.id, Order.created_at, Order.student, Order.item_id, Order.price_amount, Order.status]
+    column_default_sort = [(Order.id, True)]
+
+
+class ChatMessageAdmin(_ReadOnly, model=ChatMessage):
+    name = "Сообщение"
+    name_plural = "Чат: сообщения"
+    icon = "fa-solid fa-comments"
+    column_list = [
+        ChatMessage.id, ChatMessage.created_at, ChatMessage.room_id, ChatMessage.author, ChatMessage.kind,
+        ChatMessage.text_original, ChatMessage.was_filtered, ChatMessage.deleted_at,
+    ]
+    column_searchable_list = [ChatMessage.text_original]
+    column_default_sort = [(ChatMessage.id, True)]
+
+
 def setup_admin(app) -> Admin:
     auth = SchoolAuth(secret_key=settings.secret_key, https_only=not settings.debug)
     admin = Admin(
@@ -118,6 +158,6 @@ def setup_admin(app) -> Admin:
         templates_dir=str(BASE_DIR / "app" / "templates"),  # переопределения в templates/sqladmin/
         authentication_backend=auth,
     )
-    for view in (UserAdmin, GroupAdmin):
+    for view in (UserAdmin, GroupAdmin, StampTransactionAdmin, OrderAdmin, ChatMessageAdmin):
         admin.add_view(view)
     return admin

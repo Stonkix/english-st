@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -153,6 +153,16 @@ app.include_router(tasks_router)
 app.include_router(school_router)
 app.include_router(shop_router)
 setup_admin(app)  # /admin — sqladmin, вход по сессии сайта (только admin)
+
+
+@app.get("/sw.js")
+def service_worker():
+    """Service worker с корня сайта — иначе он управлял бы только /static/. Кэшировать сам файл нельзя: обновления."""
+    return FileResponse(
+        BASE_DIR / "app" / "static" / "js" / "sw.js",
+        media_type="text/javascript",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @app.get("/healthz")

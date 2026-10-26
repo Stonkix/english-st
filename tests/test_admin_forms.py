@@ -129,3 +129,12 @@ def test_group_form_has_no_students_field(client, db):
     group = make_group(db, make_user(db, role="teacher", login="teach1"))
     page = client.get(f"/admin/group/edit/{group.id}").text
     assert 'name="students"' not in page and 'name="teacher"' in page
+
+
+def test_journals_are_read_only(client, db):
+    from tests.factories import login_as, make_user
+    make_user(db, role="admin", login="adm")
+    login_as(client, "adm")
+    for slug in ("stamp-transaction", "order", "chat-message"):
+        assert client.get(f"/admin/{slug}/list").status_code == 200, slug
+        assert client.get(f"/admin/{slug}/create").status_code in (403, 404), slug
