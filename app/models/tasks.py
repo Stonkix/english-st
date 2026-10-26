@@ -10,6 +10,19 @@ LEVELS = ("A1", "A1+", "A2", "A2+", "B1", "B1+", "B2", "B2+", "C1", "C1+", "C2",
 QUESTION_TYPES = ("choice_text", "choice_image", "text_input", "word_bank", "match_pairs")
 
 
+class Topic(Base):
+    """Тема вопросов (грамматика, лексика…). Общий список школы, ведёт админ; тема задаётся пулу."""
+
+    __tablename__ = "topics"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(unique=True)
+    sort_order: Mapped[int] = mapped_column(default=0)
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class Pool(Base):
     """Пул вопросов: из него собирается ежедневное задание группы."""
 
@@ -20,7 +33,10 @@ class Pool(Base):
     title: Mapped[str]
     description: Mapped[str]
     level: Mapped[str]  # одно из LEVELS
+    topic_id: Mapped[int | None] = mapped_column(ForeignKey("topics.id", ondelete="SET NULL"))  # None — «без темы»
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+    topic: Mapped["Topic | None"] = relationship()
 
     # только действующие вопросы; удалённые с ответами скрываются (is_active=False)
     questions: Mapped[list["Question"]] = relationship(
@@ -114,6 +130,16 @@ class DailySettings(Base):
     max_attempts: Mapped[int] = mapped_column(default=3)
     shuffle_questions: Mapped[bool] = mapped_column(default=True)
     shuffle_options: Mapped[bool] = mapped_column(default=True)
+
+
+class GroupTopicQuota(Base):
+    """Сколько вопросов темы брать в ежедневное задание группы (когда не назначен тест)."""
+
+    __tablename__ = "group_topic_quotas"
+
+    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"), primary_key=True)
+    topic_id: Mapped[int] = mapped_column(ForeignKey("topics.id", ondelete="CASCADE"), primary_key=True)
+    count: Mapped[int]
 
 
 class Attempt(Base):

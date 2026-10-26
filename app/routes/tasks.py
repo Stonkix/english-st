@@ -4,18 +4,20 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
+from sqlalchemy.orm import object_session
 from starlette.datastructures import FormData, UploadFile
 
 from app.avatars import read_photo
-from app.daily import settings_for
+from app.daily import settings_for, topic_quotas
 from app import stamps
 from app.db import get_db
 from app.images import InvalidImage, delete_media, is_picture_of, save_picture
 from app.models import (
-    Assignment, AttemptAnswer, DailyReward, Group, GroupPool, Pool, Question, StampType, Test, TestQuestion, User,
+    Assignment, AttemptAnswer, DailyReward, Group, GroupPool, GroupTopicQuota, Pool, Question, StampType, Test, TestQuestion,
+    Topic, User,
 )
 from app.models.tasks import LEVELS, QUESTION_TYPES
 from app.params import MAX_ID, Id, form_int
@@ -232,14 +234,21 @@ def _tasks_page(request: Request, db: DbSession, user: User, values: dict | None
     owner_ids = {p.owner_id for p in pools} | {t.owner_id for t in tests}
     owners = {u.id: u for u in db.scalars(select(User).where(User.id.in_(owner_ids)))} if owner_ids else {}
     context = {
-        "user": user, "pools": pools, "tests": tests, "owners": owners, "levels": LEVELS,
-        "values": values or {"title": "", "description": "", "level": ""}, "error": error,
+        "user": user, "pools": pools, "tests": tests, "owners": owners, "levels": LEVELS, "topics": _topics(db),
+        "values": values or {"title": "", "description": "", "level": "", "topic_id": None}, "error": error,
     }
     return templates.TemplateResponse(request, "tasks/pools.html", context)
 
 
+def _topics(db: DbSession) -> list[Topic]:
+    return list(db.scalars(select(Topic).order_by(Topic.sort_order, Topic.name)))
+
+
 def _pool_page(request: Request, user: User, pool: Pool, **context):
-    context.update(user=user, pool=pool, levels=LEVELS, types=QUESTION_TYPES, labels=TYPE_LABELS, hints=TYPE_HINTS)
+    context.update(
+        user=user, pool=pool, levels=LEVELS, types=QUESTION_TYPES, labels=TYPE_LABELS, hints=TYPE_HINTS,
+        topics=_topics(object_session(pool)),
+    )
     return templates.TemplateResponse(request, "tasks/pool.html", context)
 
 
@@ -256,8 +265,12 @@ def _question_page(
     return templates.TemplateResponse(request, "tasks/question_form.html", context)
 
 
-def _pool_fields(title: str, description: str, level: str) -> tuple[dict, str | None]:
-    values = {"title": title.strip(), "description": description.strip(), "level": level}
+def _pool_fields(db: DbSession, title: str, description: str, level: str, topic_id: str = "") -> tuple[dict, str | None]:
+    """Поля пула и первая ошибка. Тема необязательна: пустая — «без темы»."""
+    topic = form_int(topic_id, 1) if topic_id else None
+    values = {"title": title.strip(), "description": description.strip(), "level": level, "topic_id": topic}
+    if topic_id and (topic is None or db.get(Topic, topic) is None):
+        return values, "Выберите тему из списка"
     if not values["title"]:
         return values, "Введите название пула"
     if len(values["title"]) > TITLE_MAX:
@@ -301,10 +314,11 @@ def create_pool(
     title: str = Form(""),
     description: str = Form(""),
     level: str = Form(""),
+    topic_id: str = Form(""),
     user: User = Depends(teacher_only),
     db: DbSession = Depends(get_db),
 ):
-    values, error = _pool_fields(title, description, level)
+    values, error = _pool_fields(db, title, description, level, topic_id)
     if error:
         return _tasks_page(request, db, user, values, error)
     pool = Pool(owner_id=user.id, **values)
@@ -325,14 +339,16 @@ def edit_pool(
     title: str = Form(""),
     description: str = Form(""),
     level: str = Form(""),
+    topic_id: str = Form(""),
     user: User = Depends(teacher_only),
     db: DbSession = Depends(get_db),
 ):
     pool = own_pool(db, user, pool_id)
-    values, error = _pool_fields(title, description, level)
+    values, error = _pool_fields(db, title, description, level, topic_id)
     if error:
         return _pool_page(request, user, pool, edit_error=error, edit_values=values)
     pool.title, pool.description, pool.level = values["title"], values["description"], values["level"]
+    pool.topic_id = values["topic_id"]
     db.commit()
     return _to_pool(pool)
 
@@ -689,9 +705,22 @@ def _group_tasks_page(request: Request, db: DbSession, user: User, group: Group,
         pools=_pools_of(db, group.teacher_id),
         connected=set(db.scalars(select(GroupPool.pool_id).where(GroupPool.group_id == group.id))),
         rewards=stamps.rewards_for(db, group.id, None),
+        topics=_topics(db),
+        quotas=topic_quotas(db, group.id),
+        topic_available=_topic_available(db, group.id),
         stamp_types=stamps.active_types(db),
     )
     return templates.TemplateResponse(request, "tasks/group_daily.html", context)
+
+
+def _topic_available(db: DbSession, group_id: int) -> dict[int | None, int]:
+    """Сколько действующих вопросов каждой темы в пулах группы (None — без темы)."""
+    rows = db.execute(
+        select(Pool.topic_id, func.count(Question.id)).join(Question, Question.pool_id == Pool.id)
+        .where(Pool.id.in_(select(GroupPool.pool_id).where(GroupPool.group_id == group_id)), Question.is_active.is_(True))
+        .group_by(Pool.topic_id)
+    )
+    return dict(rows.all())
 
 
 def _to_group_tasks(group: Group) -> RedirectResponse:
@@ -922,3 +951,28 @@ def delete_test_reward(test_id: Id, reward_id: Id, user: User = Depends(teacher_
     db.delete(reward)
     db.commit()
     return RedirectResponse(f"/tasks/tests/{test.id}#rewards", status_code=303)
+
+
+# ---------- темы в задании группы ----------
+
+QUOTA_MAX = 30  # как и «вопросов в день»
+
+
+@router.post("/groups/{group_id}/topics")
+async def save_topic_quotas(group_id: Id, request: Request, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
+    """Сколько вопросов каждой темы в задании дня. Все нули — темы не учитываются (берётся «вопросов в день»)."""
+    group = own_group(db, user, group_id)
+    form = await request.form()
+    counts = {}
+    for topic in _topics(db):
+        raw = str(form.get(f"topic_{topic.id}", "") or "0")
+        value = form_int(raw, 0, QUOTA_MAX)
+        if value is None:
+            return _group_tasks_page(request, db, user, group, topics_error=f"Число вопросов темы — от 0 до {QUOTA_MAX}")
+        counts[topic.id] = value
+    if sum(counts.values()) > QUOTA_MAX:
+        return _group_tasks_page(request, db, user, group, topics_error=f"Всего — не больше {QUOTA_MAX} вопросов в день")
+    db.execute(delete(GroupTopicQuota).where(GroupTopicQuota.group_id == group.id))
+    db.add_all([GroupTopicQuota(group_id=group.id, topic_id=t, count=c) for t, c in counts.items() if c > 0])
+    db.commit()
+    return RedirectResponse(f"/tasks/groups/{group.id}#topics", status_code=303)

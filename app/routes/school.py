@@ -1,8 +1,8 @@
-"""Админ: раздел «Школа» — учителя (создание, временный пароль, сброс, отключение), словарь фильтра мата, виды штампиков."""
+"""Админ: раздел «Школа» — учителя (создание, временный пароль, сброс, отключение), словарь фильтра мата, виды штампиков, темы вопросов."""
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
@@ -16,7 +16,7 @@ from app.db import get_db
 from app.images import InvalidImage, delete_media, read_limited, save_stamp_art
 from app.logins import is_valid_login, normalize_login
 from app.models import (
-    BadWord, BadWordException, ConversionRule, ReplacementWord, StampTransaction, StampType, StampVariant, User,
+    BadWord, BadWordException, ConversionRule, Pool, ReplacementWord, StampTransaction, StampType, StampVariant, Topic, User,
 )
 from app.params import Id, form_int
 from app.profanity import clean_text, compile_filter, contains_profanity, is_cyrillic, load_filter
@@ -387,3 +387,75 @@ def delete_rule(rule_id: Id, user: User = Depends(admin_only), db: DbSession = D
     db.delete(_rule_or_404(db, rule_id))  # прошлые обмены остаются в журнале (текст правила — в комментарии)
     db.commit()
     return _to_stamps("#rules")
+
+
+# ---------- темы вопросов ----------
+
+TOPIC_NAME_MAX = 40
+
+
+def _topics_page(request: Request, db: DbSession, user: User, error: str | None = None, error_for: str = ""):
+    topics = list(db.scalars(select(Topic).order_by(Topic.sort_order, Topic.name)))
+    used = dict(db.execute(select(Pool.topic_id, func.count()).where(Pool.topic_id.is_not(None)).group_by(Pool.topic_id)).all())
+    context = {"user": user, "topics": topics, "used": used, "error": error, "error_for": error_for}
+    return templates.TemplateResponse(request, "school/topics.html", context, status_code=400 if error else 200)
+
+
+def _topic_error(db: DbSession, name: str, own_id: int | None) -> str | None:
+    if not name or len(name) > TOPIC_NAME_MAX:
+        return f"Название темы — от 1 до {TOPIC_NAME_MAX} символов"
+    # сравниваем в Python: lower() в SQLite не знает кириллицу
+    taken = db.scalars(select(Topic.name).where(Topic.id != (own_id or 0)))
+    if name.casefold() in {n.casefold() for n in taken}:
+        return "Такая тема уже есть"
+    return None
+
+
+@router.get("/topics")
+def topics_page(request: Request, user: User = Depends(admin_only), db: DbSession = Depends(get_db)):
+    return _topics_page(request, db, user)
+
+
+@router.post("/topics")
+def create_topic(request: Request, name: str = Form(""), user: User = Depends(admin_only), db: DbSession = Depends(get_db)):
+    name = " ".join(name.split())
+    error = _topic_error(db, name, None)
+    if error:
+        return _topics_page(request, db, user, error, "new")
+    order = (db.scalar(select(func.max(Topic.sort_order))) or 0) + 1
+    db.add(Topic(name=name, sort_order=order))
+    db.commit()
+    return RedirectResponse("/school/topics", status_code=303)
+
+
+@router.post("/topics/{topic_id}")
+def edit_topic(
+    topic_id: Id,
+    request: Request,
+    name: str = Form(""),
+    sort_order: str = Form("0"),
+    user: User = Depends(admin_only),
+    db: DbSession = Depends(get_db),
+):
+    topic = db.get(Topic, topic_id)
+    if topic is None:
+        raise HTTPException(404)
+    name = " ".join(name.split())
+    error = _topic_error(db, name, topic.id)
+    order = form_int(sort_order, -1000, 1000)
+    if error or order is None:
+        return _topics_page(request, db, user, error or "Порядок — число от -1000 до 1000", str(topic.id))
+    topic.name, topic.sort_order = name, order
+    db.commit()
+    return RedirectResponse("/school/topics", status_code=303)
+
+
+@router.post("/topics/{topic_id}/delete")
+def delete_topic(topic_id: Id, user: User = Depends(admin_only), db: DbSession = Depends(get_db)):
+    """Пулы темы становятся «без темы», а число вопросов темы у групп пропадает."""
+    topic = db.get(Topic, topic_id)
+    if topic is None:
+        raise HTTPException(404)
+    db.delete(topic)
+    db.commit()
+    return RedirectResponse("/school/topics", status_code=303)

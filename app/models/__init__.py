@@ -19,10 +19,12 @@ from app.models.tasks import (
     AttemptAnswer,
     DailySettings,
     GroupPool,
+    GroupTopicQuota,
     Pool,
     Question,
     Test,
     TestQuestion,
+    Topic,
 )
 
 __all__ = [
@@ -42,6 +44,7 @@ __all__ = [
     "DailySettings",
     "Group",
     "GroupPool",
+    "GroupTopicQuota",
     "LoginAttempt",
     "Order",
     "Pool",
@@ -54,5 +57,6 @@ __all__ = [
     "StampVariant",
     "Test",
     "TestQuestion",
+    "Topic",
     "User",
 ]

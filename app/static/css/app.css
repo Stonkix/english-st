@@ -1026,3 +1026,8 @@ a.stamp-balances:active { background: var(--bg-soft); }
 /* ---------- Награды за задание (ступени) ---------- */
 .reward-tiers { display: flex; flex-wrap: wrap; gap: 6px 12px; }
 .reward-tier { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 15px; font-weight: 700; }
+
+/* ---------- Темы вопросов ---------- */
+.topic-row { display: grid; grid-template-columns: 1fr 96px; gap: 12px; align-items: end; }
+.topic-row .btn { grid-column: 1 / -1; }
+.topic-quota label small { font-weight: 400; }

@@ -33,6 +33,7 @@
     <div class="field">
       <label for="question-count">Вопросов в день</label>
       <input id="question-count" name="question_count" type="number" inputmode="numeric" min="1" max="30" value="{{ settings_values.question_count }}" required>
+      {% if quotas %}<small>Сейчас число вопросов задаётся темами ниже ({{ quotas.values()|sum }}).</small>{% endif %}
     </div>
     <div class="field">
       <label for="max-attempts">Попыток в день</label>
@@ -43,6 +44,25 @@
       <label class="pick"><input type="checkbox" name="shuffle_options" value="1"{% if settings_values.shuffle_options %} checked{% endif %}> Перемешивать варианты ответов</label>
     </div>
     <button class="btn btn-primary btn-block" type="submit">Сохранить настройки</button>
+  </form>
+
+  <form class="card" id="topics" method="post" action="/tasks/groups/{{ group.id }}/topics" data-once>
+    <h2>Вопросы по темам</h2>
+    <p class="muted">Сколько вопросов каждой темы брать в задание дня, когда не назначен тест. Если в теме не хватает вопросов, задание добирается из остальных вопросов пулов группы. Все нули — темы не учитываются, берётся «Вопросов в день» из всех пулов. Тема задаётся пулу в разделе «Задания».</p>
+    {% if topics_error is defined and topics_error %}<div class="alert-error" role="alert"><p>{{ topics_error }}</p></div>{% endif %}
+    {% if topics %}
+    {% for t in topics %}
+    <div class="field topic-quota">
+      <label for="topic-{{ t.id }}">{{ t.name }} <small class="muted">— в пулах группы {{ topic_available.get(t.id, 0) }}</small></label>
+      <input id="topic-{{ t.id }}" name="topic_{{ t.id }}" type="number" inputmode="numeric" min="0" max="30" value="{{ quotas.get(t.id, 0) }}">
+    </div>
+    {% endfor %}
+    {% if topic_available.get(none) %}<p class="muted">Без темы: {{ topic_available.get(none) }} — идут на добор.</p>{% endif %}
+    {% if quotas %}<p class="lead">Сейчас в задании {{ quotas.values()|sum }} вопросов.</p>{% endif %}
+    <button class="btn btn-primary btn-block" type="submit">Сохранить темы</button>
+    {% else %}
+    <p class="muted">Тем пока нет — их заводит администратор.</p>
+    {% endif %}
   </form>
 
   {{ rewards_card(rewards, stamp_types, "/tasks/groups/" ~ group.id ~ "/rewards", reward_error, reward_values if reward_values is defined else none,

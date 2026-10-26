@@ -6,7 +6,7 @@
   <a class="back-link" href="/tasks">← Задания</a>
   <div>
     <h1>{{ pool.title }}</h1>
-    <p class="muted"><span class="badge badge-blue">{{ pool.level }}</span></p>
+    <p class="muted"><span class="badge badge-blue">{{ pool.level }}</span>{% if pool.topic %} <span class="badge">{{ pool.topic.name }}</span>{% else %} <span class="badge">без темы</span>{% endif %}</p>
     <p>{{ pool.description }}</p>
   </div>
 
@@ -43,7 +43,7 @@
       {% if edit_error %}
       <div class="alert-error" role="alert"><p>{{ edit_error }}</p></div>
       {% endif %}
-      {% set v = edit_values if edit_values is defined else {"title": pool.title, "description": pool.description, "level": pool.level} %}
+      {% set v = edit_values if edit_values is defined else {"title": pool.title, "description": pool.description, "level": pool.level, "topic_id": pool.topic_id} %}
       <div class="field">
         <label for="pool-title">Название</label>
         <input id="pool-title" name="title" value="{{ v.title }}" maxlength="80" autocomplete="off" required>
@@ -56,6 +56,13 @@
         <label for="pool-level">Уровень</label>
         <select id="pool-level" name="level" required>
           {% for l in levels %}<option value="{{ l }}"{% if v.level == l %} selected{% endif %}>{{ l }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="pool-topic">Тема</label>
+        <select id="pool-topic" name="topic_id">
+          <option value="">Без темы</option>
+          {% for t in topics %}<option value="{{ t.id }}"{% if v.topic_id|string == t.id|string %} selected{% endif %}>{{ t.name }}</option>{% endfor %}
         </select>
       </div>
       <button class="btn btn-secondary btn-block" type="submit">Сохранить</button>
