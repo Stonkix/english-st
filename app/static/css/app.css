@@ -1031,3 +1031,40 @@ a.stamp-balances:active { background: var(--bg-soft); }
 .topic-row { display: grid; grid-template-columns: 1fr 96px; gap: 12px; align-items: end; }
 .topic-row .btn { grid-column: 1 / -1; }
 .topic-quota label small { font-weight: 400; }
+
+/* ---------- Питомцы ---------- */
+.pet-offer { align-items: center; text-align: center; }
+.pet-offer-img { width: 96px; height: 96px; }
+.pet-buy { display: flex; flex-direction: column; gap: 10px; align-self: stretch; margin: 0; }
+.pet-buy input {
+  min-height: 48px; padding: 0 14px; border: 2px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-soft); color: var(--text); font: inherit;
+}
+.food-card { gap: 12px; }
+.food-head { display: flex; align-items: center; gap: 12px; }
+.food-head div { display: flex; flex-direction: column; }
+.food-stock { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.pet-card { align-items: center; text-align: center; gap: 8px; }
+.pet-card.is-happy { border-color: var(--green-light); }
+.pet-stage { position: relative; width: 180px; height: 160px; display: flex; align-items: center; justify-content: center; }
+.pet-img { width: 140px; height: 140px; animation: pet-idle 3s ease-in-out infinite; }
+.pet-card.is-happy .pet-img { animation: pet-hop 1.2s ease-in-out infinite; }
+.pet-poop { position: absolute; right: 0; bottom: 0; width: 44px; height: 44px; }
+.pet-heart { position: absolute; right: 6px; top: 0; width: 36px; height: 36px; animation: pop .5s ease-out; }
+.pet-today { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+.pet-meals { display: inline-flex; gap: 4px; }
+.pet-meals .is-empty { filter: grayscale(1); opacity: .3; }
+.pet-warning { color: var(--red-dark); font-weight: 700; }
+.pet-card .stamp-actions { align-self: stretch; }
+.pet-gone { flex-direction: row; align-items: center; gap: 12px; border-color: var(--red-light); background: #FFF6F6; }
+.pet-gone img { filter: grayscale(1); opacity: .6; }
+.pet-gone div { display: flex; flex-direction: column; text-align: left; }
+.pet-gone small, .pet-home small { color: var(--muted); font-size: 15px; }
+.pets-empty { align-items: center; text-align: center; }
+.pet-home { flex-direction: row; align-items: center; gap: 12px; color: var(--text); }
+.pet-home img { flex: none; }
+.pet-home div { display: flex; flex-direction: column; }
+@keyframes pet-idle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes pet-hop { 0%, 100% { transform: translateY(0) rotate(0); } 30% { transform: translateY(-14px) rotate(-4deg); } 60% { transform: translateY(0) rotate(3deg); } }
+@media (prefers-reduced-motion: reduce) { .pet-img, .pet-card.is-happy .pet-img, .pet-heart { animation: none; } }
+.pet-species-row { display: grid; grid-template-columns: 40px 1fr 96px; gap: 10px; align-items: center; }

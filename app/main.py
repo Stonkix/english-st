@@ -21,6 +21,7 @@ from app.routes.chat import router as chat_router
 from app.routes.daily import JSON_PATHS
 from app.routes.daily import router as daily_router
 from app.routes.media import router as media_router
+from app.routes.pets import router as pets_router
 from app.routes.profile import router as profile_router
 from app.routes.school import router as school_router
 from app.routes.shop import router as shop_router
@@ -152,6 +153,7 @@ app.include_router(teacher_router)
 app.include_router(tasks_router)
 app.include_router(school_router)
 app.include_router(shop_router)
+app.include_router(pets_router)
 setup_admin(app)  # /admin — sqladmin, вход по сессии сайта (только admin)
 
 

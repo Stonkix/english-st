@@ -1,4 +1,4 @@
-"""Админ: раздел «Школа» — учителя (создание, временный пароль, сброс, отключение), словарь фильтра мата, виды штампиков, темы вопросов."""
+"""Админ: раздел «Школа» — учителя (создание, временный пароль, сброс, отключение), словарь фильтра мата, виды штампиков, темы вопросов, питомцы."""
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
@@ -6,7 +6,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
-from app import stamps
+from app import pets, stamps
 from app.accounts import LOGIN_INVALID, LOGIN_TAKEN, login_taken, name_errors, temp_password_page
 from app.auth.deps import require_role
 from app.auth.login_guard import reset_all
@@ -459,3 +459,54 @@ def delete_topic(topic_id: Id, user: User = Depends(admin_only), db: DbSession =
     db.delete(topic)
     db.commit()
     return RedirectResponse("/school/topics", status_code=303)
+
+
+# ---------- питомцы ----------
+
+
+def _pets_page(request: Request, db: DbSession, user: User, error: str | None = None, saved: bool = False):
+    context = {
+        "user": user, "cfg": pets.config(db), "species": pets.species_list(db, active_only=False),
+        "stamp_types": stamps.active_types(db), "error": error, "saved": saved,
+    }
+    return templates.TemplateResponse(request, "school/pets.html", context, status_code=400 if error else 200)
+
+
+@router.get("/pets")
+def pets_settings(request: Request, saved: bool = False, user: User = Depends(admin_only), db: DbSession = Depends(get_db)):
+    return _pets_page(request, db, user, saved=saved)
+
+
+@router.post("/pets")
+async def save_pets_settings(request: Request, user: User = Depends(admin_only), db: DbSession = Depends(get_db)):
+    """Валюта, корм, сколько дней без ухода терпит питомец; цены и доступность видов."""
+    form = await request.form()
+
+    def get(key: str) -> str:
+        return str(form.get(key, "") or "")
+
+    cfg = pets.config(db)
+    currency = db.get(StampType, form_int(get("price_type_id"), 1) or 0) if form_int(get("price_type_id"), 1) else None
+    values = {
+        "food_pack_price": form_int(get("food_pack_price"), 1, 1000),
+        "food_pack_size": form_int(get("food_pack_size"), 1, 100),
+        "food_max": form_int(get("food_max"), 1, 1000),
+        "runaway_days": form_int(get("runaway_days"), 1, 30),
+    }
+    if currency is None or not currency.is_active:
+        return _pets_page(request, db, user, "Выберите вид штампиков для цен")
+    if None in values.values():
+        return _pets_page(request, db, user, "Проверьте числа: цена пачки 1–1000, порций в пачке 1–100, запас 1–1000, дней 1–30")
+    if values["food_max"] < values["food_pack_size"]:
+        return _pets_page(request, db, user, "Запас корма должен вмещать хотя бы одну пачку")
+    species = pets.species_list(db, active_only=False)
+    prices = {sp.id: form_int(get(f"price_{sp.id}"), 1, 10000) for sp in species}
+    if None in prices.values():
+        return _pets_page(request, db, user, "Цена питомца — от 1 до 10000")
+    cfg.price_type_id = currency.id
+    for key, value in values.items():
+        setattr(cfg, key, value)
+    for sp in species:
+        sp.price, sp.is_active = prices[sp.id], bool(form.get(f"active_{sp.id}"))
+    db.commit()
+    return RedirectResponse("/school/pets?saved=1", status_code=303)

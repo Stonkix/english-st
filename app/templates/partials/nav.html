@@ -29,6 +29,10 @@
   <rect x="4" y="11" width="24" height="17" rx="3" fill="#CE82FF"/>
   <path d="M4 14l3-9h18l3 9z" fill="#A560E8"/>
   <rect x="12" y="16" width="8" height="3" rx="1.5" fill="#fff"/>
+  {%- elif name == "pets" %}
+  <ellipse cx="16" cy="21.5" rx="7" ry="6" fill="#FF9600"/>
+  <circle cx="7.5" cy="13" r="3.2" fill="#FFB020"/><circle cx="12.5" cy="7.5" r="3.2" fill="#FFB020"/>
+  <circle cx="19.5" cy="7.5" r="3.2" fill="#FFB020"/><circle cx="24.5" cy="13" r="3.2" fill="#FFB020"/>
   {%- elif name == "school" %}
   <path d="M16 9V2.5" stroke="#4B4B4B" stroke-width="2" stroke-linecap="round"/>
   <path d="M16 2.5h7l-2 2.25 2 2.25h-7z" fill="#FF4B4B"/>
@@ -40,7 +44,7 @@
 {%- endmacro %}
 {% set items = [("Главная", "/", "home")] if user.role == "student" else [("Группы", "/teacher", "groups"), ("Задания", "/tasks", "tasks")] %}
 {% set items = items + [("Чат", "/chat", "chat")] %}
-{% set items = items + ([("Магазин", "/shop", "shop")] if user.role == "student" else [("Заявки", "/orders", "orders")]) %}
+{% set items = items + ([("Магазин", "/shop", "shop"), ("Питомцы", "/pets", "pets")] if user.role == "student" else [("Заявки", "/orders", "orders")]) %}
 {% set unread = chat_unread(user) %}
 {% set pending = orders_pending(user) %}
 {% if user.role == "admin" %}{% set items = items + [("Школа", "/school", "school")] %}{% endif %}

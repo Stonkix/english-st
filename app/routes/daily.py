@@ -21,7 +21,7 @@ from app.daily import (
     todays_source,
     todays_status,
 )
-from app import stamps
+from app import pets, stamps
 from app.db import get_db
 from app.models import Attempt, StampTransaction, User
 from app.params import MAX_ID, Id, form_int
@@ -70,6 +70,8 @@ def _home_page(request: Request, db: DbSession, user: User, notice: str | None =
         "user": user, "status": status, "left": left, "notice": notice, "balances": stamps.balances(db, user.id),
         "penalties": stamps.recent_penalties(db, user.id),
         "rewards": [r for r in rewards if r.stamp_type.is_active],
+        "pet_todo": [p for p in pets.statuses(db, user.id) if not p.done],  # заодно проверяет, не убежал ли кто
+        "pets_gone": pets.runaways(db, user.id, moscow_today()),
     }
     return templates.TemplateResponse(request, "student/home.html", context)
 

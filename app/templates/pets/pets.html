@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Мои питомцы — English ST{% endblock %}
+
+{% block content %}
+<section class="page pets-page">
+  <h1>Мои питомцы</h1>
+  {% if ok %}<div class="alert-success" role="status"><p>{{ ok }}</p></div>{% endif %}
+  {% if error %}<div class="alert-error" role="alert"><p>{{ error }}</p></div>{% endif %}
+
+  {% for pet in gone %}
+  <div class="card pet-gone" role="status">
+    <img src="{{ pet.species|pet_image }}" alt="" width="56" height="56">
+    <div><strong>{{ pet.name }} убежал(а) {{ pet.ran_away_on.strftime("%d.%m") }}</strong><small>{{ cfg.runaway_days }} дн. подряд без ухода. Можно завести питомца снова в магазине.</small></div>
+  </div>
+  {% endfor %}
+
+  {% if statuses %}
+  <p class="food-stock"><img src="/static/pets/food.svg" alt="" width="28" height="28"> Корм: <strong>{{ food }}</strong> порций · <a href="/shop#food">купить</a></p>
+  {% for s in statuses %}
+  <article class="card pet-card{% if s.done %} is-happy{% endif %}" id="pet-{{ s.pet.id }}">
+    <div class="pet-stage">
+      <img class="pet-img" src="{{ s.pet.species|pet_image }}" alt="{{ s.pet.species.name }}" width="140" height="140">
+      {% if not s.cleaned %}<img class="pet-poop" src="/static/pets/poop.svg" alt="Нужно убрать" width="44" height="44">{% endif %}
+      {% if s.done %}<img class="pet-heart" src="/static/pets/heart.svg" alt="" width="36" height="36">{% endif %}
+    </div>
+    <h2>{{ s.pet.name }}</h2>
+    <p class="muted">{{ s.pet.species.name }}</p>
+    <div class="pet-today">
+      <span class="pet-meals" aria-label="Покормлено {{ s.feedings }} из {{ feedings_per_day }}">
+        {% for i in range(feedings_per_day) %}<img src="/static/pets/food.svg" alt="" width="28" height="28" class="{% if i >= s.feedings %}is-empty{% endif %}">{% endfor %}
+      </span>
+      <span>{% if s.done %}Сегодня всё сделано!{% elif s.hungry and not s.cleaned %}Хочет есть и нужно убрать{% elif s.hungry %}Хочет есть{% else %}Нужно убрать{% endif %}</span>
+    </div>
+    {% if s.neglected %}
+    <p class="pet-warning" role="alert">Без ухода {{ s.neglected }} дн. Если и сегодня не позаботиться — {% if s.days_left <= 1 %}завтра {{ s.pet.name }} убежит!{% else %}останется {{ s.days_left - 1 }} дн.{% endif %}</p>
+    {% endif %}
+    <div class="stamp-actions">
+      <form method="post" action="/pets/{{ s.pet.id }}/feed" data-once>
+        <button class="btn btn-primary btn-block" type="submit"{% if not s.hungry or not food %} disabled{% endif %}>Покормить</button>
+      </form>
+      <form method="post" action="/pets/{{ s.pet.id }}/clean" data-once>
+        <button class="btn btn-secondary btn-block" type="submit"{% if s.cleaned %} disabled{% endif %}>Убрать</button>
+      </form>
+    </div>
+  </article>
+  {% endfor %}
+  {% else %}
+  <div class="card pets-empty">
+    <img src="/static/pets/paws.svg" alt="" width="72" height="72">
+    <p class="lead">Питомцев пока нет. Заведи кошечку, собачку, попугайчика, жабку или черепашку в магазине!</p>
+    <a class="btn btn-primary btn-block" href="/shop">В магазин</a>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

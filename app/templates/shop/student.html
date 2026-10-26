@@ -9,6 +9,58 @@
   {% if ok %}<div class="alert-success" role="status"><p>{{ ok }}</p></div>{% endif %}
   {% if error %}<div class="alert-error" role="alert"><p>{{ error }}</p></div>{% endif %}
 
+  {% set currency = pet_cfg.price_type %}
+  {% if currency and currency.is_active and species %}
+  <h2>Питомцы</h2>
+  <p class="muted">Питомца нужно кормить 2 раза в день и убирать за ним 1 раз в день. Если {{ pet_cfg.runaway_days }} дн. подряд не ухаживать — он убежит.</p>
+  <div class="shop-grid">
+    {% for sp in species %}
+    {% set owned = sp.id in owned_species %}
+    {% set enough = have.get(currency.id, 0) >= sp.price %}
+    <article class="card shop-item pet-offer">
+      <img class="pet-offer-img" src="{{ sp|pet_image }}" alt="" width="96" height="96">
+      <h3>{{ sp.name }}</h3>
+      {% if owned %}
+      <a class="btn btn-secondary btn-block" href="/pets">Уже у тебя</a>
+      {% else %}
+      <form class="pet-buy" method="post" action="/shop/pets/{{ sp.id }}/buy" data-once>
+        <label class="visually-hidden" for="pet-name-{{ sp.id }}">Имя питомца</label>
+        <input id="pet-name-{{ sp.id }}" name="name" maxlength="20" autocomplete="off" required placeholder="Имя питомца"{% if not enough %} disabled{% endif %}>
+        <div class="shop-buy">
+          {{ chip(currency, sp.price) }}
+          <button class="btn btn-primary" type="submit"{% if not enough %} disabled{% endif %}>Купить</button>
+        </div>
+      </form>
+      {% if not enough %}<small class="muted">Не хватает: ещё {{ sp.price - have.get(currency.id, 0) }}</small>{% endif %}
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+
+  <div class="card food-card" id="food">
+    <div class="food-head">
+      <img src="/static/pets/food.svg" alt="" width="56" height="56">
+      <div><strong>Корм для питомцев</strong><small class="muted">Пачка — {{ pet_cfg.food_pack_size }} порций за {{ pet_cfg.food_pack_price }} ({{ currency.name }}). У тебя {{ food }} из {{ pet_cfg.food_max }}.</small></div>
+    </div>
+    {% set room = (pet_cfg.food_max - food) // pet_cfg.food_pack_size %}
+    {% set can_pay = have.get(currency.id, 0) // pet_cfg.food_pack_price if pet_cfg.food_pack_price else 0 %}
+    {% set packs = [room, can_pay, packs_max]|min %}
+    {% if packs > 0 %}
+    <form class="exchange-go" method="post" action="/shop/food" data-once>
+      <label class="visually-hidden" for="food-packs">Сколько пачек</label>
+      <input id="food-packs" name="packs" type="number" inputmode="numeric" min="1" max="{{ packs }}" value="1">
+      <button class="btn btn-primary" type="submit">Купить корм</button>
+    </form>
+    {% elif room <= 0 %}
+    <small class="muted">Запас полный.</small>
+    {% else %}
+    <small class="muted">Не хватает штампиков на пачку.</small>
+    {% endif %}
+  </div>
+
+  <h2>Призы</h2>
+  {% endif %}
+
   {% if items %}
   <div class="shop-grid">
     {% for item in items %}

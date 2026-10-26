@@ -21,6 +21,22 @@
   </a>
   {% endif %}
 
+  {% for pet in pets_gone %}
+  <a class="card pet-gone" href="/pets">
+    <img src="{{ pet.species|pet_image }}" alt="" width="48" height="48">
+    <div><strong>{{ pet.name }} убежал(а)!</strong><small>За питомцем долго не ухаживали.</small></div>
+  </a>
+  {% endfor %}
+  {% if pet_todo %}
+  <a class="card pet-home" href="/pets">
+    <img src="{{ pet_todo[0].pet.species|pet_image }}" alt="" width="56" height="56">
+    <div>
+      <strong>Питомцы ждут заботы</strong>
+      {% for s in pet_todo %}<small>{{ s.pet.name }}: {% if s.hungry %}покормить ({{ s.feedings }} из 2){% endif %}{% if s.hungry and not s.cleaned %}, {% endif %}{% if not s.cleaned %}убрать{% endif %}{% if s.neglected %} — без ухода {{ s.neglected }} дн.!{% endif %}</small>{% endfor %}
+    </div>
+  </a>
+  {% endif %}
+
   {% for tx in penalties %}
   <div class="card penalty-card" role="status">
     <span class="penalty-amount">{{ chip(tx.stamp_type, tx.amount) }}</span>

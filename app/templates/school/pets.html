@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Питомцы — English ST{% endblock %}
+
+{% block content %}
+<section class="page teacher-page">
+  <a class="back-link" href="/school">← Школа</a>
+  <h1>Питомцы</h1>
+  <p class="muted">Ученик покупает питомца и корм в магазине сам, без заявки. Уход: покормить 2 раза в день и убрать 1 раз в день. Если столько дней подряд, сколько указано ниже, ухода не хватало, питомец убегает (день покупки не считается).</p>
+  <form class="card" method="post" action="/school/pets" data-once>
+    {% if saved %}<div class="alert-success" role="status"><p>Сохранено</p></div>{% endif %}
+    {% if error %}<div class="alert-error" role="alert"><p>{{ error }}</p></div>{% endif %}
+    <div class="field">
+      <label for="pet-currency">Чем платят</label>
+      <select id="pet-currency" name="price_type_id">
+        {% for t in stamp_types %}<option value="{{ t.id }}"{% if t.id == cfg.price_type_id %} selected{% endif %}>{{ t.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="pack-price">Цена пачки корма</label>
+      <input id="pack-price" name="food_pack_price" type="number" inputmode="numeric" min="1" max="1000" value="{{ cfg.food_pack_price }}" required>
+    </div>
+    <div class="field">
+      <label for="pack-size">Порций в пачке</label>
+      <input id="pack-size" name="food_pack_size" type="number" inputmode="numeric" min="1" max="100" value="{{ cfg.food_pack_size }}" required>
+    </div>
+    <div class="field">
+      <label for="food-max">Запас корма не больше, порций</label>
+      <input id="food-max" name="food_max" type="number" inputmode="numeric" min="1" max="1000" value="{{ cfg.food_max }}" required>
+    </div>
+    <div class="field">
+      <label for="runaway">Убегает после дней без ухода</label>
+      <input id="runaway" name="runaway_days" type="number" inputmode="numeric" min="1" max="30" value="{{ cfg.runaway_days }}" required>
+    </div>
+    <h2>Виды</h2>
+    {% for sp in species %}
+    <div class="field pet-species-row">
+      <img src="{{ sp|pet_image }}" alt="" width="40" height="40">
+      <label class="pick"><input type="checkbox" name="active_{{ sp.id }}" value="1"{% if sp.is_active %} checked{% endif %}> {{ sp.name }}</label>
+      <label class="visually-hidden" for="price-{{ sp.id }}">Цена: {{ sp.name }}</label>
+      <input id="price-{{ sp.id }}" name="price_{{ sp.id }}" type="number" inputmode="numeric" min="1" max="10000" value="{{ sp.price }}" required>
+    </div>
+    {% endfor %}
+    <button class="btn btn-primary btn-block" type="submit">Сохранить</button>
+  </form>
+</section>
+{% endblock %}

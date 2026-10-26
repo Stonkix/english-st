@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session as DbSession
 
-from app import shop, stamps
+from app import pets, shop, stamps
 from app.auth.deps import require_role
 from app.db import SessionLocal, get_db
 from app.images import InvalidImage, delete_media, read_limited, save_shop_image
@@ -44,7 +44,7 @@ templates.env.globals["orders_pending"] = pending_for_nav
 # ---------- ученик ----------
 
 
-def _shop_page(request: Request, db: DbSession, user: User, error: str | None = None, ok: str | None = None):
+def student_shop_page(request: Request, db: DbSession, user: User, error: str | None = None, ok: str | None = None):
     balances = stamps.balances(db, user.id)
     context = {
         "user": user,
@@ -55,16 +55,26 @@ def _shop_page(request: Request, db: DbSession, user: User, error: str | None = 
         "status_text": shop.STATUS_TEXT,
         "error": error,
         "ok": ok,
+        # питомцы и корм: покупаются сразу, без заявки учителю
+        "pet_cfg": pets.config(db),
+        "species": pets.species_list(db),
+        "owned_species": {p.species_id for p in pets.living_pets(db, user.id)},
+        "food": pets.food(db, user.id),
+        "packs_max": pets.PACKS_MAX,
     }
     return templates.TemplateResponse(request, "shop/student.html", context, status_code=400 if error else 200)
 
 
-OK_MESSAGES = {"ordered": "Заявка отправлена учителю! Штампики списаны.", "cancelled": "Заявка отменена, штампики вернулись."}
+OK_MESSAGES = {
+    "ordered": "Заявка отправлена учителю! Штампики списаны.",
+    "cancelled": "Заявка отменена, штампики вернулись.",
+    "food": "Корм куплен!",
+}
 
 
 @router.get("/shop")
 def student_shop(request: Request, ok: str = "", user: User = Depends(student_only), db: DbSession = Depends(get_db)):
-    return _shop_page(request, db, user, ok=OK_MESSAGES.get(ok))
+    return student_shop_page(request, db, user, ok=OK_MESSAGES.get(ok))
 
 
 @router.post("/shop/items/{item_id}/order")
@@ -72,7 +82,7 @@ def order(item_id: Id, request: Request, user: User = Depends(student_only), db:
     try:
         shop.place_order(db, user, item_id)
     except shop.ShopError as exc:
-        return _shop_page(request, db, user, error=str(exc))
+        return student_shop_page(request, db, user, error=str(exc))
     return RedirectResponse("/shop?ok=ordered", status_code=303)
 
 
@@ -81,7 +91,7 @@ def cancel(order_id: Id, request: Request, user: User = Depends(student_only), d
     try:
         shop.cancel_order(db, user, order_id)
     except shop.ShopError as exc:
-        return _shop_page(request, db, user, error=str(exc))
+        return student_shop_page(request, db, user, error=str(exc))
     return RedirectResponse("/shop?ok=cancelled", status_code=303)
 
 
