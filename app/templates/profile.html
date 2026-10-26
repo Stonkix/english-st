@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Профиль — English ST{% endblock %}
+
+{% block content %}
+<section class="page profile-page">
+  <div class="card profile-head">
+    {% set photo = user|avatar_url %}
+    <span class="avatar avatar-lg">
+      {%- if photo %}<img src="{{ photo }}" alt="" width="112" height="112">{% else %}{{ (user.first_name[:1] ~ user.last_name[:1])|upper }}{% endif -%}
+    </span>
+    <h1>{{ user.first_name }} {{ user.last_name }}</h1>
+    <p class="muted">Логин: <strong>{{ user.login }}</strong></p>
+    <p class="muted profile-note">Имя и фамилию меняет учитель.</p>
+  </div>
+
+  {% if avatar_lock %}
+  <div class="card">
+    <h2>Моё фото</h2>
+    <div class="alert-error" role="status"><p>{{ avatar_lock }}</p></div>
+  </div>
+  {% else %}
+  <form class="card" method="post" action="/profile/avatar" enctype="multipart/form-data" data-once>
+    <h2>Моё фото</h2>
+    {% if avatar_error %}
+    <div class="alert-error" role="alert"><p>{{ avatar_error }}</p></div>
+    {% endif %}
+    <div class="field">
+      <label for="photo">Выбери фото</label>
+      <input id="photo" name="photo" type="file" accept="image/*,.heic,.heif" required>
+    </div>
+    <button class="btn btn-primary btn-block" type="submit">Загрузить фото</button>
+  </form>
+  {% if user.avatar %}
+  <form method="post" action="/profile/avatar/delete">
+    <button class="btn btn-secondary btn-block" type="submit">Убрать фото</button>
+  </form>
+  {% endif %}
+  {% endif %}
+
+  <form class="card" method="post" action="/profile/password">
+    <h2>Сменить пароль</h2>
+    {% if password_ok %}
+    <div class="alert-success" role="status"><p>Пароль изменён</p></div>
+    {% endif %}
+    {% if password_errors %}
+    <div class="alert-error" role="alert">
+      {% for e in password_errors %}<p>{{ e }}</p>{% endfor %}
+    </div>
+    {% endif %}
+    <div class="field">
+      <label for="current-password">Текущий пароль</label>
+      <div class="input-wrap">
+        <input id="current-password" name="current" type="password" autocomplete="current-password" required>
+        <button class="input-toggle" type="button" data-toggle-password="current-password" aria-controls="current-password" aria-pressed="false" hidden>показать</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="new-password">Новый пароль</label>
+      <div class="input-wrap">
+        <input id="new-password" name="new" type="password" autocomplete="new-password" required>
+        <button class="input-toggle" type="button" data-toggle-password="new-password" aria-controls="new-password" aria-pressed="false" hidden>показать</button>
+      </div>
+    </div>
+    {% with for_id="new-password" %}{% include "partials/password_rules.html" %}{% endwith %}
+    <div class="field">
+      <label for="repeat-password">Ещё раз новый пароль</label>
+      <div class="input-wrap">
+        <input id="repeat-password" name="repeat" type="password" autocomplete="new-password" required>
+        <button class="input-toggle" type="button" data-toggle-password="repeat-password" aria-controls="repeat-password" aria-pressed="false" hidden>показать</button>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-block" type="submit">Сохранить пароль</button>
+  </form>
+
+  <form method="post" action="/logout">
+    <button class="btn btn-secondary btn-block" type="submit">Выйти</button>
+  </form>
+</section>
+{% endblock %}

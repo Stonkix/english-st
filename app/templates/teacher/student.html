@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}{{ student.first_name }} {{ student.last_name }} — English ST{% endblock %}
+
+{% block content %}
+<section class="page teacher-page">
+  {% if student.group %}<a class="back-link" href="/teacher/groups/{{ student.group_id }}">← {{ student.group.name }}</a>
+  {% else %}<a class="back-link" href="/teacher">← Все группы</a>{% endif %}
+
+  <div class="card profile-head">
+    {% set photo = student|avatar_url %}
+    <span class="avatar avatar-lg">
+      {%- if photo %}<img src="{{ photo }}" alt="" width="112" height="112">{% else %}{{ (student.first_name[:1] ~ student.last_name[:1])|upper }}{% endif -%}
+    </span>
+    <h1>{{ student.first_name }} {{ student.last_name }}</h1>
+    <p class="muted">Логин: <strong>{{ student.login }}</strong></p>
+    {% if locked or not student.is_active %}
+    <p class="list-item-badges">
+      {% if locked %}<span class="badge badge-red">заблокирован</span>{% endif %}
+      {% if not student.is_active %}<span class="badge">не активен</span>{% endif %}
+    </p>
+    {% endif %}
+  </div>
+
+  <form class="card" method="post" action="/teacher/students/{{ student.id }}/edit" data-once>
+    <h2>Данные ученика</h2>
+    {% if saved %}
+    <div class="alert-success" role="status"><p>Сохранено</p></div>
+    {% endif %}
+    {% if errors %}
+    <div class="alert-error" role="alert">
+      {% for e in errors %}<p>{{ e }}</p>{% endfor %}
+    </div>
+    {% endif %}
+    <div class="field">
+      <label for="first-name">Имя</label>
+      <input id="first-name" name="first_name" value="{{ student.first_name }}" maxlength="50" autocomplete="off" required>
+    </div>
+    <div class="field">
+      <label for="last-name">Фамилия</label>
+      <input id="last-name" name="last_name" value="{{ student.last_name }}" maxlength="50" autocomplete="off" required>
+    </div>
+    <div class="field">
+      <label for="group-id">Группа</label>
+      <select id="group-id" name="group_id">
+        {% for g in groups %}
+        <option value="{{ g.id }}"{% if g.id == student.group_id %} selected{% endif %}>{{ g.name }}{% if user.role == "admin" %} ({{ g.teacher.full_name }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn btn-primary btn-block" type="submit">Сохранить</button>
+  </form>
+
+  <div class="card">
+    <h2>Фото</h2>
+    {% if avatar_error %}
+    <div class="alert-error" role="alert"><p>{{ avatar_error }}</p></div>
+    {% endif %}
+    {% if student.avatar %}
+    <form method="post" action="/teacher/students/{{ student.id }}/avatar/delete"
+          data-confirm="Удалить текущее фото насовсем? В предыдущие оно не попадёт." data-once>
+      <button class="btn btn-danger btn-block" type="submit">Удалить текущее фото</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/teacher/students/{{ student.id }}/avatar" enctype="multipart/form-data" data-once>
+      <div class="field">
+        <label for="photo">Загрузить ученику новое фото</label>
+        <input id="photo" name="photo" type="file" accept="image/*,.heic,.heif" required>
+      </div>
+      <button class="btn btn-primary btn-block" type="submit">Загрузить фото</button>
+    </form>
+
+    <h3>Запрет менять фото</h3>
+    {% if photo_locked %}<p class="muted">{{ photo_lock }}</p>{% else %}<p class="muted">Ученик может менять фото.</p>{% endif %}
+    <form method="post" action="/teacher/students/{{ student.id }}/avatar/lock" data-once>
+      <div class="field">
+        <label for="lock-period">Срок запрета</label>
+        <select id="lock-period" name="period">
+          <option value=""{% if photo_locked %} selected{% endif %}>Оставить как есть</option>
+          <option value="off"{% if not photo_locked %} selected{% endif %}>Не запрещать</option>
+          <option value="1">На 1 день</option>
+          <option value="7">На 7 дней</option>
+          <option value="30">На 30 дней</option>
+          <option value="forever">Навсегда</option>
+        </select>
+      </div>
+      <button class="btn btn-secondary btn-block" type="submit">Применить</button>
+    </form>
+
+    <h3>Предыдущие фото</h3>
+    {% if photo_history %}
+    {% for item in photo_history %}
+    <div class="photo-history-item">
+      <span class="avatar avatar-lg"><img src="/media/{{ item.path }}" alt="" width="112" height="112" loading="lazy"></span>
+      <p class="muted">Заменено {{ item.created_at|msk }}</p>
+      <form method="post" action="/teacher/students/{{ student.id }}/avatar/history/{{ item.id }}/delete"
+            data-confirm="Удалить это фото насовсем?" data-once>
+        <button class="btn btn-danger btn-block" type="submit">Удалить</button>
+      </form>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="muted">Пока нет.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Доступ</h2>
+    {% if locked %}
+    <form method="post" action="/teacher/students/{{ student.id }}/unlock">
+      <button class="btn btn-primary btn-block" type="submit">Разблокировать вход</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/teacher/students/{{ student.id }}/reset-password"
+          data-confirm="Сбросить пароль? Ученик выйдет из аккаунта на всех устройствах." data-once>
+      <button class="btn btn-secondary btn-block" type="submit">Сбросить пароль</button>
+    </form>
+    {% if student.is_active %}
+    <form method="post" action="/teacher/students/{{ student.id }}/deactivate"
+          data-confirm="Деактивировать ученика? Он сразу выйдет из аккаунта и не сможет войти.">
+      <button class="btn btn-danger btn-block" type="submit">Деактивировать</button>
+    </form>
+    {% else %}
+    <form method="post" action="/teacher/students/{{ student.id }}/activate">
+      <button class="btn btn-primary btn-block" type="submit">Активировать</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

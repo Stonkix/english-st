@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Ошибка {{ code }} — English ST{% endblock %}
+
+{% block content %}
+{% set messages = {
+  403: "Сюда нельзя: эта страница не для твоего аккаунта.",
+  400: "Не получилось разобрать запрос. Проверь данные и попробуй ещё раз.",
+  500: "У нас что-то сломалось. Мы уже знаем — попробуй чуть позже.",
+  429:"Слишком много попыток. Подожди немного и попробуй снова.",
+} %}
+<section class="page status-page">
+  <p class="status-code" aria-hidden="true">{{ code }}</p>
+  <h1>Что-то пошло не так</h1>
+  <p class="lead">{{ messages.get(code, "Попробуй ещё раз чуть позже или вернись на главную.") }}</p>
+  <a class="btn btn-primary btn-block" href="/">На главную</a>
+</section>
+{% endblock %}

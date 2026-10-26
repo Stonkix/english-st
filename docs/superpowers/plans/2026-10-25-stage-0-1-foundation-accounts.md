@@ -23,7 +23,7 @@
 - Сессия: cookie `est_session`, httpOnly, SameSite=Lax, Secure при `DEBUG=false`; срок 30 дней со скольжением.
 - Все даты в БД — naive UTC (`app/timeutil.utcnow()`).
 - Логин: `^[a-z0-9._-]{3,32}$`, хранится в нижнем регистре.
-- Загрузка: не больше 15 МБ на файл; аватар — квадрат 512px WebP, EXIF/GPS удалены, HEIC поддерживается.
+- Загрузка: не больше 10 МБ на файл (решение заказчика 2026-10-26; Task 8 делалась с 15 МБ, Task 9b меняет); аватар — квадрат 512px WebP не больше 400 КБ, EXIF/GPS удалены, HEIC поддерживается, оригинал не хранится.
 - Прод: `uvicorn --port 8002 --workers 1`, пользователь `englishst`, каталог `/srv/englishst`.
 - Изменяющие запросы (POST/PUT/PATCH/DELETE) принимаются, только если `Origin` (или при его отсутствии `Referer`) совпадает с `BASE_URL`.
 - У аккаунта одна роль: `student` / `teacher` / `admin`; `admin` проходит любые проверки `teacher`.
@@ -717,6 +717,86 @@ def test_move_only_to_own_group(client, db):
 
 ---
 
+### Task 9b: Модерация аватаров (дополнение заказчика 2026-10-26)
+
+**Files:**
+- Create: `app/avatars.py`, `alembic/versions/0002_avatar_moderation.py`, `tests/test_avatars.py`
+- Modify: `app/models/accounts.py`, `app/images.py`, `app/auth/access.py`, `app/routes/media.py`, `app/routes/profile.py`, `app/routes/teacher.py`, `app/templates/profile.html`, `app/templates/teacher/student.html`, `tests/test_profile.py`, `tests/test_media.py`
+
+**Interfaces:**
+- Consumes: `save_avatar`, `delete_media`, `read_limited`, `InvalidImage` (app/images.py), `own_student` (Task 9), `can_view_avatar` (Task 8).
+- Produces:
+  - `User`: новые поля `previous_avatar: str | None`, `avatar_locked_until: datetime | None`, `avatar_locked_forever: bool = False` (миграция `0002`, revision `"0002"`, down_revision `"0001"`).
+  - `app.images`: `MAX_UPLOAD_BYTES = 10 * 1024 * 1024`; `AVATAR_MAX_BYTES = 400 * 1024` — `save_avatar` пробует качество 85, при превышении снижает (75, 65, 55), гарантируя файл ≤ 400 КБ; сообщения об ошибке размера — «10 МБ».
+  - `app.avatars`:
+    - `LOCK_PERIODS: dict[str, timedelta | None] = {"1": 1 день, "7": 7 дней, "30": 30 дней, "forever": None}`.
+    - `avatar_locked(user: User, now: datetime | None = None) -> bool` — `avatar_locked_forever` или `avatar_locked_until > now`.
+    - `replace_avatar(db, user: User, data: bytes) -> None` — сохраняет новое фото; прежнее текущее становится `previous_avatar`, файл прежнего предыдущего удаляется; один commit; при ошибке commit новый файл удаляется.
+    - `student_remove_avatar(db, user) -> None` — текущее → `previous_avatar` (старое предыдущее удаляется), `avatar = None`.
+    - `teacher_remove_avatar(db, user) -> None` — текущее удаляется насовсем, `previous_avatar` не трогается.
+    - `remove_previous_avatar(db, user) -> None`.
+    - `set_avatar_lock(db, user, period: str | None, now=None) -> None` — `None`/`"off"` снимает запрет; `"forever"` — навсегда; иначе `avatar_locked_until = now + LOCK_PERIODS[period]`; неизвестное значение → `ValueError`.
+  - `app.auth.access.can_view_previous_avatar(viewer: User, owner: User) -> bool` — только админ или учитель группы владельца (не сам ученик, не одногруппники).
+  - Медиа-маршрут отдаёт файл, если путь равен `owner.avatar` и `can_view_avatar`, **или** равен `owner.previous_avatar` и `can_view_previous_avatar`; иначе 404.
+  - Профиль ученика: при активном запрете формы загрузки/удаления скрыты и сервер отвечает 403 на `POST /profile/avatar` и `/profile/avatar/delete`; текст «Учитель запретил менять фото до ДД.ММ.ГГГГ ЧЧ:ММ» (время по Москве) или «Учитель запретил менять фото». Запрет действует только на роль `student`.
+  - Учитель (`own_student`): на странице ученика — текущее и «Предыдущее фото»; `POST /teacher/students/{id}/avatar` (file `photo`, ошибка как в профиле), `POST .../avatar/delete`, `POST .../avatar/previous/delete`, `POST .../avatar/lock` (form `period`: `off`|`1`|`7`|`30`|`forever`) — тумблер с выбором срока; все кнопки удаления — с подтверждением `data-confirm`.
+
+- [ ] **Step 1: Write the failing tests** — `tests/test_avatars.py` (и правки в test_profile/test_media)
+
+```python
+def test_upload_limit_is_10mb(client, db):
+    make_user(db, login="kid"); login_as(client, "kid")
+    r = client.post("/profile/avatar", files={"photo": ("a.jpg", b"0" * (10 * 1024 * 1024 + 1), "image/jpeg")})
+    assert "Не получилось открыть картинку" in r.text
+
+def test_compressed_size_cap(db):
+    # шумная картинка 4000x3000 → файл ≤ 400 КБ, 512x512
+    ...
+    assert (settings.media_dir / rel).stat().st_size <= 400 * 1024
+
+def test_student_change_keeps_previous(client, db):
+    # загрузил A, потом B: avatar=B, previous=A, файл A на месте; потом C: previous=B, файл A удалён
+    ...
+
+def test_previous_visible_only_to_teacher_and_admin(client, db):
+    # previous: учитель группы 200, админ 200; сам ученик, одногруппник, чужой учитель — 404
+    ...
+
+def test_teacher_delete_current_is_permanent(client, db):
+    # учитель удаляет текущее: avatar=None, previous не изменился, файл текущего удалён
+    ...
+
+def test_teacher_uploads_for_student_and_deletes_previous(client, db): ...
+
+def test_lock_blocks_student(client, db):
+    # учитель ставит period="7": ученик POST /profile/avatar → 403, /profile/avatar/delete → 403,
+    # в профиле «Учитель запретил менять фото до»; period="off" — снова можно
+    ...
+
+def test_lock_forever_and_expiry(db):
+    from datetime import timedelta
+    from app.avatars import set_avatar_lock, avatar_locked
+    from app.timeutil import utcnow
+    u = make_user(db); now = utcnow()
+    set_avatar_lock(db, u, "1", now=now)
+    assert avatar_locked(u, now + timedelta(hours=23)) and not avatar_locked(u, now + timedelta(hours=25))
+    set_avatar_lock(db, u, "forever", now=now)
+    assert avatar_locked(u, now + timedelta(days=3650))
+    set_avatar_lock(db, u, "off")
+    assert not avatar_locked(u, now)
+
+def test_foreign_teacher_cannot_moderate(client, db):
+    # чужой учитель: POST /teacher/students/{id}/avatar/lock → 404
+    ...
+```
+
+- [ ] **Step 2: Run** — FAIL.
+- [ ] **Step 3: Implement.** Перенести логику загрузки/удаления из `routes/profile.py` в `app/avatars.py`; маршруты профиля и учителя вызывают сервис. Временный файл multipart закрывать (`photo.file.close()` / `await photo.close()`) сразу после чтения — оригинал на диске не остаётся.
+- [ ] **Step 4: Run** `pytest -q` — PASS; руками в браузере 375px: ученик меняет фото, учитель видит предыдущее, ставит запрет на 7 дней, ученик видит сообщение.
+- [ ] **Step 5: Commit** `git commit -m "Аватар: лимит 10 МБ, предыдущее фото для учителя, удаление и запрет смены"`
+
+---
+
 ### Task 10: Админ — раздел «Школа» и sqladmin
 
 **Files:**
@@ -819,7 +899,7 @@ def test_reset_password(db, capsys):
 **Interfaces:**
 - Produces:
   - `englishst.service` — как `rieltor.service`: `User/Group=englishst`, `WorkingDirectory=/srv/englishst`, `ExecStart=/srv/englishst/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8002 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1`, те же ограничения, `ReadWritePaths=/srv/englishst/data /srv/englishst/media`; комментарий, почему ровно один воркер (чат в памяти процесса, этап 3).
-  - `nginx.conf` — зоны `limit_req` с префиксом `englishst_` (вход 5r/m, burst 5); `upstream` на `127.0.0.1:8002`; `client_max_body_size 16m`; `location /static/` — alias, `expires 30d`; `location /_protected/ { internal; alias /srv/englishst/media/; }`; `location = /login` с `limit_req`; `location /ws` — `proxy_http_version 1.1`, `Upgrade`/`Connection "upgrade"`, `proxy_read_timeout 3600s` (заготовка для этапа 3); заголовки безопасности как у rieltor_site + `Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'"`; отдельный `server` для `english-st.online www.english-st.online` → `return 301 https://english-st.ru$request_uri`; `server_name english-st.ru www.english-st.ru`; комментарий с командой certbot на все четыре имени.
+  - `nginx.conf` — зоны `limit_req` с префиксом `englishst_` (вход 5r/m, burst 5); `upstream` на `127.0.0.1:8002`; `client_max_body_size 11m`; `limit_req` на `/profile/avatar` и `/teacher/students/*/avatar` (загрузки держат до 10 МБ в памяти, пока ждут очереди декодирования); `location /static/` — alias, `expires 30d`; `location /_protected/ { internal; alias /srv/englishst/media/; }`; `location = /login` с `limit_req`; `location /ws` — `proxy_http_version 1.1`, `Upgrade`/`Connection "upgrade"`, `proxy_read_timeout 3600s` (заготовка для этапа 3); заголовки безопасности как у rieltor_site + `Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'"`; отдельный `server` для `english-st.online www.english-st.online` → `return 301 https://english-st.ru$request_uri`; `server_name english-st.ru www.english-st.ru`; комментарий с командой certbot на все четыре имени.
   - `backup.sh` — как у rieltor_site: онлайн-бэкап SQLite + `media`, `/var/backups/englishst`, 14 дней.
   - `update.sh` — `set -eu; cd /srv/englishst; sudo -u englishst git pull --ff-only; sudo -u englishst .venv/bin/pip install -r requirements.txt; sudo -u englishst .venv/bin/alembic upgrade head; systemctl restart englishst; systemctl is-active englishst`.
   - `README.md` — по образцу rieltor_site: что есть; запуск локально на Windows (`py -3.12 -m venv .venv`, `pip install -r requirements-dev.txt`, `alembic upgrade head`, `python -m app.cli create-admin ...`, `uvicorn app.main:app --reload --port 8002`); тесты; деплой на VDS по шагам (пользователь `englishst`, клонирование, `.env`, `alembic upgrade head`, `create-admin`, systemd, nginx рядом с соседними сайтами — не удалять их конфиги и не трогать `default`, если он уже удалён; certbot; cron бэкапа); обновление — `sudo /srv/englishst/deploy/update.sh`; CLI-команды; структура.

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{% block title %}English ST{% endblock %}</title>
+  <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="preload" href="/static/fonts/nunito-cyrillic-800-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/css/app.css?v={{ static_v }}">
+  <script src="/static/vendor/htmx.min.js" defer></script>
+  <script src="/static/js/app.js?v={{ static_v }}" defer></script>
+</head>
+<body{% if user %} class="has-nav"{% endif %}>
+  {% if user %}{% include "partials/nav.html" %}{% endif %}
+  <main id="main">
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
