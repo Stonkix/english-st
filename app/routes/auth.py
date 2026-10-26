@@ -1,4 +1,4 @@
-"""Вход, выход, смена пароля и главная страница."""
+"""Вход, выход и смена пароля. Главная страница — в routes/daily.py."""
 
 import math
 import re
@@ -139,10 +139,3 @@ def password_change(
     # временный пароль мог увидеть кто-то ещё и войти с другого устройства: чужие сессии завершаем (одним коммитом)
     revoke_user_sessions(db, user.id, keep_token=request.cookies.get(COOKIE_NAME))
     return RedirectResponse(home_for(user), status_code=303)
-
-
-@router.get("/")
-def home(request: Request, user: User = Depends(require_user)):
-    if user.role != "student":
-        return RedirectResponse(home_for(user), status_code=303)
-    return templates.TemplateResponse(request, "student/home.html", {"user": user})

@@ -517,3 +517,214 @@ details > summary { font-weight: 800; cursor: pointer; padding: 6px 0; }
 .mini-btn { flex: none; width: 48px; min-height: 48px; padding: 0; font-size: 22px; line-height: 1; }
 .pick { display: flex; align-items: center; gap: 12px; min-height: 48px; font-weight: 700; }
 .pick input { flex: none; width: 24px; min-height: 24px; height: 24px; margin: 0; padding: 0; accent-color: var(--green); }
+
+/* ---------- Ученик: главная ---------- */
+.btn-big { min-height: 60px; font-size: 18px; }
+.streak-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+}
+.streak-card div { display: flex; flex-direction: column; }
+.streak-card strong { font-size: 20px; font-weight: 800; }
+.streak-card small { color: var(--muted); font-size: 15px; }
+/* огонёк серии: «капля» остриём вверх (квадрат со скруглением, повёрнутый на 45°) */
+.streak-flame {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  margin: 8px 6px 2px;
+  border-radius: 50% 0 50% 50%;
+  transform: rotate(-45deg);
+  background: radial-gradient(circle at 42% 58%, #fff 0 20%, transparent 22%), var(--border);
+}
+.streak-card.is-on { border-color: #FFE38A; background: #FFF8DC; }
+.streak-card.is-on .streak-flame {
+  background: radial-gradient(circle at 42% 58%, #FFE38A 0 22%, transparent 24%), linear-gradient(225deg, #FF4B4B, #FF9600);
+}
+.today-card form { display: flex; }
+
+/* ---------- Плеер задания ---------- */
+.player { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; max-width: 640px; margin: 0 auto; }
+.player-top {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 8px 4px;
+  background: #fff;
+}
+.player-top form { margin: 0; }
+.player-exit {
+  width: 52px;
+  height: 52px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--faint);
+  font: inherit;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.player-exit:hover, .player-exit:active { background: var(--bg-soft); color: var(--muted); }
+.player-progress { flex: 1; }
+.player-stage { flex: 1; padding: 12px 16px calc(120px + env(safe-area-inset-bottom)); }
+.question { display: flex; flex-direction: column; gap: 20px; }
+.q-prompt { font-size: 24px; overflow-wrap: anywhere; }
+.q-image { width: 100%; max-height: 38vh; object-fit: contain; border-radius: var(--radius); }
+.q-hint { font-size: 16px; margin-top: -8px; }
+.player-bottom, .sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 16px max(16px, calc((100% - 608px) / 2)) calc(16px + env(safe-area-inset-bottom));
+}
+.player-bottom { z-index: 10; background: #fff; border-top: 2px solid var(--border); }
+.player-net { margin-bottom: 8px; color: var(--red-dark); font-size: 16px; font-weight: 700; text-align: center; }
+.player-net[hidden], .sheet[hidden], .sheet-text[hidden] { display: none; }
+
+/* плашка результата выезжает снизу и закрывает кнопку «Проверить» */
+.sheet { z-index: 20; transform: translateY(100%); transition: transform .25s ease-out; }
+.sheet.is-open { transform: none; }
+.sheet.is-good { background: var(--green-light); }
+.sheet.is-bad { background: var(--red-light); }
+.sheet-inner { display: flex; flex-direction: column; gap: 6px; }
+.sheet-title { font-size: 24px; font-weight: 800; }
+.sheet-text { margin-bottom: 8px; font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
+.sheet.is-good .sheet-title, .sheet.is-good .sheet-text { color: var(--green-dark); }
+.sheet.is-bad .sheet-title, .sheet.is-bad .sheet-text { color: var(--red-dark); }
+.sheet .btn { margin-top: 6px; }
+
+/* варианты, карточки, плитки и пары: крупные и «объёмные», как кнопки */
+.options { display: flex; flex-direction: column; gap: 12px; }
+.option, .tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+  box-shadow: 0 4px 0 var(--border);
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  transition: transform .08s ease, box-shadow .08s ease, background-color .15s ease, border-color .15s ease, opacity .3s ease;
+}
+.option { width: 100%; min-height: 64px; padding: 14px 18px; overflow-wrap: anywhere; }
+.option:active:not(:disabled), .tile:active { transform: translateY(4px); box-shadow: 0 0 0 var(--border); }
+.option.is-selected { border-color: var(--blue-border); background: var(--blue-light); color: var(--blue-dark); box-shadow: 0 4px 0 var(--blue-border); }
+.option.is-right { border-color: var(--green); background: var(--green-light); color: var(--green-dark); box-shadow: 0 4px 0 var(--green); }
+.option.is-wrong { border-color: var(--red); background: var(--red-light); color: var(--red-dark); box-shadow: 0 4px 0 var(--red); }
+.options-images { display: grid; grid-template-columns: 1fr 1fr; }
+.option-card { flex-direction: column; gap: 8px; padding: 10px; }
+.option-card img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--radius-sm); }
+.option-caption { font-size: 18px; }
+
+.answer-input {
+  width: 100%;
+  min-height: 64px;
+  padding: 14px 18px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+  color: var(--text);
+  font: inherit;
+  font-size: 22px; /* не меньше 16px — иначе iPhone приближает страницу */
+}
+.answer-input:focus { outline: none; border-color: var(--blue); background: #fff; }
+.answer-input.is-right { border-color: var(--green); background: var(--green-light); }
+.answer-input.is-wrong { border-color: var(--red); background: var(--red-light); }
+
+.wb-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 8px;
+  min-height: 132px;
+  padding: 4px 0 12px;
+  background: repeating-linear-gradient(transparent 0 62px, var(--border) 62px 64px);
+}
+.wb-line.is-right .tile { border-color: var(--green); color: var(--green-dark); }
+.wb-line.is-wrong .tile { border-color: var(--red); color: var(--red-dark); }
+.wb-bank { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.wb-slot { display: inline-flex; min-height: 56px; }
+.wb-slot.is-empty { border-radius: var(--radius-sm); background: var(--border); }
+.tile { min-height: 52px; padding: 8px 16px; border-radius: var(--radius-sm); }
+
+.pairs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pair-col { display: flex; flex-direction: column; gap: 12px; }
+.pair { min-height: 64px; padding: 10px 8px; font-size: 18px; text-align: center; }
+.pair.is-matched { border-color: var(--green); background: var(--green-light); color: var(--green-dark); box-shadow: none; opacity: .45; cursor: default; }
+.pair.is-wrong { animation: flash-red .6s ease; }
+@keyframes flash-red {
+  0%, 60% { border-color: var(--red); background: var(--red-light); color: var(--red-dark); box-shadow: 0 4px 0 var(--red); }
+}
+
+.shake { animation: shake .4s ease; }
+@keyframes shake {
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(5px); }
+}
+
+/* ---------- Экран результата ---------- */
+.result-page { align-items: center; padding-top: 10vh; text-align: center; }
+.result-page .streak-card { align-self: stretch; text-align: left; }
+.result-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: var(--blue-light);
+  color: var(--blue-dark);
+  font-size: 44px;
+  font-weight: 800;
+  animation: pop .5s ease-out;
+}
+.result-badge.is-perfect { background: var(--green-light); color: var(--green-dark); }
+.result-actions { display: flex; flex-direction: column; gap: 12px; align-self: stretch; }
+.result-actions form { display: flex; }
+@keyframes pop { 0% { transform: scale(.3); opacity: 0; } 70% { transform: scale(1.1); } }
+
+/* конфетти на чистом CSS: место и задержку каждой бумажки задаёт шаблон (--x, --d, --drift) */
+.confetti { position: fixed; inset: 0; z-index: 30; overflow: hidden; pointer-events: none; }
+.confetti i {
+  position: absolute;
+  top: -24px;
+  left: var(--x, 50%);
+  width: 10px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--green);
+  opacity: 0;
+  animation: confetti-fall 2.8s ease-in var(--d, 0s) forwards;
+}
+.confetti i:nth-child(4n+1) { background: var(--blue); }
+.confetti i:nth-child(4n+2) { background: var(--yellow); width: 8px; height: 8px; border-radius: 50%; }
+.confetti i:nth-child(4n+3) { background: var(--red); }
+@keyframes confetti-fall {
+  0% { opacity: 1; transform: translate3d(0, 0, 0) rotate(0); }
+  100% { opacity: 1; transform: translate3d(var(--drift, 40px), 110vh, 0) rotate(720deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confetti { display: none; }
+  .option:active:not(:disabled), .tile:active { transform: none; }
+}

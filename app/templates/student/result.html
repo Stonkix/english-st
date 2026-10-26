@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from "student/macros.html" import days %}
+{% block title %}Результат — English ST{% endblock %}
+
+{% block content %}
+{% set all_right = attempt.total_count > 0 and attempt.correct_count == attempt.total_count %}
+<div class="confetti" aria-hidden="true">
+  {%- for i in range(24) %}<i style="--x: {{ (i * 37) % 100 }}%; --d: {{ (i * 7) % 12 / 10 }}s; --drift: {{ (i * 23) % 120 - 60 }}px"></i>{% endfor -%}
+</div>
+<section class="page result-page">
+  <p class="result-badge{% if all_right %} is-perfect{% endif %}" aria-hidden="true">{{ attempt.correct_count }}/{{ attempt.total_count }}</p>
+  <h1>{% if all_right %}Идеально!{% elif attempt.correct_count * 2 >= attempt.total_count %}Молодец!{% else %}Задание пройдено!{% endif %}</h1>
+  <p class="lead">Верно {{ attempt.correct_count }} из {{ attempt.total_count }}</p>
+  <div class="streak-card{% if streak %} is-on{% endif %}">
+    <span class="streak-flame" aria-hidden="true"></span>
+    <div><strong>Серия: {{ days(streak) }}</strong><small>Возвращайся завтра, чтобы её продолжить.</small></div>
+  </div>
+  <div class="result-actions">
+    <a class="btn btn-primary btn-block btn-big" href="/">На главную</a>
+    {% if can_retry %}
+    <form method="post" action="/daily/start" data-once>
+      <button class="btn btn-secondary btn-block btn-big" type="submit">Ещё раз</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

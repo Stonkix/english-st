@@ -282,7 +282,7 @@ def test_student_home_greets_by_name(client, db):
     login_as(client, "ivan")
     r = client.get("/")
     assert r.status_code == 200
-    assert "Привет, Маша &lt;b&gt;! Скоро здесь появятся ежедневные задания." in r.text
+    assert "Привет, Маша &lt;b&gt;!" in r.text
     assert "<nav" in r.text
 
 
