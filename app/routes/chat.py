@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 from starlette.concurrency import run_in_threadpool
+from starlette.websockets import WebSocketState
 
 from app import chat
 from app.auth.deps import require_user
@@ -283,7 +284,8 @@ async def websocket_chat(websocket: WebSocket):
     finally:
         hub.remove(conn)
         writer.cancel()
-    try:
-        await websocket.close(code=1008)
-    except RuntimeError:  # уже закрыто
-        pass
+    if websocket.application_state == WebSocketState.CONNECTED and websocket.client_state == WebSocketState.CONNECTED:
+        try:
+            await websocket.close(code=1008)  # сессия больше не действует
+        except (RuntimeError, WebSocketDisconnect):  # клиент ушёл в тот же момент
+            pass

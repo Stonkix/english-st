@@ -75,3 +75,13 @@ def test_backup_and_env_example():
     env = _read(".env.example")
     for name in ("DEBUG", "BASE_URL", "SECRET_KEY", "DATABASE_URL", "MEDIA_DIR"):
         assert name in env
+
+
+def test_nginx_chat():
+    n = _read("deploy/nginx.conf")
+    chat = n[n.index("location ~ ^/chat/[0-9]+/image$"):]
+    chat = chat[:chat.index("}")]
+    assert "client_max_body_size 16m" in chat and "zone=englishst_chat" in chat
+    assert n.count("connect-src 'self' wss://english-st.ru") == 2  # основная CSP и CSP админки
+    ws = n[n.index("location /ws/ {"):]
+    assert "Upgrade $http_upgrade" in ws.split("}")[0]

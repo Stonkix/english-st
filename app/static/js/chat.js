@@ -63,8 +63,10 @@
     const node = el("div", "msg" + (mine ? " is-mine" : "") + (m.deleted ? " is-deleted" : ""));
     node.dataset.id = m.id;
     node.dataset.day = m.day;
+    node.dataset.author = m.author.id;
     if (!mine && data.kind === "group") node.append(avatar(m.author));
-    const body = el("div", "msg-body" + (m.kind !== "text" && !m.deleted ? " is-media" : ""));
+    const media = m.deleted ? "" : { sticker: " is-sticker", image: " is-media" }[m.kind] || "";
+    const body = el("div", "msg-body" + media);
     if (!mine && data.kind === "group") {
       const name = el("div", "msg-name", m.author.name);
       if (m.author.teacher) name.append(" ", el("span", "msg-teacher", "учитель"));
@@ -110,6 +112,16 @@
     return node;
   }
 
+  // Подряд идущие сообщения одного автора за день: имя и фото — только у первого
+  function regroup() {
+    let prev = null;
+    for (const node of list.children) {
+      const msg = node.classList.contains("msg");
+      node.classList.toggle("is-cont", msg && !!prev && prev.dataset.author === node.dataset.author);
+      prev = msg ? node : null;
+    }
+  }
+
   function separator(day) {
     const sep = el("div", "chat-day", dayLabel(day));
     sep.dataset.sep = day;
@@ -142,6 +154,7 @@
     lastId = Math.max(lastId, m.id);
     if (firstId === null) firstId = m.id;
     hideEmpty();
+    regroup();
   }
 
   // Порция истории сверху; прокрутка остаётся на том же сообщении
@@ -164,6 +177,7 @@
     }
     list.prepend(frag);
     firstId = messages[0].id;
+    regroup();
     list.scrollTop += list.scrollHeight - before;
   }
 
@@ -181,13 +195,11 @@
   function markDeleted(id) {
     const node = byId.get(id);
     if (!node) return;
-    const author = Number(node.classList.contains("is-mine") ? data.me : 0);
     node.classList.add("is-deleted");
     const body = node.querySelector(".msg-body");
-    body.classList.remove("is-media");
+    body.classList.remove("is-media", "is-sticker");
     body.querySelectorAll(".msg-text, .msg-sticker, .msg-image-link, .msg-original, .msg-delete").forEach((n) => n.remove());
     body.insertBefore(el("p", "msg-text", "Сообщение удалено"), body.querySelector(".msg-meta"));
-    void author;
   }
 
   function showError(text) {

@@ -816,6 +816,10 @@ details > summary { font-weight: 800; cursor: pointer; padding: 6px 0; }
 }
 .msg.is-mine .msg-body { border-color: var(--blue-border); border-radius: 18px 18px 6px 18px; background: var(--blue-light); }
 .msg-body.is-media { padding: 6px; }
+.msg .msg-body.is-sticker { padding: 0; border-color: transparent; background: none; }
+.msg.is-cont .msg-name { display: none; }
+.msg.is-cont > .avatar { visibility: hidden; }
+.msg.is-cont { margin-top: -3px; }
 .msg-name { color: var(--blue-dark); font-size: 14px; font-weight: 800; }
 .msg-teacher { padding: 0 6px; border-radius: 999px; background: var(--green-light); color: var(--green-dark); font-size: 12px; }
 .msg-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 17px; line-height: 1.4; }
