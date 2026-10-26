@@ -1,5 +1,13 @@
 # Импорт этого пакета регистрирует модели в Base.metadata
 from app.models.accounts import AvatarHistory, Group, User
+from app.models.chat import (
+    BadWord,
+    BadWordException,
+    ChatMessage,
+    ChatReadMark,
+    ChatRoom,
+    ReplacementWord,
+)
 from app.models.security import LoginAttempt, Session
 from app.models.tasks import (
     LEVELS,
@@ -22,12 +30,18 @@ __all__ = [
     "Attempt",
     "AttemptAnswer",
     "AvatarHistory",
+    "BadWord",
+    "BadWordException",
+    "ChatMessage",
+    "ChatReadMark",
+    "ChatRoom",
     "DailySettings",
     "Group",
     "GroupPool",
     "LoginAttempt",
     "Pool",
     "Question",
+    "ReplacementWord",
     "Session",
     "Test",
     "TestQuestion",

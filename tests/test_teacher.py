@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from app.auth import login_guard
 from app.main import app
 from app.models import Group, User
-from tests.factories import login_as, make_group, make_user
+from tests.factories import login_as, make_group, make_user, seed_filter
 
 
 def setup_teacher(client, db, login="teach1"):
@@ -318,3 +318,13 @@ def test_move_only_to_own_group(client, db):
     assert s.group_id == g_own2.id
     r = client.post(f"/teacher/students/{s.id}/edit", data={"first_name": "Петя", "last_name": "К", "group_id": "abc"})
     assert r.status_code == 404
+
+
+def test_create_student_rejects_bad_name(client, db):
+    seed_filter(db)
+    t, g = setup_teacher(client, db)
+    r = new_student(client, g, first_name="Сука", login="ok.login")
+    assert "В имени или фамилии недопустимое слово" in r.text
+    assert db.query(User).filter_by(role="student").count() == 0
+    assert new_student(client, g, first_name="Мандарин", login="ok.login2").status_code == 200
+    assert db.query(User).filter_by(login="ok.login2").count() == 1

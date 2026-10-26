@@ -68,7 +68,7 @@ def create_teacher(
     first_name, last_name, login = first_name.strip(), last_name.strip(), normalize_login(login)
     values = {"first_name": first_name, "last_name": last_name, "login": login}
 
-    errors = name_errors(first_name, last_name)
+    errors = name_errors(first_name, last_name, db)
     if not is_valid_login(login):
         errors.append(LOGIN_INVALID)
     elif login_taken(db, login):

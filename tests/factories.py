@@ -44,3 +44,15 @@ def make_group(db, teacher, name="Группа 1") -> Group:
 
 def login_as(client, login, password="Passw0rd12"):
     return client.post("/login", data={"login": login, "password": password}, follow_redirects=False)
+
+
+def seed_filter(db) -> None:
+    """Начальный словарь фильтра мата (миграция кладёт его в БД, но тесты чистят таблицы)."""
+    from app.models import BadWord, BadWordException, ReplacementWord
+    from app.profanity import is_cyrillic
+    from app.profanity_defaults import BAD_WORDS, EXCEPTIONS, REPLACEMENTS
+
+    db.add_all([BadWord(pattern=w, lang="ru" if is_cyrillic(w) else "en") for w in BAD_WORDS])
+    db.add_all([BadWordException(word=w) for w in EXCEPTIONS])
+    db.add_all([ReplacementWord(word=w) for w in REPLACEMENTS])
+    db.commit()

@@ -222,7 +222,7 @@ def create_student(
     first_name, last_name, login = first_name.strip(), last_name.strip(), normalize_login(login)
     values = {"first_name": first_name, "last_name": last_name, "login": login}
 
-    errors = name_errors(first_name, last_name)
+    errors = name_errors(first_name, last_name, db)
     if not is_valid_login(login):
         errors.append(LOGIN_INVALID)
     elif login_taken(db, login):
@@ -271,7 +271,7 @@ def edit_student(
     student = own_student(db, user, student_id)
     new_group = own_group(db, user, _group_id_or_404(group_id))  # перенос — только в группы этого учителя
     first_name, last_name = first_name.strip(), last_name.strip()
-    errors = name_errors(first_name, last_name)
+    errors = name_errors(first_name, last_name, db)
     if errors:
         return _student_page(request, db, user, student, errors=errors)
     student.first_name, student.last_name, student.group_id = first_name, last_name, new_group.id
