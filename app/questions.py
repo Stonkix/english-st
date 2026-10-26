@@ -1,8 +1,11 @@
 """Вопросы заданий: схемы payload, публичный вид для плеера, проверка ответа."""
 
+import hashlib
+import hmac
 import random
 from dataclasses import dataclass
 
+from app.config import settings
 from app.models.tasks import QUESTION_TYPES, Question
 
 
@@ -105,9 +108,15 @@ def _shuffled(items: list, seed: str, salt: str) -> list:
 
 
 def _perm(n: int, seed: str, question_id, salt: str) -> list[int]:
-    """Непрозрачные id: perm[i] — id элемента с исходным индексом i (зависит от seed)."""
+    """Непрозрачные id: perm[i] — id элемента с исходным индексом i.
+
+    Seed перестановки смешан с секретом сервера (HMAC): seed ученика (id + дата) известен,
+    и без секрета по нему можно было бы восстановить порядок фразы и пары.
+    """
     perm = list(range(n))
-    random.Random(f"{seed}|{question_id}|ids|{salt}").shuffle(perm)
+    key = settings.secret_key.encode()
+    digest = hmac.new(key, f"{seed}|{question_id}|ids|{salt}".encode(), hashlib.sha256).hexdigest()
+    random.Random(digest).shuffle(perm)
     return perm
 
 

@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import JSON, CheckConstraint, Date, ForeignKey, UniqueConstraint
+from sqlalchemy import JSON, CheckConstraint, Date, ForeignKey, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -125,7 +125,9 @@ class Attempt(Base):
     source: Mapped[str]  # "test" | "pool"
     test_id: Mapped[int | None] = mapped_column(ForeignKey("tests.id", ondelete="SET NULL"))
     question_ids: Mapped[list] = mapped_column(JSON)  # id вопросов в порядке показа
-    pair_mistakes: Mapped[dict] = mapped_column(JSON, default=dict)
+    pair_mistakes: Mapped[dict] = mapped_column(JSON, default=dict)  # {"<qid>": число неверных пар}
+    # {"<qid>": [[left_id, right_id], ...]} — уже собранные верные пары (переживают обновление страницы)
+    pair_matched: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'"))
     started_at: Mapped[datetime] = mapped_column(default=utcnow)
     finished_at: Mapped[datetime | None]
     correct_count: Mapped[int] = mapped_column(default=0)

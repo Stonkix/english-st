@@ -212,3 +212,15 @@ def test_malformed_answer_is_wrong_not_error():
     assert not grade(q, None, "s").correct
     t = make_q("text_input", {"accepted": ["apple"]})
     assert not grade(t, {"text": 5}, "s").correct and not grade(t, {}, "s").correct
+
+
+def test_opaque_ids_depend_on_server_secret(monkeypatch):
+    """id плиток и пар нельзя восстановить по открытому seed (ученик + дата) без секрета сервера."""
+    from app.config import settings
+    from app.questions import pair_ids
+
+    q = Question(id=7, type="match_pairs", prompt="p", payload={"pairs": [[str(i), f"r{i}"] for i in range(6)]})
+    before = pair_ids(q, "1:2026-10-26")
+    assert pair_ids(q, "1:2026-10-26") == before  # детерминированно при одном секрете
+    monkeypatch.setattr(settings, "secret_key", "другой секрет")
+    assert pair_ids(q, "1:2026-10-26") != before

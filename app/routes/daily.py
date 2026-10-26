@@ -3,12 +3,12 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
 from app.auth.deps import home_for, require_role, require_user
 from app.daily import (
     AttemptFinished,
+    active_attempt,
     NoAttemptsLeft,
     NothingToday,
     check_pair,
@@ -52,16 +52,6 @@ def _error(status: int, message: str) -> JSONResponse:
     return JSONResponse({"error": message}, status_code=status)
 
 
-def _active_attempt(db: DbSession, student: User) -> Attempt | None:
-    """Незавершённая сегодняшняя попытка ученика."""
-    return db.scalar(
-        select(Attempt)
-        .where(Attempt.student_id == student.id, Attempt.date == moscow_today(), Attempt.finished_at.is_(None))
-        .order_by(Attempt.id)
-        .limit(1)
-    )
-
-
 def _own_attempt(db: DbSession, student: User, attempt_id: int) -> Attempt | None:
     attempt = db.get(Attempt, attempt_id)
     return attempt if attempt is not None and attempt.student_id == student.id else None
@@ -74,19 +64,22 @@ def _home_page(request: Request, db: DbSession, user: User, notice: str | None =
     return templates.TemplateResponse(request, "student/home.html", context)
 
 
+NO_ATTEMPTS = "Попытки на сегодня закончились. Приходи завтра!"
+
+
 @router.get("/")
-def home(request: Request, user: User = Depends(require_user), db: DbSession = Depends(get_db)):
+def home(request: Request, limit: str | None = None, user: User = Depends(require_user), db: DbSession = Depends(get_db)):
     if user.role != "student":
         return RedirectResponse(home_for(user), status_code=303)
-    return _home_page(request, db, user)
+    return _home_page(request, db, user, NO_ATTEMPTS if limit is not None else None)
 
 
 @router.post("/daily/start")
-def start(request: Request, user: User = Depends(student_only), db: DbSession = Depends(get_db)):
+def start(user: User = Depends(student_only), db: DbSession = Depends(get_db)):
     try:
         start_or_resume(db, user)
     except NoAttemptsLeft:
-        return _home_page(request, db, user, "Попытки на сегодня закончились. Приходи завтра!")
+        return RedirectResponse("/?limit=1", status_code=303)
     except NothingToday:
         return RedirectResponse("/", status_code=303)
     return RedirectResponse("/daily/play", status_code=303)
@@ -94,7 +87,7 @@ def start(request: Request, user: User = Depends(student_only), db: DbSession = 
 
 @router.get("/daily/play")
 def play(request: Request, user: User = Depends(student_only), db: DbSession = Depends(get_db)):
-    attempt = _active_attempt(db, user)
+    attempt = active_attempt(db, user)
     if attempt is None:
         return RedirectResponse("/", status_code=303)
     if finish_if_complete(db, attempt):  # оставшиеся вопросы удалены — попытка закончена
@@ -106,6 +99,8 @@ def play(request: Request, user: User = Depends(student_only), db: DbSession = D
         "attempt_id": attempt.id,
         "index": index,
         "questions": [public_view(q, seed, shuffle) for q in live],
+        # уже собранные пары match_pairs: после обновления страницы плеер покажет их собранными
+        "matched": attempt.pair_matched or {},
     }
     # меню не показываем (user в шаблон не передаём): плеер на весь экран
     return templates.TemplateResponse(request, "student/player.html", {"data": data})

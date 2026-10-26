@@ -192,11 +192,7 @@
       [left.b, right.b].forEach((b) => b.classList.remove("is-selected"));
       if (!res) return;
       if (res.ok) {
-        [left.b, right.b].forEach((b) => {
-          b.classList.add("is-matched");
-          b.disabled = true;
-        });
-        matched += 1;
+        markMatched(left.b, right.b);
         refreshCheck();
         if (matched === q.left.length) check(); // все пары собраны — проверяем сами
       } else {
@@ -210,14 +206,29 @@
       }
     }
 
+    function markMatched(...buttons) {
+      buttons.forEach((b) => {
+        b.classList.add("is-matched");
+        b.disabled = true;
+      });
+      matched += 1;
+    }
+
+    const byId = { left: new Map(), right: new Map() };
     for (const side of ["left", "right"]) {
       q[side].forEach((item) => {
         const b = button("option pair", item.text);
         b.addEventListener("click", () => pick(side, item, b));
+        byId[side].set(item.id, b);
         cols[side].append(b);
       });
       grid.append(cols[side]);
     }
+    // пары, собранные до обновления страницы, сервер помнит — показываем их сразу собранными
+    ((data.matched || {})[String(q.id)] || []).forEach(([l, r]) => {
+      if (byId.left.has(l) && byId.right.has(r)) markMatched(byId.left.get(l), byId.right.get(r));
+    });
+    if (matched === q.left.length) setTimeout(check, 0); // всё было собрано, а ответ не ушёл (обрыв связи)
     body.append(el("p", "muted q-hint", "Нажми на слово слева, потом на его пару справа"), grid);
     getAnswer = () => (matched === q.left.length ? {} : null);
     return () => {};

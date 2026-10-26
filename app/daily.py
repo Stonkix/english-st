@@ -2,6 +2,7 @@
 
 import json
 import random
+import threading
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
@@ -86,6 +87,12 @@ def todays_source(db: DbSession, student: User, day: date) -> TodaySource | None
 
 RAW_LIMIT = 2000  # больше этого «сырой» ответ клиента в истории не храним (настоящие ответы короче)
 
+# Записи попыток (старт, ответ, пары, завершение) идут по одной: «прочитал — проверил — записал»
+# без замка дал бы лишнюю попытку при двух одновременных «Начать» или потерял бы ошибку в парах.
+# Прод — один процесс uvicorn (--workers 1), поэтому замка в памяти процесса достаточно.
+# Внутри замка попытку перечитываем из БД (db.refresh): объект мог быть загружен до ожидания.
+_WRITE_LOCK = threading.RLock()
+
 
 class NoAttemptsLeft(Exception):
     """Попытки на сегодня закончились."""
@@ -97,6 +104,14 @@ class NothingToday(Exception):
 
 class AttemptFinished(Exception):
     """Попытка уже завершена: новых ответов не принимаем."""
+
+
+class AttemptExpired(AttemptFinished):
+    """Попытка вчерашняя (по Москве): играть её можно только в свой день."""
+
+
+class PairsNotDone(ValueError):
+    """match_pairs: ответ прислан, а собраны не все пары."""
 
 
 def seed_for(student_id: int, day: date) -> str:
@@ -117,6 +132,16 @@ def live_questions(db: DbSession, attempt: Attempt) -> list[Question]:
 def _answers(db: DbSession, attempt: Attempt) -> dict[int, AttemptAnswer]:
     rows = db.scalars(select(AttemptAnswer).where(AttemptAnswer.attempt_id == attempt.id))
     return {row.question_id: row for row in rows}
+
+
+def active_attempt(db: DbSession, student: User, now: datetime | None = None) -> Attempt | None:
+    """Незавершённая сегодняшняя попытка ученика (самая ранняя)."""
+    return db.scalar(
+        select(Attempt)
+        .where(Attempt.student_id == student.id, Attempt.date == moscow_today(now), Attempt.finished_at.is_(None))
+        .order_by(Attempt.id)
+        .limit(1)
+    )
 
 
 def todays_status(db: DbSession, student: User, now: datetime | None = None) -> dict:
@@ -142,6 +167,11 @@ def todays_status(db: DbSession, student: User, now: datetime | None = None) -> 
 
 def start_or_resume(db: DbSession, student: User, now: datetime | None = None) -> Attempt:
     """Незавершённая сегодняшняя попытка или новая (с тем же набором вопросов, что у первой попытки дня)."""
+    with _WRITE_LOCK:  # проверка лимита и создание попытки — одним шагом
+        return _start_or_resume(db, student, now)
+
+
+def _start_or_resume(db: DbSession, student: User, now: datetime | None) -> Attempt:
     day = moscow_today(now)
     attempts = _attempts(db, student, day)
     for attempt in attempts:
@@ -167,7 +197,7 @@ def start_or_resume(db: DbSession, student: User, now: datetime | None = None) -
         random.Random(f"{student.id}:{day.isoformat()}:{len(attempts) + 1}").shuffle(ids)
     attempt = Attempt(
         student_id=student.id, date=day, source=source, test_id=test_id,
-        question_ids=ids, pair_mistakes={}, total_count=len(ids),
+        question_ids=ids, pair_mistakes={}, pair_matched={}, total_count=len(ids),
     )
     db.add(attempt)
     db.commit()
@@ -205,14 +235,16 @@ def progress(db: DbSession, attempt: Attempt) -> tuple[list[Question], int]:
 
 def finish_if_complete(db: DbSession, attempt: Attempt) -> bool:
     """Неотвеченных вопросов не осталось (например, последний удалили) — завершает попытку. True, если она завершена."""
-    if attempt.finished_at is not None:
+    with _WRITE_LOCK:
+        db.refresh(attempt)
+        if attempt.finished_at is not None:
+            return True
+        live, answers, current = _current(db, attempt)
+        if current is not None:
+            return False
+        _finish(db, attempt, live, answers)
+        db.commit()
         return True
-    live, answers, current = _current(db, attempt)
-    if current is not None:
-        return False
-    _finish(db, attempt, live, answers)
-    db.commit()
-    return True
 
 
 def _stored(attempt: Attempt, row: AttemptAnswer, live: list[Question], answers: dict[int, AttemptAnswer]) -> dict:
@@ -261,8 +293,28 @@ def _small(answer) -> dict:
         return {}
 
 
+def _check_day(attempt: Attempt, now: datetime | None) -> None:
+    if attempt.date != moscow_today(now):
+        raise AttemptExpired
+
+
+def _true_pairs(question: Question, attempt: Attempt) -> set[tuple[int, int]]:
+    return set(zip(*pair_ids(question, seed_for(attempt.student_id, attempt.date))))
+
+
+def _matched(attempt: Attempt, question_id: int) -> list[list[int]]:
+    return list((attempt.pair_matched or {}).get(str(question_id), []))
+
+
 def submit_answer(db: DbSession, attempt: Attempt, question_id: int, answer: dict, now: datetime | None = None) -> dict:
     """Ответ на следующий вопрос попытки. Повтор ответа на уже отвеченный вопрос возвращает сохранённый результат."""
+    with _WRITE_LOCK:
+        db.refresh(attempt)
+        return _submit_answer(db, attempt, question_id, answer, now)
+
+
+def _submit_answer(db: DbSession, attempt: Attempt, question_id: int, answer: dict, now: datetime | None) -> dict:
+    _check_day(attempt, now)
     live, answers, current = _current(db, attempt)
     if question_id in answers:
         return _stored(attempt, answers[question_id], live, answers)
@@ -270,6 +322,8 @@ def submit_answer(db: DbSession, attempt: Attempt, question_id: int, answer: dic
         raise AttemptFinished
     if current is None or current.id != question_id:
         raise ValueError("Это не следующий вопрос попытки")
+    if current.type == "match_pairs" and {tuple(p) for p in _matched(attempt, question_id)} != _true_pairs(current, attempt):
+        raise PairsNotDone("Собраны не все пары")
 
     seed = seed_for(attempt.student_id, attempt.date)
     mistakes = int((attempt.pair_mistakes or {}).get(str(question_id), 0))
@@ -298,17 +352,24 @@ def submit_answer(db: DbSession, attempt: Attempt, question_id: int, answer: dic
     return _stored(attempt, row, live, answers)
 
 
-def check_pair(db: DbSession, attempt: Attempt, question_id: int, left: int, right: int) -> bool:
-    """match_pairs: верна ли пара (left, right). Неверная увеличивает счётчик ошибок вопроса."""
-    if attempt.finished_at is not None:
-        raise AttemptFinished
-    _, _, current = _current(db, attempt)
-    if current is None or current.id != question_id or current.type != "match_pairs":
-        raise ValueError("Это не текущий вопрос с парами")
-    ok = (left, right) in set(zip(*pair_ids(current, seed_for(attempt.student_id, attempt.date))))
-    if not ok:
-        mistakes = dict(attempt.pair_mistakes or {})  # новый dict: иначе SQLAlchemy не заметит изменение JSON
-        mistakes[str(question_id)] = int(mistakes.get(str(question_id), 0)) + 1
-        attempt.pair_mistakes = mistakes
+def check_pair(db: DbSession, attempt: Attempt, question_id: int, left: int, right: int, now: datetime | None = None) -> bool:
+    """match_pairs: верна ли пара (left, right). Верная запоминается, неверная увеличивает счётчик ошибок вопроса."""
+    with _WRITE_LOCK:
+        db.refresh(attempt)
+        _check_day(attempt, now)
+        if attempt.finished_at is not None:
+            raise AttemptFinished
+        _, _, current = _current(db, attempt)
+        if current is None or current.id != question_id or current.type != "match_pairs":
+            raise ValueError("Это не текущий вопрос с парами")
+        key = str(question_id)
+        ok = (left, right) in _true_pairs(current, attempt)
+        # JSON-колонки меняем только присваиванием нового dict: изменение «на месте» SQLAlchemy не заметит
+        if ok and [left, right] not in _matched(attempt, question_id):
+            attempt.pair_matched = {**(attempt.pair_matched or {}), key: _matched(attempt, question_id) + [[left, right]]}
+        elif not ok:
+            mistakes = dict(attempt.pair_mistakes or {})
+            mistakes[key] = int(mistakes.get(key, 0)) + 1
+            attempt.pair_mistakes = mistakes
         db.commit()
-    return ok
+        return ok

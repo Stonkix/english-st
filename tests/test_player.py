@@ -1,11 +1,16 @@
 import json
 import re
-from datetime import datetime
+import threading
+from datetime import datetime, timedelta
+
+import pytest
 
 from sqlalchemy import select
 
 from app.daily import (
+    AttemptExpired,
     NoAttemptsLeft,
+    PairsNotDone,
     NothingToday,
     check_pair,
     settings_for,
@@ -13,6 +18,7 @@ from app.daily import (
     submit_answer,
     todays_status,
 )
+from app.db import SessionLocal
 from app.models import Attempt, AttemptAnswer, GroupPool, Pool, Question, User
 from app.questions import pair_ids
 from app.timeutil import moscow_today
@@ -355,6 +361,10 @@ def test_service_functions(db):
     except ValueError:
         pass
     assert check_pair(db, attempt, rows[0].id, 99, 99) is False
+    with pytest.raises(PairsNotDone):  # пары не собраны — ответа нет
+        submit_answer(db, attempt, rows[0].id, {})
+    for lt, rt in zip(*pair_ids(rows[0], f"{student.id}:{moscow_today().isoformat()}")):
+        assert check_pair(db, attempt, rows[0].id, lt, rt) is True
     res = submit_answer(db, attempt, rows[0].id, {})
     assert res["correct"] is False and res["next_index"] == 1
     res = submit_answer(db, attempt, rows[1].id, {"text": "a"})
@@ -375,3 +385,105 @@ def test_teacher_cannot_play(client, db):
     assert client.get("/daily/play").status_code == 403
     assert client.post("/daily/answer", json={"attempt_id": 1, "question_id": 1, "answer": {}}).status_code == 403
     assert client.get("/", follow_redirects=False).headers["location"] == "/teacher"
+
+
+def test_match_pairs_cannot_skip_matching(client, db):
+    _, _, student, rows = setup_class(db, _pairs_question())
+    login_as(client, "kid")
+    client.post("/daily/start")
+    data = player_data(client)
+    q = data["questions"][0]
+    r = answer(client, data, q, {})  # ни одной пары не собрано
+    assert r.status_code == 409
+    left, right = pair_ids(rows[0], f"{student.id}:{moscow_today().isoformat()}")
+    client.post("/daily/pair", json={"attempt_id": data["attempt_id"], "question_id": q["id"], "left": left[0], "right": right[0]})
+    assert answer(client, data, q, {}).status_code == 409  # собрана только одна пара из трёх
+    assert db.scalar(select(AttemptAnswer)) is None
+
+
+def test_match_pairs_restored_after_reload(client, db):
+    _, _, student, rows = setup_class(db, _pairs_question())
+    login_as(client, "kid")
+    client.post("/daily/start")
+    data = player_data(client)
+    q = data["questions"][0]
+    left, right = pair_ids(rows[0], f"{student.id}:{moscow_today().isoformat()}")
+    for _ in range(2):  # повтор той же верной пары не дублируется
+        client.post("/daily/pair", json={"attempt_id": data["attempt_id"], "question_id": q["id"], "left": left[1], "right": right[1]})
+    again = player_data(client)
+    assert again["matched"] == {str(q["id"]): [[left[1], right[1]]]}
+    for lt, rt in zip(left, right):
+        client.post("/daily/pair", json={"attempt_id": data["attempt_id"], "question_id": q["id"], "left": lt, "right": rt})
+    assert answer(client, again, q, {}).json()["correct"] is True
+
+
+def test_attempt_playable_only_on_its_day(db):
+    _, _, student, rows = setup_class(db, _pairs_question() + [("text_input", {"accepted": ["a"]})])
+    late = datetime(2026, 10, 26, 20, 59)  # 23:59 МСК
+    early = datetime(2026, 10, 26, 21, 1)  # 00:01 МСК следующего дня
+    attempt = start_or_resume(db, student, now=late)
+    first = db.get(Question, attempt.question_ids[0])
+    with pytest.raises(AttemptExpired):
+        check_pair(db, attempt, first.id, 0, 0, now=early)
+    with pytest.raises(AttemptExpired):
+        submit_answer(db, attempt, first.id, {"text": "a"}, now=early)
+    db.refresh(attempt)
+    db.refresh(student)
+    assert attempt.finished_at is None and attempt.pair_mistakes == {}
+    assert student.current_streak == 0 and student.last_completed_date is None
+    assert db.scalar(select(AttemptAnswer)) is None
+
+
+def test_yesterdays_attempt_rejected_by_routes(client, db):
+    _, _, student, rows = setup_class(db, _pairs_question())
+    attempt = Attempt(
+        student_id=student.id, date=moscow_today() - timedelta(days=1), source="pool", test_id=None,
+        question_ids=[rows[0].id], pair_mistakes={}, pair_matched={}, total_count=1,
+    )
+    db.add(attempt)
+    db.commit()
+    login_as(client, "kid")
+    r = client.post("/daily/pair", json={"attempt_id": attempt.id, "question_id": rows[0].id, "left": 0, "right": 0})
+    assert r.status_code == 409
+    assert client.post("/daily/answer", json={"attempt_id": attempt.id, "question_id": rows[0].id, "answer": {}}).status_code == 409
+    assert client.get("/daily/play", follow_redirects=False).headers["location"] == "/"  # вчерашнюю не продолжаем
+
+
+def _in_threads(n, work):
+    """Запускает work(session) в n потоках одновременно (у каждого своя сессия БД)."""
+    barrier = threading.Barrier(n)
+    errors = []
+
+    def run():
+        try:
+            with SessionLocal() as s:
+                barrier.wait()
+                work(s)
+        except Exception as exc:  # noqa: BLE001 — ошибку потока проверяем в тесте
+            errors.append(exc)
+
+    threads = [threading.Thread(target=run) for _ in range(n)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    return errors
+
+
+def test_concurrent_starts_make_one_attempt(db):
+    _, group, student, _ = setup_class(db)
+    settings_for(db, group.id).max_attempts = 1
+    db.commit()
+    errors = _in_threads(8, lambda s: start_or_resume(s, s.get(User, student.id)))
+    assert errors == []
+    assert len(db.scalars(select(Attempt)).all()) == 1
+
+
+def test_concurrent_wrong_pairs_all_counted(db):
+    _, _, student, rows = setup_class(db, _pairs_question())
+    attempt_id = start_or_resume(db, student).id
+    left, right = pair_ids(rows[0], f"{student.id}:{moscow_today().isoformat()}")
+    errors = _in_threads(8, lambda s: check_pair(s, s.get(Attempt, attempt_id), rows[0].id, left[0], right[1]))
+    assert errors == []
+    db.expire_all()
+    assert db.get(Attempt, attempt_id).pair_mistakes == {str(rows[0].id): 8}
