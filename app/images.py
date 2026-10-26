@@ -15,6 +15,7 @@ from app.config import settings
 register_heif_opener()  # фото с iPhone в формате HEIC/HEIF открываются как обычные картинки
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+CHAT_UPLOAD_BYTES = 15 * 1024 * 1024  # картинка в чат — прямо с камеры телефона
 AVATAR_MAX_BYTES = 400 * 1024  # потолок размера готового файла
 AVATAR_SIZE = 512
 PICTURE_MAX_SIDE = 1280  # длинная сторона картинки вопроса
@@ -43,17 +44,17 @@ class InvalidImage(Exception):
     """Не картинка, повреждённый или слишком большой файл."""
 
 
-def read_limited(stream: BinaryIO) -> bytes:
-    """Читает порциями и бросает InvalidImage, как только набралось больше MAX_UPLOAD_BYTES."""
+def read_limited(stream: BinaryIO, limit: int = MAX_UPLOAD_BYTES) -> bytes:
+    """Читает порциями и бросает InvalidImage, как только набралось больше limit байт."""
     parts: list[bytes] = []
     total = 0
-    while total <= MAX_UPLOAD_BYTES:
-        chunk = stream.read(min(_CHUNK, MAX_UPLOAD_BYTES + 1 - total))
+    while total <= limit:
+        chunk = stream.read(min(_CHUNK, limit + 1 - total))
         if not chunk:
             return b"".join(parts)
         parts.append(chunk)
         total += len(chunk)
-    raise InvalidImage("Файл больше 10 МБ")
+    raise InvalidImage(f"Файл больше {limit // (1024 * 1024)} МБ")
 
 
 def _shrink(img: Image.Image) -> Image.Image:
@@ -90,10 +91,10 @@ def _shrink_fit(img: Image.Image) -> Image.Image:
     return out
 
 
-def _decode(data: bytes, draft_side: int, shrink, finish) -> Image.Image:
+def _decode(data: bytes, draft_side: int, shrink, finish, limit: int = MAX_UPLOAD_BYTES) -> Image.Image:
     """Общая часть аватара и картинки вопроса: открыть, уменьшить полосами, повернуть по EXIF, убрать прозрачность."""
-    if not data or len(data) > MAX_UPLOAD_BYTES:
-        raise InvalidImage("Пустой файл или больше 10 МБ")
+    if not data or len(data) > limit:
+        raise InvalidImage("Пустой файл или слишком большой")
     try:
         img = Image.open(BytesIO(data))
         if img.width * img.height > MAX_PIXELS:
@@ -129,8 +130,8 @@ def _fit_picture(small: Image.Image) -> Image.Image:
     return small
 
 
-def _decode_picture(data: bytes) -> Image.Image:
-    return _decode(data, PICTURE_MAX_SIDE * 2, _shrink_fit, _fit_picture)
+def _decode_picture(data: bytes, limit: int = MAX_UPLOAD_BYTES) -> Image.Image:
+    return _decode(data, PICTURE_MAX_SIDE * 2, _shrink_fit, _fit_picture, limit)
 
 
 def _encode(img: Image.Image) -> tuple[bytes, bool]:
@@ -157,15 +158,24 @@ def save_avatar(user_id: int, data: bytes) -> str:
     return _write(f"avatars/{user_id}/{secrets.token_hex(6)}.webp", _encode(img)[0])
 
 
-def save_picture(owner_id: int, data: bytes) -> str:
-    """Сохраняет картинку вопроса (до 1280px, WebP до 400 КБ): questions/<owner_id>/<12 hex>.webp."""
+def _save_fitted(folder: str, data: bytes, limit: int) -> str:
     with _DECODE_LOCK:
-        img = _decode_picture(data)
+        img = _decode_picture(data, limit)
     content, fits = _encode(img)
     while not fits:  # шумная картинка не уложилась даже при низком качестве — уменьшаем размер
         img = img.resize((max(1, img.width * 4 // 5), max(1, img.height * 4 // 5)), Image.Resampling.LANCZOS)
         content, fits = _encode(img)
-    return _write(f"questions/{owner_id}/{secrets.token_hex(6)}.webp", content)
+    return _write(f"{folder}/{secrets.token_hex(6)}.webp", content)
+
+
+def save_picture(owner_id: int, data: bytes) -> str:
+    """Сохраняет картинку вопроса (до 1280px, WebP до 400 КБ): questions/<owner_id>/<12 hex>.webp."""
+    return _save_fitted(f"questions/{owner_id}", data, MAX_UPLOAD_BYTES)
+
+
+def save_chat_image(room_id: int, data: bytes) -> str:
+    """Картинка в чат (вход до 15 МБ, выход как у вопросов): chat/<room_id>/<12 hex>.webp."""
+    return _save_fitted(f"chat/{room_id}", data, CHAT_UPLOAD_BYTES)
 
 
 def is_picture_of(owner_id: int, rel: object) -> bool:

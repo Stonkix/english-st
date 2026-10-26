@@ -18,6 +18,9 @@
   <rect x="11" y="2" width="10" height="6" rx="2" fill="#58A700"/>
   <path d="M10.5 15.5l2.5 2.5 4.5-5" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M10.5 24h11" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+  {%- elif name == "chat" %}
+  <path d="M6 5h20a4 4 0 0 1 4 4v11a4 4 0 0 1-4 4H14l-6 5v-5H6a4 4 0 0 1-4-4V9a4 4 0 0 1 4-4z" fill="#1CB0F6"/>
+  <circle cx="10" cy="14.5" r="2" fill="#fff"/><circle cx="16" cy="14.5" r="2" fill="#fff"/><circle cx="22" cy="14.5" r="2" fill="#fff"/>
   {%- elif name == "school" %}
   <path d="M16 9V2.5" stroke="#4B4B4B" stroke-width="2" stroke-linecap="round"/>
   <path d="M16 2.5h7l-2 2.25 2 2.25h-7z" fill="#FF4B4B"/>
@@ -28,6 +31,8 @@
 </svg>
 {%- endmacro %}
 {% set items = [("Главная", "/", "home")] if user.role == "student" else [("Группы", "/teacher", "groups"), ("Задания", "/tasks", "tasks")] %}
+{% set items = items + [("Чат", "/chat", "chat")] %}
+{% set unread = chat_unread(user) %}
 {% if user.role == "admin" %}{% set items = items + [("Школа", "/school", "school")] %}{% endif %}
 {% set items = items + [("Профиль", "/profile", "profile")] %}
 {% set path = request.url.path %}
@@ -37,6 +42,7 @@
   {% set active = path == href or (href != "/" and path.startswith(href ~ "/")) %}
   <a class="tabbar-item{% if active %} is-active{% endif %}" href="{{ href }}"{% if active %} aria-current="page"{% endif %}>
     {{ icon(name) }}<span>{{ label }}</span>
+    {%- if name == "chat" and unread %}<span class="tabbar-badge" data-chat-unread aria-label="непрочитанных: {{ unread }}">{{ unread if unread < 100 else "99+" }}</span>{% endif %}
   </a>
   {% endfor %}
 </nav>

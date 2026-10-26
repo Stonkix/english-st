@@ -15,7 +15,8 @@ from app.auth.access import can_view_avatar, can_view_previous_avatar, can_view_
 from app.auth.deps import require_user
 from app.config import settings
 from app.db import get_db
-from app.models import AvatarHistory, Question, User
+from app.chat import can_access
+from app.models import AvatarHistory, ChatMessage, ChatRoom, Question, User
 from app.questions import picture_paths
 
 router = APIRouter()
@@ -69,5 +70,19 @@ def question_image(owner_id: str, name: str, viewer: User = Depends(require_user
     # отдаём только картинки, на которые ещё ссылается вопрос автора (скрытые тоже: они нужны истории ответов)
     questions = db.scalars(select(Question).where(Question.owner_id == int(owner_id)))
     if not any(rel in picture_paths(q) for q in questions):
+        raise HTTPException(404)
+    return _file_response(rel)
+
+
+@router.get("/media/chat/{room_id}/{name}")
+def chat_image(room_id: str, name: str, viewer: User = Depends(require_user), db: DbSession = Depends(get_db)):
+    """Картинка чата — только участникам комнаты и только пока сообщение не удалено (при удалении путь стирается)."""
+    if not _USER_ID.fullmatch(room_id) or not _NAME.fullmatch(name):
+        raise HTTPException(404)
+    room = db.get(ChatRoom, int(room_id))
+    rel = f"chat/{room_id}/{name}"
+    if room is None or not can_access(db, viewer, room):
+        raise HTTPException(404)
+    if db.scalar(select(ChatMessage.id).where(ChatMessage.room_id == room.id, ChatMessage.image == rel)) is None:
         raise HTTPException(404)
     return _file_response(rel)
