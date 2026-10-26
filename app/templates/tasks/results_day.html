@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Результаты — {{ group.name }} — English ST{% endblock %}
+
+{% block content %}
+<section class="page teacher-page">
+  <a class="back-link" href="/teacher/groups/{{ group.id }}">← {{ group.name }}</a>
+  <h1>Результаты</h1>
+
+  <div class="card">
+    <p><strong>{{ day.strftime("%d.%m.%Y") }}{% if day == today %} · сегодня{% endif %}</strong></p>
+    <p>
+      <a class="btn btn-secondary" href="/tasks/groups/{{ group.id }}/results?day={{ prev_day.isoformat() }}">← Раньше</a>
+      {% if day < today %}<a class="btn btn-secondary" href="/tasks/groups/{{ group.id }}/results?day={{ next_day.isoformat() }}">Позже →</a>{% endif %}
+    </p>
+  </div>
+
+  {% if rows %}
+  <ul class="list">
+    {% for r in rows %}
+    <li><a class="list-item" href="/tasks/students/{{ r.student.id }}/results">
+      <span class="list-item-main">
+        <strong>{{ r.student.first_name }} {{ r.student.last_name }}</strong>
+        <small>попыток: {{ r.attempts }} · серия: {{ r.streak }}</small>
+        {% if r.best %}
+        <small>Лучший результат: {{ r.best[0] }} из {{ r.best[1] }} · первая попытка: {{ r.first[0] }} из {{ r.first[1] }}</small>
+        {% endif %}
+      </span>
+      <span class="list-item-badges">
+        {% if r.status == "done" %}<span class="badge badge-green">пройдено</span>
+        {% elif r.status == "progress" %}<span class="badge badge-blue">в процессе</span>
+        {% else %}<span class="badge">не начинал</span>{% endif %}
+      </span>
+    </a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="card"><p class="lead">В группе пока нет учеников.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

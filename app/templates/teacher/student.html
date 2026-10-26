@@ -21,6 +21,8 @@
     {% endif %}
   </div>
 
+  <a class="btn btn-secondary btn-block" href="/tasks/students/{{ student.id }}/results">Результаты заданий</a>
+
   <form class="card" method="post" action="/teacher/students/{{ student.id }}/edit" data-once>
     <h2>Данные ученика</h2>
     {% if saved %}

@@ -11,6 +11,7 @@
 
   <a class="btn btn-primary btn-block" href="/teacher/groups/{{ group.id }}/students/new">Добавить ученика</a>
   <a class="btn btn-secondary btn-block" href="/tasks/groups/{{ group.id }}">Задания группы</a>
+  <a class="card" href="/tasks/groups/{{ group.id }}/results"><strong>Сегодня: прошли {{ done }} из {{ students|length }}</strong><span class="muted">Результаты по дням</span></a>
 
   {% if students %}
   <ul class="list">

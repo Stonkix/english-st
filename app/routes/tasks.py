@@ -1,6 +1,6 @@
 """Учитель: пулы вопросов, редактор вопросов (в том числе с картинками), тесты и задания групп."""
 
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
@@ -17,7 +17,8 @@ from app.models import Assignment, AttemptAnswer, Group, GroupPool, Pool, Questi
 from app.models.tasks import LEVELS, QUESTION_TYPES
 from app.params import MAX_ID, Id
 from app.questions import PayloadError, picture_paths, validate_payload
-from app.routes.teacher import own_group, teacher_only
+from app.results import day_rows, group_students, history, parse_day
+from app.routes.teacher import own_group, own_student, teacher_only
 from app.templating import templates
 from app.timeutil import moscow_today
 
@@ -801,3 +802,33 @@ def delete_assignment(group_id: Id, assignment_id: Id, user: User = Depends(teac
     db.delete(assignment)
     db.commit()
     return _to_group_tasks(group)
+
+
+# ---------- результаты ----------
+
+
+@router.get("/groups/{group_id}/results")
+def group_results(
+    group_id: Id,
+    request: Request,
+    day: str | None = Query(None),
+    user: User = Depends(teacher_only),
+    db: DbSession = Depends(get_db),
+):
+    """Итоги дня по ученикам группы; day — YYYY-MM-DD, неверный или будущий день заменяется сегодняшним."""
+    group = own_group(db, user, group_id)
+    today = moscow_today()
+    chosen = parse_day(day, today)
+    context = {
+        "user": user, "group": group, "day": chosen, "today": today,
+        "prev_day": chosen - timedelta(days=1), "next_day": chosen + timedelta(days=1),
+        "rows": day_rows(db, group_students(group), chosen, today),
+    }
+    return templates.TemplateResponse(request, "tasks/results_day.html", context)
+
+
+@router.get("/students/{student_id}/results")
+def student_results(student_id: Id, request: Request, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
+    student = own_student(db, user, student_id)
+    context = {"user": user, "student": student, "entries": history(db, student, moscow_today())}
+    return templates.TemplateResponse(request, "tasks/student_results.html", context)

@@ -35,7 +35,9 @@ from app.images import InvalidImage
 from app.logins import is_valid_login, normalize_login, suggest_login, unique_login
 from app.models import Group, User
 from app.params import MAX_ID, Id
+from app.results import done_today
 from app.templating import templates
+from app.timeutil import moscow_today
 
 router = APIRouter(prefix="/teacher")
 teacher_only = require_role("teacher")  # админ проходит тоже
@@ -109,7 +111,7 @@ def _group_page(request: Request, db: DbSession, user: User, group: Group, **con
         (s for s in group.students if s.role == "student"), key=lambda s: (s.last_name.lower(), s.first_name.lower(), s.id)
     )
     flags = {s.id: {"locked": is_locked(db, s.login)} for s in students}
-    context.update(user=user, group=group, students=students, flags=flags)
+    context.update(user=user, group=group, students=students, flags=flags, done=done_today(db, students, moscow_today()))
     return templates.TemplateResponse(request, "teacher/group.html", context)
 
 
