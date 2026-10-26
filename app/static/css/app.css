@@ -1022,3 +1022,7 @@ a.stamp-balances:active { background: var(--bg-soft); }
 .stamp-history .item-row:has(.is-minus) strong:first-child { overflow-wrap: anywhere; }
 .stamp-chip.is-negative { box-shadow: inset 0 0 0 2px var(--red); color: var(--red-dark); }
 .msg-take { display: inline-block; margin-top: 4px; color: var(--red-dark); font-size: 14px; text-decoration: underline; }
+
+/* ---------- Награды за задание (ступени) ---------- */
+.reward-tiers { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.reward-tier { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 15px; font-weight: 700; }

@@ -75,12 +75,19 @@ class StampTransaction(Base):
 
 
 class DailyReward(Base):
-    """Награда группы за ежедневное задание: amount штампиков вида, если результат не ниже min_score_percent."""
+    """Награда за ежедневное задание: amount штампиков вида при результате не ниже min_score_percent.
+
+    Принадлежит группе (любое задание дня) или тесту (только когда в этот день назначен он — тогда вместо наград группы).
+    """
 
     __tablename__ = "daily_rewards"
+    __table_args__ = (
+        CheckConstraint("(group_id IS NOT NULL) <> (test_id IS NOT NULL)", name="ck_daily_reward_owner"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"), index=True)
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"), index=True)
+    test_id: Mapped[int | None] = mapped_column(ForeignKey("tests.id", ondelete="CASCADE"), index=True)
     stamp_type_id: Mapped[int] = mapped_column(ForeignKey("stamp_types.id", ondelete="CASCADE"))
     amount: Mapped[int]
     min_score_percent: Mapped[int] = mapped_column(default=0)

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "partials/stamps.html" import chip %}
+{% from "partials/stamps.html" import chip, rewards_card %}
 {% block title %}Задания группы — English ST{% endblock %}
 
 {% block content %}
@@ -45,46 +45,8 @@
     <button class="btn btn-primary btn-block" type="submit">Сохранить настройки</button>
   </form>
 
-  <div class="card">
-    <h2>Награды за задание</h2>
-    <p class="muted">Штампики за пройденное задание. Каждая награда — не чаще раза в день: за первую попытку дня с результатом не ниже порога.</p>
-    {% if rewards %}
-    <ul class="list">
-      {% for r in rewards %}
-      <li class="item-row">
-        {{ chip(r.stamp_type, "+" ~ r.amount) }}
-        <span class="item-row-main"><strong>{{ r.stamp_type.name }}</strong><small>{% if r.min_score_percent %}от {{ r.min_score_percent }}% верных{% else %}за любое прохождение{% endif %}{% if not r.stamp_type.is_active %} · вид отключён{% endif %}</small></span>
-        <form method="post" action="/tasks/groups/{{ group.id }}/rewards/{{ r.id }}/delete" data-confirm="Убрать награду? Уже выданные штампики останутся у учеников.">
-          <button class="btn btn-secondary mini-btn" type="submit" aria-label="Убрать награду">×</button>
-        </form>
-      </li>
-      {% endfor %}
-    </ul>
-    {% endif %}
-    {% if reward_error %}<div class="alert-error" role="alert"><p>{{ reward_error }}</p></div>{% endif %}
-    {% if stamp_types %}
-    {% set rv = reward_values if reward_values is defined else {"stamp_type_id": "", "amount": "1", "min_score_percent": "0"} %}
-    <form method="post" action="/tasks/groups/{{ group.id }}/rewards" data-once>
-      <div class="field">
-        <label for="reward-type">Вид</label>
-        <select id="reward-type" name="stamp_type_id">
-          {% for t in stamp_types %}<option value="{{ t.id }}"{% if rv.stamp_type_id|string == t.id|string %} selected{% endif %}>{{ t.name }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        <label for="reward-amount">Сколько</label>
-        <input id="reward-amount" name="amount" type="number" inputmode="numeric" min="1" max="100" value="{{ rv.amount }}" required>
-      </div>
-      <div class="field">
-        <label for="reward-percent">Минимум верных ответов, %</label>
-        <input id="reward-percent" name="min_score_percent" type="number" inputmode="numeric" min="0" max="100" value="{{ rv.min_score_percent }}" required>
-      </div>
-      <button class="btn btn-primary btn-block" type="submit">Добавить награду</button>
-    </form>
-    {% else %}
-    <p class="muted">Видов штампиков нет — их заводит администратор.</p>
-    {% endif %}
-  </div>
+  {{ rewards_card(rewards, stamp_types, "/tasks/groups/" ~ group.id ~ "/rewards", reward_error, reward_values if reward_values is defined else none,
+     "Штампики за ежедневное задание группы. Если в этот день назначен тест со своими наградами, выдаются награды теста.") }}
 
   <h2>Назначенные тесты</h2>
   {% if assignments %}

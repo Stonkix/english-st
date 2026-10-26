@@ -506,13 +506,18 @@ def _tests_page(request: Request, db: DbSession, user: User, values: dict | None
     return templates.TemplateResponse(request, "tasks/tests.html", context)
 
 
-def _test_page(request: Request, db: DbSession, user: User, test: Test, pool: Pool | None = None, error: str | None = None):
+def _test_page(
+    request: Request, db: DbSession, user: User, test: Test, pool: Pool | None = None, error: str | None = None,
+    reward_error: str | None = None, reward_values: dict | None = None,
+):
     items = [q for q in test.questions if q.is_active]
     in_test = {q.id for q in test.questions}
     context = {
         "user": user, "test": test, "items": items, "pools": _pools_of(db, test.owner_id), "pool": pool,
         "candidates": [q for q in pool.questions if q.id not in in_test] if pool else [],
         "error": error, "types": QUESTION_TYPES, "labels": TYPE_LABELS, "hints": TYPE_HINTS,
+        "rewards": stamps.rewards_for(db, None, test.id), "stamp_types": stamps.active_types(db),
+        "reward_error": reward_error, "reward_values": reward_values,
     }
     return templates.TemplateResponse(request, "tasks/test.html", context)
 
@@ -683,7 +688,7 @@ def _group_tasks_page(request: Request, db: DbSession, user: User, group: Group,
         titles={t.id: t.title for t in tests}, by_id=by_id,
         pools=_pools_of(db, group.teacher_id),
         connected=set(db.scalars(select(GroupPool.pool_id).where(GroupPool.group_id == group.id))),
-        rewards=list(db.scalars(select(DailyReward).where(DailyReward.group_id == group.id).order_by(DailyReward.id))),
+        rewards=stamps.rewards_for(db, group.id, None),
         stamp_types=stamps.active_types(db),
     )
     return templates.TemplateResponse(request, "tasks/group_daily.html", context)
@@ -839,9 +844,20 @@ def student_results(student_id: Id, request: Request, user: User = Depends(teach
     return templates.TemplateResponse(request, "tasks/student_results.html", context)
 
 
-# ---------- награды за ежедневное задание ----------
+# ---------- награды за задание (группы и теста) ----------
 
 REWARD_INVALID = f"Награда: выберите вид, количество от 1 до {stamps.REWARD_MAX} и порог от 0 до 100%"
+
+
+def _parse_reward(db: DbSession, stamp_type_id: str, amount: str, min_score_percent: str):
+    """(вид, количество, порог) или None, если что-то не так."""
+    type_id = form_int(stamp_type_id, 1)
+    count = form_int(amount, 1, stamps.REWARD_MAX)
+    percent = form_int(min_score_percent or "0", 0, 100)
+    stamp_type = db.get(StampType, type_id) if type_id else None
+    if stamp_type is None or not stamp_type.is_active or count is None or percent is None:
+        return None
+    return stamp_type, count, percent
 
 
 @router.post("/groups/{group_id}/rewards")
@@ -855,16 +871,14 @@ def add_reward(
     db: DbSession = Depends(get_db),
 ):
     group = own_group(db, user, group_id)
-    type_id = form_int(stamp_type_id, 1)
-    count = form_int(amount, 1, stamps.REWARD_MAX)
-    percent = form_int(min_score_percent or "0", 0, 100)
-    stamp_type = db.get(StampType, type_id) if type_id else None
-    if stamp_type is None or not stamp_type.is_active or count is None or percent is None:
+    parsed = _parse_reward(db, stamp_type_id, amount, min_score_percent)
+    if parsed is None:
         values = {"stamp_type_id": stamp_type_id, "amount": amount, "min_score_percent": min_score_percent}
         return _group_tasks_page(request, db, user, group, reward_error=REWARD_INVALID, reward_values=values)
+    stamp_type, count, percent = parsed
     db.add(DailyReward(group_id=group.id, stamp_type_id=stamp_type.id, amount=count, min_score_percent=percent))
     db.commit()
-    return _to_group_tasks(group)
+    return RedirectResponse(f"/tasks/groups/{group.id}#rewards", status_code=303)
 
 
 @router.post("/groups/{group_id}/rewards/{reward_id}/delete")
@@ -875,4 +889,36 @@ def delete_reward(group_id: Id, reward_id: Id, user: User = Depends(teacher_only
         raise HTTPException(404)
     db.delete(reward)  # начисленное остаётся в журнале (reward_id станет пустым)
     db.commit()
-    return _to_group_tasks(group)
+    return RedirectResponse(f"/tasks/groups/{group.id}#rewards", status_code=303)
+
+
+@router.post("/tests/{test_id}/rewards")
+def add_test_reward(
+    test_id: Id,
+    request: Request,
+    stamp_type_id: str = Form(""),
+    amount: str = Form(""),
+    min_score_percent: str = Form("0"),
+    user: User = Depends(teacher_only),
+    db: DbSession = Depends(get_db),
+):
+    test = own_test(db, user, test_id)
+    parsed = _parse_reward(db, stamp_type_id, amount, min_score_percent)
+    if parsed is None:
+        values = {"stamp_type_id": stamp_type_id, "amount": amount, "min_score_percent": min_score_percent}
+        return _test_page(request, db, user, test, reward_error=REWARD_INVALID, reward_values=values)
+    stamp_type, count, percent = parsed
+    db.add(DailyReward(test_id=test.id, stamp_type_id=stamp_type.id, amount=count, min_score_percent=percent))
+    db.commit()
+    return RedirectResponse(f"/tasks/tests/{test.id}#rewards", status_code=303)
+
+
+@router.post("/tests/{test_id}/rewards/{reward_id}/delete")
+def delete_test_reward(test_id: Id, reward_id: Id, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
+    test = own_test(db, user, test_id)
+    reward = db.get(DailyReward, reward_id)
+    if reward is None or reward.test_id != test.id:
+        raise HTTPException(404)
+    db.delete(reward)
+    db.commit()
+    return RedirectResponse(f"/tasks/tests/{test.id}#rewards", status_code=303)

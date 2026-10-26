@@ -167,26 +167,47 @@ def recent_penalties(db: DbSession, student_id: int, days: int = 3) -> list[Stam
     ))
 
 
+def rewards_for(db: DbSession, group_id: int | None, test_id: int | None) -> list[DailyReward]:
+    """Действующие награды задания: у назначенного теста — свои, если заданы; иначе — награды группы.
+
+    По возрастанию порога (так их и показываем).
+    """
+    order = (DailyReward.min_score_percent, DailyReward.id)
+    if test_id is not None:
+        own = list(db.scalars(select(DailyReward).where(DailyReward.test_id == test_id).order_by(*order)))
+        if own:
+            return own
+    if group_id is None:
+        return []
+    return list(db.scalars(select(DailyReward).where(DailyReward.group_id == group_id).order_by(*order)))
+
+
 def award_daily(db: DbSession, attempt: Attempt, group_id: int | None) -> None:
     """Награды за завершённую попытку (без commit — его делает завершение попытки).
 
-    Правило срабатывает, если результат не ниже порога, и не чаще раза в день: за день — максимум одна запись.
+    Выдаются один раз в день — за первую попытку, достигшую какого-нибудь порога, — и только награды самого высокого
+    достигнутого порога (если на нём несколько наград — все). Пример: «от 50% — 2 обычных», «от 80% — 1 редкий»;
+    при 90% ученик получает только 1 редкий.
     """
-    if group_id is None or not attempt.total_count:
+    if not attempt.total_count:
+        return
+    already = db.scalar(select(StampTransaction.id).where(
+        StampTransaction.student_id == attempt.student_id,
+        StampTransaction.reason == "daily",
+        StampTransaction.reward_date == attempt.date,
+    ).limit(1))
+    if already is not None:
         return
     percent = attempt.correct_count * 100 / attempt.total_count
-    rules = db.scalars(select(DailyReward).where(DailyReward.group_id == group_id).order_by(DailyReward.id))
-    for rule in rules:
-        if percent < rule.min_score_percent or not rule.stamp_type.is_active:
-            continue
-        done = db.scalar(
-            select(StampTransaction.id).where(
-                StampTransaction.student_id == attempt.student_id,
-                StampTransaction.reward_id == rule.id,
-                StampTransaction.reward_date == attempt.date,
-            )
-        )
-        if done is None:
+    test_id = attempt.test_id if attempt.source == "test" else None
+    reached = [
+        r for r in rewards_for(db, group_id, test_id) if percent >= r.min_score_percent and r.stamp_type.is_active
+    ]
+    if not reached:
+        return
+    top = max(r.min_score_percent for r in reached)
+    for rule in reached:
+        if rule.min_score_percent == top:
             db.add(StampTransaction(
                 student_id=attempt.student_id, stamp_type_id=rule.stamp_type_id, amount=rule.amount,
                 reason="daily", attempt_id=attempt.id, reward_id=rule.id, reward_date=attempt.date,

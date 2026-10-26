@@ -18,6 +18,7 @@ from app.daily import (
     settings_for,
     start_or_resume,
     submit_answer,
+    todays_source,
     todays_status,
 )
 from app import stamps
@@ -61,9 +62,14 @@ def _own_attempt(db: DbSession, student: User, attempt_id: int) -> Attempt | Non
 def _home_page(request: Request, db: DbSession, user: User, notice: str | None = None):
     status = todays_status(db, user)
     left = max(0, status["max_attempts"] - status["attempts_used"])
+    rewards = []
+    if status["state"] != "none" and user.group_id:
+        source = todays_source(db, user, moscow_today())
+        rewards = stamps.rewards_for(db, user.group_id, source.test_id if source and source.source == "test" else None)
     context = {
         "user": user, "status": status, "left": left, "notice": notice, "balances": stamps.balances(db, user.id),
         "penalties": stamps.recent_penalties(db, user.id),
+        "rewards": [r for r in rewards if r.stamp_type.is_active],
     }
     return templates.TemplateResponse(request, "student/home.html", context)
 

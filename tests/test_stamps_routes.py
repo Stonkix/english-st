@@ -258,3 +258,39 @@ def test_chat_gives_moderator_swear_reason(client, db):
     html = client.get(f"/chat/{chat.group_room(db, g.id).id}").text
     data = json.loads(html.split('id="chat-data">')[1].split("</script>")[0])
     assert data["swear_reason"] == "За мат" and data["moderator"]
+
+
+def test_test_rewards_crud_and_home_preview(client, db):
+    from app.models import Assignment, Test, TestQuestion
+    from app.timeutil import moscow_today
+    star, gem = _types(db)
+    teacher, group, qs = setup_group(db, 1)
+    make_user(db, login="kid", group=group)
+    test = Test(owner_id=teacher.id, title="Тест", description="")
+    db.add(test)
+    db.flush()
+    db.add(TestQuestion(test_id=test.id, question_id=qs[0].id, position=0))
+    db.add(Assignment(test_id=test.id, group_id=group.id, date=moscow_today()))
+    db.add(DailyReward(group_id=group.id, stamp_type_id=star.id, amount=1, min_score_percent=0))
+    db.commit()
+    login_as(client, "teach")
+    assert "Свои награды этого теста" in client.get(f"/tasks/tests/{test.id}").text
+    r = client.post(f"/tasks/tests/{test.id}/rewards", data={"stamp_type_id": gem.id, "amount": "0", "min_score_percent": "50"})
+    assert "Награда: выберите вид" in r.text
+    r = client.post(f"/tasks/tests/{test.id}/rewards", data={"stamp_type_id": gem.id, "amount": "2", "min_score_percent": "90"},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    reward = db.query(DailyReward).filter_by(test_id=test.id).one()
+    assert "от 90% верных" in client.get(f"/tasks/tests/{test.id}").text
+    client.post("/logout")
+    login_as(client, "kid")
+    home = client.get("/").text
+    assert "от 90%" in home and "+2" in home and "за прохождение" not in home  # у теста свои награды — групповые не показываются
+    client.post("/logout")
+    make_user(db, role="teacher", login="other")
+    login_as(client, "other")
+    assert client.post(f"/tasks/tests/{test.id}/rewards/{reward.id}/delete").status_code == 404
+    client.post("/logout")
+    login_as(client, "teach")
+    client.post(f"/tasks/tests/{test.id}/rewards/{reward.id}/delete")
+    assert db.query(DailyReward).filter_by(test_id=test.id).count() == 0

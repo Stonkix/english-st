@@ -71,21 +71,42 @@ def test_journal_is_append_only_by_constraint(db):
         db.commit()
 
 
-def test_daily_reward_once_per_rule_per_day(db):
-    star, gem = _types(db)
-    _, group, qs = setup_group(db, 2)
-    kid = make_user(db, group=group, login="kid")
+def _tiers(db, owner, star, gem, crown):
     db.add_all([
-        DailyReward(group_id=group.id, stamp_type_id=star.id, amount=1, min_score_percent=0),
-        DailyReward(group_id=group.id, stamp_type_id=gem.id, amount=3, min_score_percent=100),
+        DailyReward(**owner, stamp_type_id=star.id, amount=2, min_score_percent=50),
+        DailyReward(**owner, stamp_type_id=gem.id, amount=1, min_score_percent=80),
+        DailyReward(**owner, stamp_type_id=star.id, amount=5, min_score_percent=80),  # тот же порог — выдаются вместе
+        DailyReward(**owner, stamp_type_id=crown.id, amount=1, min_score_percent=100),
     ])
     db.commit()
-    first = _play(db, kid, qs, right=1)  # 50%: только звезда
-    assert [(t.stamp_type_id, t.amount) for t in stamps.awarded_for(db, first.id)] == [(star.id, 1)]
-    second = _play(db, kid, qs, right=2)  # 100%: звезда уже была сегодня, кристалл — впервые
-    assert [(t.stamp_type_id, t.amount) for t in stamps.awarded_for(db, second.id)] == [(gem.id, 3)]
-    _play(db, kid, qs, right=2)
-    assert stamps.balance_of(db, kid.id, star.id) == 1 and stamps.balance_of(db, kid.id, gem.id) == 3
+
+
+def test_only_highest_tier_is_awarded(db):
+    star, gem = _types(db)
+    crown = StampType(name="Корона", icon="crown", color="purple", sort_order=3)
+    db.add(crown)
+    db.commit()
+    _, group, qs = setup_group(db, 5)
+    kid = make_user(db, group=group, login="kid")
+    _tiers(db, {"group_id": group.id}, star, gem, crown)
+    attempt = _play(db, kid, qs, right=4)  # 80%
+    assert sorted((t.stamp_type_id, t.amount) for t in stamps.awarded_for(db, attempt.id)) == sorted([(gem.id, 1), (star.id, 5)])
+
+
+def test_rewards_once_per_day(db):
+    star, gem = _types(db)
+    crown = StampType(name="Корона", icon="crown", color="purple", sort_order=3)
+    db.add(crown)
+    db.commit()
+    _, group, qs = setup_group(db, 2)
+    kid = make_user(db, group=group, login="kid")
+    _tiers(db, {"group_id": group.id}, star, gem, crown)
+    zero = _play(db, kid, qs, right=0)  # 0% — ниже всех порогов, награды нет, попытка не «сгорает»
+    assert stamps.awarded_for(db, zero.id) == []
+    half = _play(db, kid, qs, right=1)  # 50% — первая попытка с порогом
+    assert [(t.stamp_type_id, t.amount) for t in stamps.awarded_for(db, half.id)] == [(star.id, 2)]
+    full = _play(db, kid, qs, right=2)  # 100% в тот же день — больше не выдаётся
+    assert stamps.awarded_for(db, full.id) == []
 
 
 def test_no_reward_without_rules_or_for_inactive_type(db):
@@ -227,3 +248,33 @@ def test_exchange_blocked_while_in_debt(db):
     stamps.take(db, t, kid, common.id, 5, "За мат")
     with pytest.raises(stamps.StampError, match="у тебя -5"):
         stamps.exchange(db, kid, _rule(db, common, rare).id)
+
+
+def test_test_rewards_replace_group_rewards(db):
+    from app.models import Assignment, Test, TestQuestion
+    from app.timeutil import moscow_today
+    star, gem = _types(db)
+    teacher, group, qs = setup_group(db, 2)
+    kid = make_user(db, group=group, login="kid")
+    db.add(DailyReward(group_id=group.id, stamp_type_id=star.id, amount=1, min_score_percent=0))
+    test = Test(owner_id=teacher.id, title="Тест", description="")
+    db.add(test)
+    db.flush()
+    db.add_all([TestQuestion(test_id=test.id, question_id=q.id, position=i) for i, q in enumerate(qs)])
+    db.add(Assignment(test_id=test.id, group_id=group.id, date=moscow_today()))
+    db.commit()
+    # у теста наград нет — действуют награды группы
+    assert [r.stamp_type_id for r in stamps.rewards_for(db, group.id, test.id)] == [star.id]
+    db.add(DailyReward(test_id=test.id, stamp_type_id=gem.id, amount=3, min_score_percent=50))
+    db.commit()
+    assert [r.stamp_type_id for r in stamps.rewards_for(db, group.id, test.id)] == [gem.id]
+    attempt = _play(db, kid, qs, right=2)
+    assert attempt.source == "test"
+    assert [(t.stamp_type_id, t.amount) for t in stamps.awarded_for(db, attempt.id)] == [(gem.id, 3)]
+
+
+def test_reward_belongs_to_exactly_one_owner(db):
+    star, _ = _types(db)
+    db.add(DailyReward(stamp_type_id=star.id, amount=1, min_score_percent=0))
+    with pytest.raises(IntegrityError):
+        db.commit()

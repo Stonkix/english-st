@@ -32,6 +32,11 @@
 
   <div class="card today-card">
     <h2>Задание на сегодня</h2>
+    {% if rewards %}
+    <div class="reward-tiers" aria-label="Награды за задание">
+      {% for r in rewards %}<span class="reward-tier">{% if r.min_score_percent %}от {{ r.min_score_percent }}%{% else %}за прохождение{% endif %} {{ chip(r.stamp_type, "+" ~ r.amount) }}</span>{% endfor %}
+    </div>
+    {% endif %}
     {% if status.state == "none" %}
       <p class="lead">Сегодня заданий нет. Отдыхай!</p>
     {% elif status.state == "ready" %}
