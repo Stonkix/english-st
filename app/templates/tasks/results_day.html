@@ -28,6 +28,7 @@
       <span class="list-item-badges">
         {% if r.status == "done" %}<span class="badge badge-green">пройдено</span>
         {% elif r.status == "progress" %}<span class="badge badge-blue">в процессе</span>
+        {% elif r.status == "abandoned" %}<span class="badge badge-red">не завершил</span>
         {% else %}<span class="badge">не начинал</span>{% endif %}
       </span>
     </a></li>

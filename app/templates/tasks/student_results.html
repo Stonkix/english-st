@@ -24,7 +24,7 @@
         <span class="muted">не отвечено</span>
         {% else %}
         {% if i.correct %}<span class="badge badge-green">верно</span>{% else %}<span class="badge badge-red">неверно</span>{% endif %}
-        Ответ ученика: {{ i.shown or "—" }}
+        Ответ ученика: {{ i.shown or "—" }}{% if i.typo %} <span class="badge badge-blue">опечатка засчитана</span>{% endif %}
         {% if not i.correct %}<br>Правильный ответ: {{ i.right }}{% endif %}
         {% endif %}
       </li>

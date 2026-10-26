@@ -1,8 +1,9 @@
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from datetime import timedelta
 
-from app.daily import start_or_resume, submit_answer
+from app.daily import check_pair, seed_for, start_or_resume, submit_answer
+from app.questions import pair_ids, public_view
 from app.models import Attempt, GroupPool, Pool, Question, Test, TestQuestion
 from app.timeutil import moscow_today, utcnow
 from tests.factories import login_as, make_group, make_user
@@ -91,7 +92,7 @@ def test_attempt_detail_shows_answers(client, db):
     assert "Новая формулировка" in html
     assert "Вопрос удалён" in html
     assert "oops" in html  # ответ ученика из снимка
-    assert "неверно" in html and "верно" in html
+    assert 'badge-red">неверно<' in html and 'badge-green">верно<' in html
     assert "Правильный ответ:" in html and "changed" not in html
     assert "Пул вопросов" in html and "1 из 2" in html
     assert "<script" not in html.split("</head>")[-1].replace('src="/static', "")  # без inline-скриптов
@@ -135,7 +136,7 @@ def test_day_param_invalid_falls_back_to_today(client, db):
     login_as(client, "teach")
     today = moscow_today()
     future = (today + timedelta(days=3)).isoformat()
-    for bad in ("garbage", "2026-13-45", future, ""):
+    for bad in ("garbage", "2026-13-45", future, "", "0001-01-01"):
         html = client.get(f"/tasks/groups/{group.id}/results", params={"day": bad}).text
         assert f"{today.strftime('%d.%m.%Y')} · сегодня" in html, bad
 
@@ -164,3 +165,45 @@ def test_students_forbidden_admin_allowed(client, db):
     login_as(client, "boss")
     assert client.get(f"/tasks/groups/{group.id}/results").status_code == 200
     assert client.get(f"/tasks/students/{kid.id}/results").status_code == 200
+
+
+def test_typo_and_abandoned_labels(client, db):
+    _, group, qs = setup_group(db, 1)
+    kid = make_user(db, group=group, login="kid")
+    play(db, kid, ["wrd0"])  # опечатка засчитана
+    old = make_user(db, group=group, login="old", first_name="Яна", last_name="Яя")
+    yesterday = moscow_today() - timedelta(days=1)
+    old_attempt(db, old, yesterday, 0, 1, finished=False)
+    login_as(client, "teach")
+    assert "опечатка засчитана" in client.get(f"/tasks/students/{kid.id}/results").text
+    past = client.get(f"/tasks/groups/{group.id}/results?day={yesterday.isoformat()}").text
+    assert "не завершил" in past and "в процессе" not in past
+
+
+def test_word_bank_and_pairs_snapshots(client, db):
+    teacher, group, old_qs = setup_group(db, 1)
+    pool = db.scalar(select(Pool))
+    wb = Question(owner_id=teacher.id, pool_id=pool.id, type="word_bank", prompt="Соберите", payload={"answer": "I like cats", "distractors": ["dogs"]})
+    mp = Question(owner_id=teacher.id, pool_id=pool.id, type="match_pairs", prompt="Пары", payload={"pairs": [["cat", "кошка"], ["dog", "собака"]]})
+    db.add_all([wb, mp])
+    for q in old_qs:
+        q.is_active = False  # остаются только word_bank и match_pairs
+    db.commit()
+    kid = make_user(db, group=group, login="kid")
+    attempt = start_or_resume(db, kid)
+    seed = seed_for(kid.id, attempt.date)
+    for qid in attempt.question_ids:
+        q = db.get(Question, qid)
+        if q.type == "word_bank":
+            by_word = {t["word"]: t["id"] for t in public_view(q, seed, False)["tiles"]}
+            submit_answer(db, attempt, qid, {"tiles": [by_word[w] for w in ("I", "like", "cats")]})
+        else:
+            left, right = pair_ids(q, seed)
+            check_pair(db, attempt, qid, left[0], right[1])  # одна ошибка
+            for lt, rt in zip(left, right):
+                check_pair(db, attempt, qid, lt, rt)
+            submit_answer(db, attempt, qid, {})
+    login_as(client, "teach")
+    html = client.get(f"/tasks/students/{kid.id}/results").text
+    assert "Ответ ученика: I like cats" in html
+    assert "Ответ ученика: ошибок: 1" in html and "кошка" in html

@@ -9,6 +9,7 @@ from app.models import Attempt, AttemptAnswer, Question, Test, User
 from app.streak import effective_streak
 
 HISTORY_DAYS = 14
+MAX_BACK_DAYS = 3650  # глубже не листаем: защита от дат вроде 0001-01-01
 DELETED_QUESTION = "Вопрос удалён"
 
 
@@ -18,7 +19,9 @@ def parse_day(raw: str | None, today: date) -> date:
         day = date.fromisoformat(raw or "")
     except ValueError:
         return today
-    return today if day > today else day
+    if day > today or day < today - timedelta(days=MAX_BACK_DAYS):
+        return today
+    return day
 
 
 def group_students(group) -> list[User]:
@@ -49,7 +52,7 @@ def day_rows(db: DbSession, students: list[User], day: date, today: date) -> lis
         if finished:
             status = "done"
         elif attempts:
-            status = "progress"
+            status = "progress" if day == today else "abandoned"
         else:
             status = "none"
         rows.append({
