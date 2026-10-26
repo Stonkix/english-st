@@ -97,6 +97,12 @@
         const orig = el("p", "msg-original");
         orig.append(el("strong", "", "Отфильтровано. Было: "), m.original);
         body.append(orig);
+        if (!m.author.teacher) {
+          // учитель сразу забирает штампик: карточка ученика с готовой причиной
+          const take = el("a", "msg-take", "Забрать штампик за мат");
+          take.href = `/teacher/students/${m.author.id}?take_reason=${encodeURIComponent(data.swear_reason)}#take`;
+          body.append(take);
+        }
       }
     }
     const meta = el("div", "msg-meta");
@@ -198,7 +204,7 @@
     node.classList.add("is-deleted");
     const body = node.querySelector(".msg-body");
     body.classList.remove("is-media", "is-sticker");
-    body.querySelectorAll(".msg-text, .msg-sticker, .msg-image-link, .msg-original, .msg-delete").forEach((n) => n.remove());
+    body.querySelectorAll(".msg-text, .msg-sticker, .msg-image-link, .msg-original, .msg-take, .msg-delete").forEach((n) => n.remove());
     body.insertBefore(el("p", "msg-text", "Сообщение удалено"), body.querySelector(".msg-meta"));
   }
 

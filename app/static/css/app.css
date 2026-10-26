@@ -1020,3 +1020,5 @@ a.stamp-balances:active { background: var(--bg-soft); }
 .penalty-card small { color: var(--muted); font-size: 15px; overflow-wrap: anywhere; }
 .penalty-amount { flex: none; }
 .stamp-history .item-row:has(.is-minus) strong:first-child { overflow-wrap: anywhere; }
+.stamp-chip.is-negative { box-shadow: inset 0 0 0 2px var(--red); color: var(--red-dark); }
+.msg-take { display: inline-block; margin-top: 4px; color: var(--red-dark); font-size: 14px; text-decoration: underline; }

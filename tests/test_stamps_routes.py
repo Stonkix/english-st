@@ -13,8 +13,6 @@ def test_teacher_gives_and_takes(client, db):
     r = client.post(f"/teacher/students/{kid.id}/stamps",
                     data={"stamp_type_id": star.id, "amount": "5", "comment": "за урок"}, follow_redirects=False)
     assert r.status_code == 303 and stamps.balance_of(db, kid.id, star.id) == 5
-    r = client.post(f"/teacher/students/{kid.id}/stamps/take", data={"stamp_type_id": star.id, "amount": "9", "reason": "за поведение"})
-    assert "Столько забрать нельзя: у ученика 5" in r.text
     r = client.post(f"/teacher/students/{kid.id}/stamps/take", data={"stamp_type_id": star.id, "amount": "2", "reason": "  "})
     assert "Напишите, за что" in r.text and stamps.balance_of(db, kid.id, star.id) == 5
     r = client.post(f"/teacher/students/{kid.id}/stamps/take",
@@ -229,3 +227,34 @@ def test_admin_rules(client, db):
     assert not rule.is_active
     client.post(f"/school/stamp-rules/{rule.id}/delete")
     assert db.query(ConversionRule).count() == before
+
+
+def test_take_into_minus_and_swearing_reason(client, db):
+    star, gem = _types(db)
+    t = make_user(db, role="teacher", login="teach")
+    kid = make_user(db, login="kid", group=make_group(db, t))
+    login_as(client, "teach")
+    page = client.get(f"/teacher/students/{kid.id}", params={"take_reason": "За мат"}).text
+    assert 'value="За мат"' in page and '<details class="card" id="take" open>' in page
+    assert '<option value="За мат">' in page  # подсказка в списке причин
+    r = client.post(f"/teacher/students/{kid.id}/stamps/take",
+                    data={"stamp_type_id": gem.id, "amount": "2", "reason": "За мат"}, follow_redirects=False)
+    assert r.status_code == 303 and stamps.balance_of(db, kid.id, gem.id) == -2
+    assert "is-negative" in client.get(f"/teacher/students/{kid.id}").text
+    client.post("/logout")
+    login_as(client, "kid")
+    home = client.get("/").text
+    assert "За мат" in home and "is-negative" in home
+
+
+def test_chat_gives_moderator_swear_reason(client, db):
+    import json
+    from app import chat
+    star, _ = _types(db)
+    t = make_user(db, role="teacher", login="teach")
+    g = make_group(db, t)
+    make_user(db, login="kid", group=g)
+    login_as(client, "teach")
+    html = client.get(f"/chat/{chat.group_room(db, g.id).id}").text
+    data = json.loads(html.split('id="chat-data">')[1].split("</script>")[0])
+    assert data["swear_reason"] == "За мат" and data["moderator"]

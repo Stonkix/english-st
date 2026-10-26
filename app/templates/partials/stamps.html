@@ -1,6 +1,6 @@
 {# Штампик: иконка вида и число на фоне его цвета #}
 {% macro chip(t, amount, big=false) -%}
-<span class="stamp-chip{% if big %} stamp-chip-big{% endif %}" style="--tint: {{ t|stamp_tint }}" title="{{ t.name }}">
+<span class="stamp-chip{% if big %} stamp-chip-big{% endif %}{% if amount is number and amount < 0 %} is-negative{% endif %}" style="--tint: {{ t|stamp_tint }}" title="{{ t.name }}">
   <img src="{{ t|stamp_icon }}" alt="" width="{{ 32 if big else 22 }}" height="{{ 32 if big else 22 }}"><strong>{{ amount }}</strong><span class="visually-hidden"> {{ t.name }}</span>
 </span>
 {%- endmacro %}

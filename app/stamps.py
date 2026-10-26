@@ -30,7 +30,8 @@ REASON_TEXT = {
     "conversion": "Обмен",
 }
 # подсказки причины в форме «Забрать штампики» (учитель может написать свою)
-PENALTY_HINTS = ("За поведение на уроке", "За грубость", "За опоздание", "За невыполненное домашнее задание", "За списывание")
+PENALTY_REASON_SWEARING = "За мат"
+PENALTY_HINTS = (PENALTY_REASON_SWEARING, "За поведение на уроке", "За грубость", "За опоздание", "За невыполненное домашнее задание", "За списывание")
 NAME_MAX = 30
 AMOUNT_MAX = 1000  # за одну операцию
 RULE_AMOUNT_MAX = 1000
@@ -91,7 +92,7 @@ def balances_by_student(db: DbSession, student_ids: list[int]) -> dict[int, dict
 
 
 def balances(db: DbSession, student_id: int) -> list[Balance]:
-    """Активные виды (даже с нулём) и неактивные, если на них что-то осталось."""
+    """Активные виды (даже с нулём) и неактивные, если на них что-то осталось (или долг)."""
     totals = balances_by_student(db, [student_id])[student_id]
     return [Balance(t, totals.get(t.id, 0)) for t in all_types(db) if t.is_active or totals.get(t.id, 0)]
 
@@ -127,7 +128,8 @@ def give(db: DbSession, actor: User, student: User, stamp_type_id: int, amount: 
 def take(db: DbSession, actor: User, student: User, stamp_type_id: int, amount: int, reason: str) -> StampTransaction:
     """Учитель забирает штампики любого вида (в том числе выключенного) с обязательной причиной — ученик её увидит.
 
-    Забрать больше, чем есть, нельзя.
+    Баланс может уйти в минус: долг гасится следующими штампиками. Магазин и обмен при этом недоступны
+    (им нужен положительный баланс).
     """
     stamp_type = db.get(StampType, stamp_type_id) if 0 < stamp_type_id <= MAX_ID else None
     if stamp_type is None:
@@ -138,9 +140,6 @@ def take(db: DbSession, actor: User, student: User, stamp_type_id: int, amount: 
     if not reason:
         raise StampError("Напишите, за что забираете штампики — ученик это увидит")
     with BALANCE_LOCK:
-        have = balance_of(db, student.id, stamp_type.id)
-        if have < amount:
-            raise StampError(f"Столько забрать нельзя: у ученика {have} ({stamp_type.name})")
         tx = StampTransaction(
             student_id=student.id, stamp_type_id=stamp_type.id, amount=-amount, reason="penalty",
             comment=reason, actor_id=actor.id,

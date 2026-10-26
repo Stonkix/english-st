@@ -34,8 +34,6 @@ def test_give_and_take(db):
     stamps.give(db, t, s, star.id, 5, "  молодец  ")
     stamps.take(db, t, s, star.id, 2, "  за   поведение ")
     assert stamps.balance_of(db, s.id, star.id) == 3
-    with pytest.raises(stamps.StampError, match="у ученика 3"):
-        stamps.take(db, t, s, star.id, 4, "за поведение")
     with pytest.raises(stamps.StampError, match="за что"):
         stamps.take(db, t, s, star.id, 1, "   ")
     for bad in (0, -1, 1001):
@@ -198,3 +196,34 @@ def test_variants_drop_randomly_and_collect(db):
     assert stamps.collection(db, kid.id)[0].owned == 2
     other = make_user(db, login="other")
     assert [v.icon for v, _ in stamps.collection(db, other.id)[0].variants] == ["star"]
+
+
+def test_take_can_go_negative_and_debt_is_paid_first(db):
+    from app.models import ShopItem
+    from app import shop
+    from tests.factories import make_group
+    star, _ = _types(db)
+    t = make_user(db, role="teacher", login="teach")
+    g = make_group(db, t)
+    kid = make_user(db, login="kid", group=g)
+    stamps.give(db, t, kid, star.id, 2)
+    stamps.take(db, t, kid, star.id, 5, stamps.PENALTY_REASON_SWEARING)
+    assert stamps.balance_of(db, kid.id, star.id) == -3
+    assert [(b.stamp_type.name, b.amount) for b in stamps.balances(db, kid.id)][0] == ("Звезда", -3)
+    item = ShopItem(group_id=g.id, title="Наклейка", price_type_id=star.id, price_amount=1)
+    db.add(item)
+    db.commit()
+    with pytest.raises(shop.ShopError, match="нужно 1, у тебя -3"):
+        shop.place_order(db, kid, item.id)
+    stamps.give(db, t, kid, star.id, 4)
+    assert stamps.balance_of(db, kid.id, star.id) == 1  # долг погашен
+    shop.place_order(db, kid, item.id)
+
+
+def test_exchange_blocked_while_in_debt(db):
+    common, rare, legend = _kinds(db)
+    t = make_user(db, role="teacher", login="teach")
+    kid = make_user(db, login="kid")
+    stamps.take(db, t, kid, common.id, 5, "За мат")
+    with pytest.raises(stamps.StampError, match="у тебя -5"):
+        stamps.exchange(db, kid, _rule(db, common, rare).id)

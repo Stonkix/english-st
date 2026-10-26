@@ -264,9 +264,18 @@ def create_student(
 
 @router.get("/students/{student_id}")
 def student_page(
-    student_id: Id, request: Request, stamped: str = "", user: User = Depends(teacher_only), db: DbSession = Depends(get_db)
+    student_id: Id,
+    request: Request,
+    stamped: str = "",
+    take_reason: str = "",
+    user: User = Depends(teacher_only),
+    db: DbSession = Depends(get_db),
 ):
-    return _student_page(request, db, user, own_student(db, user, student_id), stamped=stamped)
+    """take_reason — причина для формы «Забрать штампики» (ссылка «Забрать за мат» из чата)."""
+    context = {"stamped": stamped}
+    if take_reason:
+        context["take_values"] = {"stamp_type_id": "", "amount": "1", "reason": take_reason[:stamps.COMMENT_MAX]}
+    return _student_page(request, db, user, own_student(db, user, student_id), **context)
 
 
 @router.post("/students/{student_id}/edit")

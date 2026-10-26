@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session as DbSession
 from starlette.concurrency import run_in_threadpool
 from starlette.websockets import WebSocketState
 
-from app import chat
+from app import chat, stamps
 from app.auth.deps import require_user
 from app.auth.sessions import COOKIE_NAME, get_session_user
 from app.chat_hub import Connection, hub
@@ -127,6 +127,7 @@ def room_page(room_id: Id, request: Request, user: User = Depends(require_user),
         "messages": [chat.serialize(m, moderator) for m in messages],
         "has_more": len(messages) == chat.PAGE_SIZE,
         "text_max": chat.TEXT_MAX,
+        "swear_reason": stamps.PENALTY_REASON_SWEARING,
         "stickers": [{"id": key, "label": label, "url": f"/static/stickers/{key}.svg"} for key, label in chat.STICKERS.items()],
     }
     # меню не показываем (user в шаблон не передаём): переписка на весь экран, как плеер
