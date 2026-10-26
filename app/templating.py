@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.auth.passwords import RULE_TEXT
 from app.config import BASE_DIR, settings
-from app.stamps import icon_url, tint
+from app.stamps import icon_url, tint, tx_picture, variant_url
 from app.timeutil import moscow_str
 
 templates = Jinja2Templates(directory=BASE_DIR / "app" / "templates")
@@ -18,6 +18,8 @@ templates.env.filters["avatar_url"] = avatar_url
 templates.env.filters["msk"] = moscow_str
 templates.env.filters["stamp_icon"] = icon_url
 templates.env.filters["stamp_tint"] = tint
+templates.env.filters["tx_picture"] = tx_picture
+templates.env.filters["variant_url"] = variant_url
 templates.env.globals.update(
     settings=settings,
     password_rules=RULE_TEXT,  # для partials/password_rules.html

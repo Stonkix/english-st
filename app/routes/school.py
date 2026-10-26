@@ -1,22 +1,25 @@
 """Админ: раздел «Школа» — учителя (создание, временный пароль, сброс, отключение), словарь фильтра мата, виды штампиков."""
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
+from app import stamps
 from app.accounts import LOGIN_INVALID, LOGIN_TAKEN, login_taken, name_errors, temp_password_page
 from app.auth.deps import require_role
 from app.auth.login_guard import reset_all
 from app.auth.passwords import generate_temp_password, hash_password
 from app.auth.sessions import revoke_user_sessions
 from app.db import get_db
+from app.images import InvalidImage, delete_media, read_limited, save_stamp_art
 from app.logins import is_valid_login, normalize_login
-from app import stamps
-from app.models import BadWord, BadWordException, ReplacementWord, StampType, User
+from app.models import (
+    BadWord, BadWordException, ConversionRule, ReplacementWord, StampTransaction, StampType, StampVariant, User,
+)
+from app.params import Id, form_int
 from app.profanity import clean_text, compile_filter, contains_profanity, is_cyrillic, load_filter
-from app.params import Id
 from app.templating import templates
 
 router = APIRouter(prefix="/school")
@@ -198,7 +201,8 @@ def filter_save(
 def _stamps_page(request: Request, db: DbSession, user: User, errors: dict | None = None, values: dict | None = None):
     context = {
         "user": user, "types": stamps.all_types(db), "icons": stamps.ICONS, "colors": stamps.COLORS,
-        "errors": errors or {}, "values": values or {},
+        "errors": errors or {}, "values": values or {}, "rules": stamps.all_rules(db),
+        "dropped": set(db.scalars(select(StampTransaction.variant_id).where(StampTransaction.variant_id.is_not(None)).distinct())),
     }
     return templates.TemplateResponse(request, "school/stamps.html", context)
 
@@ -250,6 +254,7 @@ def edit_stamp_type(
     color: str = Form(""),
     sort_order: str = Form("0"),
     is_active: str = Form(""),
+    craftable: str = Form(""),
     user: User = Depends(admin_only),
     db: DbSession = Depends(get_db),
 ):
@@ -260,9 +265,125 @@ def edit_stamp_type(
     name = " ".join(name.split())
     errors = _stamp_errors(db, name, icon, color, sort_order, stamp_type.id)
     if errors:
-        values = {"name": name, "icon": icon, "color": color, "sort_order": sort_order, "is_active": bool(is_active)}
+        values = {
+            "name": name, "icon": icon, "color": color, "sort_order": sort_order,
+            "is_active": bool(is_active), "craftable": bool(craftable),
+        }
         return _stamps_page(request, db, user, errors={stamp_type.id: errors}, values={stamp_type.id: values})
     stamp_type.name, stamp_type.icon, stamp_type.color = name, icon, color
     stamp_type.sort_order, stamp_type.is_active = int(sort_order), bool(is_active)
+    stamp_type.craftable = bool(craftable)  # правила обмена «в этот вид» перестают работать сразу (см. stamps._usable)
     db.commit()
     return RedirectResponse("/school/stamps", status_code=303)
+
+
+
+def _to_stamps(anchor: str = "") -> RedirectResponse:
+    return RedirectResponse("/school/stamps" + anchor, status_code=303)
+
+
+# ---------- рисовки ----------
+
+
+@router.post("/stamps/{type_id}/variants")
+def add_variant(
+    type_id: Id,
+    request: Request,
+    icon: str = Form(""),
+    name: str = Form(""),
+    image: UploadFile | None = File(None),
+    user: User = Depends(admin_only),
+    db: DbSession = Depends(get_db),
+):
+    """Новая рисовка вида: загруженная картинка (лучше PNG с прозрачным фоном) или встроенная."""
+    stamp_type = db.get(StampType, type_id)
+    if stamp_type is None:
+        raise HTTPException(404)
+    name = " ".join(name.split())[:stamps.NAME_MAX]
+    rel = None
+    try:
+        if image is not None and image.filename:
+            rel = save_stamp_art(read_limited(image.file))
+    except InvalidImage:
+        return _stamps_page(request, db, user, errors={f"v{type_id}": ["Картинка не подошла: это не изображение или файл больше 10 МБ"]})
+    if rel is None and icon not in stamps.ICONS:
+        return _stamps_page(request, db, user, errors={f"v{type_id}": ["Загрузите картинку или выберите встроенную"]})
+    order = max((v.sort_order for v in stamp_type.variants), default=0) + 1
+    db.add(StampVariant(stamp_type_id=stamp_type.id, name=name, icon=None if rel else icon, image=rel, sort_order=order))
+    db.commit()
+    return _to_stamps(f"#type-{stamp_type.id}")
+
+
+def _variant_or_404(db: DbSession, variant_id: int) -> StampVariant:
+    variant = db.get(StampVariant, variant_id)
+    if variant is None:
+        raise HTTPException(404)
+    return variant
+
+
+@router.post("/stamps/variants/{variant_id}/toggle")
+def toggle_variant(variant_id: Id, user: User = Depends(admin_only), db: DbSession = Depends(get_db)):
+    """Скрытая рисовка больше не выпадает, но у кого уже есть — остаётся в коллекции."""
+    variant = _variant_or_404(db, variant_id)
+    variant.is_active = not variant.is_active
+    db.commit()
+    return _to_stamps(f"#type-{variant.stamp_type_id}")
+
+
+@router.post("/stamps/variants/{variant_id}/delete")
+def delete_variant(variant_id: Id, request: Request, user: User = Depends(admin_only), db: DbSession = Depends(get_db)):
+    """Удалить можно только рисовку, которая ещё никому не выпадала (иначе пропала бы из коллекций)."""
+    variant = _variant_or_404(db, variant_id)
+    if db.scalar(select(StampTransaction.id).where(StampTransaction.variant_id == variant.id).limit(1)) is not None:
+        return _stamps_page(request, db, user, errors={f"v{variant.stamp_type_id}": ["Эта рисовка уже у учеников — её можно только скрыть"]})
+    type_id, image = variant.stamp_type_id, variant.image
+    db.delete(variant)
+    db.commit()
+    delete_media(image)
+    return _to_stamps(f"#type-{type_id}")
+
+
+# ---------- правила обмена ----------
+
+
+@router.post("/stamp-rules")
+def add_rule(
+    request: Request,
+    from_type_id: str = Form(""),
+    from_amount: str = Form(""),
+    to_type_id: str = Form(""),
+    to_amount: str = Form(""),
+    user: User = Depends(admin_only),
+    db: DbSession = Depends(get_db),
+):
+    values = [form_int(v, 1) or 0 for v in (from_type_id, from_amount, to_type_id, to_amount)]
+    errors = stamps.rule_errors(db, *values)
+    if errors:
+        raw = {"from_type_id": from_type_id, "from_amount": from_amount, "to_type_id": to_type_id, "to_amount": to_amount}
+        return _stamps_page(request, db, user, errors={"rule": errors}, values={"rule": raw})
+    src, src_amount, dst, dst_amount = values
+    db.add(ConversionRule(from_type_id=src, from_amount=src_amount, to_type_id=dst, to_amount=dst_amount, is_active=True))
+    db.commit()
+    return _to_stamps("#rules")
+
+
+def _rule_or_404(db: DbSession, rule_id: int) -> ConversionRule:
+    rule = db.get(ConversionRule, rule_id)
+    if rule is None:
+        raise HTTPException(404)
+    return rule
+
+
+@router.post("/stamp-rules/{rule_id}/toggle")
+def toggle_rule(rule_id: Id, user: User = Depends(admin_only), db: DbSession = Depends(get_db)):
+    rule = _rule_or_404(db, rule_id)
+    rule.is_active = not rule.is_active
+    db.commit()
+    return _to_stamps("#rules")
+
+
+@router.post("/stamp-rules/{rule_id}/delete")
+def delete_rule(rule_id: Id, user: User = Depends(admin_only), db: DbSession = Depends(get_db)):
+    db.delete(_rule_or_404(db, rule_id))  # прошлые обмены остаются в журнале (текст правила — в комментарии)
+    db.commit()
+    return _to_stamps("#rules")

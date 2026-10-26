@@ -4,13 +4,14 @@
 процесс один (см. englishst.service), так что проверка и запись не разъедутся.
 """
 
+import random
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
-from app.models import Attempt, DailyReward, StampTransaction, StampType, User
+from app.models import Attempt, ConversionRule, DailyReward, StampTransaction, StampType, StampVariant, User
 from app.params import MAX_ID
 
 # Иконки — Fluent Emoji (Flat), MIT: app/static/stamps
@@ -24,10 +25,12 @@ COLORS = {
 }
 REASON_TEXT = {
     "manual": "От учителя", "daily": "За задание", "order": "Обмен в магазине", "refund": "Возврат",
-    "conversion": "Обмен штампиков",
+    "conversion": "Обмен",
 }
 NAME_MAX = 30
 AMOUNT_MAX = 1000  # за одну операцию
+RULE_AMOUNT_MAX = 1000
+EXCHANGE_TIMES_MAX = 100  # обменов за одно нажатие
 COMMENT_MAX = 200
 REWARD_MAX = 100
 
@@ -117,6 +120,7 @@ def give(db: DbSession, actor: User, student: User, stamp_type_id: int, amount: 
         tx = StampTransaction(
             student_id=student.id, stamp_type_id=stamp_type.id, amount=amount, reason="manual",
             comment=comment or None, actor_id=actor.id,
+            variant_id=pick_variant(db, stamp_type.id) if amount > 0 else None,
         )
         db.add(tx)
         db.commit()
@@ -146,6 +150,7 @@ def award_daily(db: DbSession, attempt: Attempt, group_id: int | None) -> None:
             db.add(StampTransaction(
                 student_id=attempt.student_id, stamp_type_id=rule.stamp_type_id, amount=rule.amount,
                 reason="daily", attempt_id=attempt.id, reward_id=rule.id, reward_date=attempt.date,
+                variant_id=pick_variant(db, rule.stamp_type_id),
             ))
 
 
@@ -159,3 +164,109 @@ def describe(tx: StampTransaction) -> str:
     """Строка истории: «За задание», «От учителя: молодец!»."""
     text = REASON_TEXT.get(tx.reason, "")
     return f"{text}: {tx.comment}" if tx.comment else text
+
+
+# ---------- рисовки и коллекция ----------
+
+
+def pick_variant(db: DbSession, stamp_type_id: int, rng: random.Random | None = None) -> int | None:
+    """Случайная рисовка вида для нового штампика (None — рисовок нет, тогда показывается картинка вида)."""
+    ids = list(db.scalars(
+        select(StampVariant.id).where(StampVariant.stamp_type_id == stamp_type_id, StampVariant.is_active.is_(True))
+    ))
+    return (rng or random).choice(ids) if ids else None
+
+
+def variant_url(variant: StampVariant) -> str:
+    return f"/media/{variant.image}" if variant.image else f"/static/stamps/{variant.icon or 'star'}.svg"
+
+
+def tx_picture(tx: StampTransaction) -> str:
+    """Картинка строки истории: выпавшая рисовка или картинка вида."""
+    return variant_url(tx.variant) if tx.variant is not None else icon_url(tx.stamp_type)
+
+
+@dataclass
+class CollectionRow:
+    stamp_type: StampType
+    variants: list[tuple[StampVariant, bool]] = field(default_factory=list)  # (рисовка, есть ли у ученика)
+
+    @property
+    def owned(self) -> int:
+        return sum(1 for _, has in self.variants if has)
+
+
+def collection(db: DbSession, student_id: int) -> list[CollectionRow]:
+    """Какие рисовки ученику уже выпадали. Скрытые админом показываются, только если уже выпали."""
+    got = set(db.scalars(
+        select(StampTransaction.variant_id).where(
+            StampTransaction.student_id == student_id, StampTransaction.variant_id.is_not(None)
+        ).distinct()
+    ))
+    rows = []
+    for t in all_types(db):
+        variants = [(v, v.id in got) for v in t.variants if v.is_active or v.id in got]
+        if t.is_active and variants:
+            rows.append(CollectionRow(t, variants))
+    return rows
+
+
+# ---------- обмен ----------
+
+
+def rule_text(rule: ConversionRule) -> str:
+    return f"{rule.from_amount} {rule.from_type.name} → {rule.to_amount} {rule.to_type.name}"
+
+
+def rule_errors(db: DbSession, from_type_id: int, from_amount: int, to_type_id: int, to_amount: int) -> list[str]:
+    errors = []
+    src = db.get(StampType, from_type_id) if 0 < from_type_id <= MAX_ID else None
+    dst = db.get(StampType, to_type_id) if 0 < to_type_id <= MAX_ID else None
+    if src is None or dst is None:
+        errors.append("Выберите оба вида")
+    elif src.id == dst.id:
+        errors.append("Обменивать вид сам на себя нельзя")
+    elif not dst.craftable:
+        errors.append(f"«{dst.name}» нельзя получить обменом — только выдать")
+    if not 1 <= from_amount <= RULE_AMOUNT_MAX or not 1 <= to_amount <= RULE_AMOUNT_MAX:
+        errors.append(f"Количество — от 1 до {RULE_AMOUNT_MAX}")
+    return errors
+
+
+def _usable(rule: ConversionRule) -> bool:
+    return rule.is_active and rule.from_type.is_active and rule.to_type.is_active and rule.to_type.craftable
+
+
+def all_rules(db: DbSession) -> list[ConversionRule]:
+    return list(db.scalars(select(ConversionRule).order_by(ConversionRule.id)))
+
+
+def exchange_rules(db: DbSession) -> list[ConversionRule]:
+    """Правила, доступные ученику сейчас."""
+    return [r for r in all_rules(db) if _usable(r)]
+
+
+def exchange(db: DbSession, student: User, rule_id: int, times: int = 1) -> StampTransaction:
+    """Обмен по правилу times раз: списание и начисление одной транзакцией БД. Возвращает начисление."""
+    rule = db.get(ConversionRule, rule_id) if 0 < rule_id <= MAX_ID else None
+    if rule is None or not _usable(rule):
+        raise StampError("Такого обмена нет")
+    if not 1 <= times <= EXCHANGE_TIMES_MAX:
+        raise StampError(f"За раз — от 1 до {EXCHANGE_TIMES_MAX} обменов")
+    cost, gain = rule.from_amount * times, rule.to_amount * times
+    with BALANCE_LOCK:
+        have = balance_of(db, student.id, rule.from_type_id)
+        if have < cost:
+            raise StampError(f"Не хватает: нужно {cost} ({rule.from_type.name}), у тебя {have}")
+        text = rule_text(rule) + (f" × {times}" if times > 1 else "")
+        db.add(StampTransaction(
+            student_id=student.id, stamp_type_id=rule.from_type_id, amount=-cost, reason="conversion",
+            comment=text, actor_id=student.id,
+        ))
+        got = StampTransaction(
+            student_id=student.id, stamp_type_id=rule.to_type_id, amount=gain, reason="conversion",
+            comment=text, actor_id=student.id, variant_id=pick_variant(db, rule.to_type_id),
+        )
+        db.add(got)
+        db.commit()
+    return got

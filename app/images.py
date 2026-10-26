@@ -91,7 +91,7 @@ def _shrink_fit(img: Image.Image) -> Image.Image:
     return out
 
 
-def _decode(data: bytes, draft_side: int, shrink, finish, limit: int = MAX_UPLOAD_BYTES) -> Image.Image:
+def _decode(data: bytes, draft_side: int, shrink, finish, limit: int = MAX_UPLOAD_BYTES, keep_alpha: bool = False) -> Image.Image:
     """Общая часть аватара и картинки вопроса: открыть, уменьшить полосами, повернуть по EXIF, убрать прозрачность."""
     if not data or len(data) > limit:
         raise InvalidImage("Пустой файл или слишком большой")
@@ -108,9 +108,13 @@ def _decode(data: bytes, draft_side: int, shrink, finish, limit: int = MAX_UPLOA
         if orientation in _ORIENTATION:
             small = small.transpose(_ORIENTATION[orientation])
         fitted = finish(small)
-        # прозрачность -> белый фон (иначе у PNG с альфой фон станет чёрным); новый кадр — без EXIF/XMP/GPS
-        result = Image.new("RGB", fitted.size, "white")
-        result.paste(fitted, mask=fitted.getchannel("A"))
+        if keep_alpha:  # рисовки штампиков: прозрачный фон сохраняем; новый кадр — без EXIF/XMP/GPS
+            result = Image.new("RGBA", fitted.size)
+            result.paste(fitted)
+        else:
+            # прозрачность -> белый фон (иначе у PNG с альфой фон станет чёрным); новый кадр — без EXIF/XMP/GPS
+            result = Image.new("RGB", fitted.size, "white")
+            result.paste(fitted, mask=fitted.getchannel("A"))
     except InvalidImage:
         raise
     except Exception as exc:  # PIL, pillow_heif, DecompressionBombError, обрезанные файлы — всё это «не картинка»
@@ -205,3 +209,22 @@ def delete_media(rel_path: str | None) -> None:
 def save_shop_image(group_id: int, data: bytes) -> str:
     """Картинка позиции магазина (как у вопросов): shop/<group_id>/<12 hex>.webp."""
     return _save_fitted(f"shop/{group_id}", data, MAX_UPLOAD_BYTES)
+
+
+STAMP_ART_SIDE = 512
+
+
+def save_stamp_art(data: bytes) -> str:
+    """Рисовка штампика: до 512px, прозрачность сохраняется, WebP до 400 КБ: stamps/<12 hex>.webp."""
+
+    def fit(small: Image.Image) -> Image.Image:
+        small.thumbnail((STAMP_ART_SIDE, STAMP_ART_SIDE), Image.Resampling.LANCZOS)
+        return small
+
+    with _DECODE_LOCK:
+        img = _decode(data, STAMP_ART_SIDE * 2, _shrink_fit, fit, keep_alpha=True)
+    content, fits = _encode(img)
+    while not fits:
+        img = img.resize((max(1, img.width * 4 // 5), max(1, img.height * 4 // 5)), Image.Resampling.LANCZOS)
+        content, fits = _encode(img)
+    return _write(f"stamps/{secrets.token_hex(6)}.webp", content)

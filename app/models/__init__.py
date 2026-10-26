@@ -10,7 +10,7 @@ from app.models.chat import (
 )
 from app.models.security import LoginAttempt, Session
 from app.models.shop import Order, ShopItem
-from app.models.stamps import ConversionRule, DailyReward, StampTransaction, StampType
+from app.models.stamps import ConversionRule, DailyReward, StampTransaction, StampType, StampVariant
 from app.models.tasks import (
     LEVELS,
     QUESTION_TYPES,
@@ -51,6 +51,7 @@ __all__ = [
     "ShopItem",
     "StampTransaction",
     "StampType",
+    "StampVariant",
     "Test",
     "TestQuestion",
     "User",

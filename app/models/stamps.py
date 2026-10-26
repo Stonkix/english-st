@@ -20,9 +20,30 @@ class StampType(Base):
     color: Mapped[str]  # из app.stamps.COLORS
     sort_order: Mapped[int] = mapped_column(default=0)
     is_active: Mapped[bool] = mapped_column(default=True)
+    # можно ли получить обменом (легендарный — нельзя: его только выдают)
+    craftable: Mapped[bool] = mapped_column(default=True, server_default="1")
+
+    variants: Mapped[list["StampVariant"]] = relationship(
+        order_by="(StampVariant.sort_order, StampVariant.id)", cascade="all, delete-orphan", passive_deletes=True,
+    )
 
     def __str__(self) -> str:
         return self.name
+
+
+class StampVariant(Base):
+    """Рисовка штампика. Вид один (баланс общий), а выпадает каждый раз случайная рисовка — их собирают в коллекцию."""
+
+    __tablename__ = "stamp_variants"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    stamp_type_id: Mapped[int] = mapped_column(ForeignKey("stamp_types.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(default="")
+    icon: Mapped[str | None]  # встроенная картинка (app.stamps.ICONS) …
+    image: Mapped[str | None]  # … или загруженная: stamps/<12 hex>.webp относительно media_dir
+    sort_order: Mapped[int] = mapped_column(default=0)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
 class StampTransaction(Base):
@@ -46,9 +67,11 @@ class StampTransaction(Base):
     order_id: Mapped[int | None]  # заявка магазина (этап 5)
     reward_id: Mapped[int | None] = mapped_column(ForeignKey("daily_rewards.id", ondelete="SET NULL"))
     reward_date: Mapped[date | None]  # день по Москве, за который начислена награда
+    variant_id: Mapped[int | None] = mapped_column(ForeignKey("stamp_variants.id", ondelete="SET NULL"))  # выпавшая рисовка
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
     stamp_type: Mapped[StampType] = relationship()
+    variant: Mapped["StampVariant | None"] = relationship()
 
 
 class DailyReward(Base):
@@ -66,7 +89,7 @@ class DailyReward(Base):
 
 
 class ConversionRule(Base):
-    """Обмен видов (from_amount from_type → to_amount to_type). Правила определит заказчик; интерфейса пока нет."""
+    """Обмен: from_amount штампиков from_type → to_amount штампиков to_type. Правила задаёт админ, меняет ученик."""
 
     __tablename__ = "conversion_rules"
 
@@ -76,3 +99,6 @@ class ConversionRule(Base):
     to_type_id: Mapped[int] = mapped_column(ForeignKey("stamp_types.id", ondelete="CASCADE"))
     to_amount: Mapped[int]
     is_active: Mapped[bool] = mapped_column(default=False)
+
+    from_type: Mapped[StampType] = relationship(foreign_keys=[from_type_id])
+    to_type: Mapped[StampType] = relationship(foreign_keys=[to_type_id])

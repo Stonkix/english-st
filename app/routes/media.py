@@ -16,7 +16,7 @@ from app.auth.deps import require_user
 from app.config import settings
 from app.db import get_db
 from app.chat import can_access
-from app.models import AvatarHistory, ChatMessage, ChatRoom, Group, Question, ShopItem, User
+from app.models import AvatarHistory, ChatMessage, ChatRoom, Group, Question, ShopItem, StampVariant, User
 from app.questions import picture_paths
 
 router = APIRouter()
@@ -101,5 +101,16 @@ def shop_image(group_id: str, name: str, viewer: User = Depends(require_user), d
     )
     rel = f"shop/{group_id}/{name}"
     if not allowed or db.scalar(select(ShopItem.id).where(ShopItem.group_id == group.id, ShopItem.image == rel)) is None:
+        raise HTTPException(404)
+    return _file_response(rel)
+
+
+@router.get("/media/stamps/{name}")
+def stamp_art(name: str, viewer: User = Depends(require_user), db: DbSession = Depends(get_db)):
+    """Рисовка штампика — любому вошедшему (это не фото), только пока на неё ссылается рисовка."""
+    if not _NAME.fullmatch(name):
+        raise HTTPException(404)
+    rel = f"stamps/{name}"
+    if db.scalar(select(StampVariant.id).where(StampVariant.image == rel)) is None:
         raise HTTPException(404)
     return _file_response(rel)

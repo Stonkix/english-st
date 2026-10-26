@@ -10,7 +10,7 @@
 <ul class="list stamp-history">
   {% for tx in rows %}
   <li class="item-row">
-    <img src="{{ tx.stamp_type|stamp_icon }}" alt="" width="28" height="28">
+    <img class="stamp-art" src="{{ tx|tx_picture }}" alt="" width="40" height="40" loading="lazy">
     <span class="item-row-main">
       <strong>{{ describe(tx) }}</strong>
       <small>{{ tx.created_at|msk }} · {{ tx.stamp_type.name }}</small>

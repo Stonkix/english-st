@@ -1,6 +1,6 @@
 """Ученик: главная с заданием на сегодня, плеер задания и экран результата."""
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DbSession
@@ -22,8 +22,8 @@ from app.daily import (
 )
 from app import stamps
 from app.db import get_db
-from app.models import Attempt, User
-from app.params import MAX_ID, Id
+from app.models import Attempt, StampTransaction, User
+from app.params import MAX_ID, Id, form_int
 from app.questions import public_view
 from app.templating import templates
 from app.timeutil import moscow_today
@@ -147,12 +147,41 @@ def result(attempt_id: Id, request: Request, user: User = Depends(student_only),
     return templates.TemplateResponse(request, "student/result.html", context)
 
 
-@router.get("/stamps")
-def my_stamps(request: Request, user: User = Depends(student_only), db: DbSession = Depends(get_db)):
+def _stamps_page(request: Request, db: DbSession, user: User, got=None, error: str | None = None):
+    balances = stamps.balances(db, user.id)
     context = {
         "user": user,
-        "balances": stamps.balances(db, user.id),
+        "balances": balances,
+        "have": {b.stamp_type.id: b.amount for b in balances},
+        "rules": stamps.exchange_rules(db),
+        "collection": stamps.collection(db, user.id),
         "rows": stamps.history(db, user.id, limit=100),
         "describe": stamps.describe,
+        "got": got,
+        "error": error,
     }
-    return templates.TemplateResponse(request, "student/stamps.html", context)
+    return templates.TemplateResponse(request, "student/stamps.html", context, status_code=400 if error else 200)
+
+
+@router.get("/stamps")
+def my_stamps(request: Request, got: int | None = None, user: User = Depends(student_only), db: DbSession = Depends(get_db)):
+    """got — id начисления после обмена: показать, какая рисовка выпала (только своё)."""
+    tx = db.get(StampTransaction, got) if got and 0 < got <= MAX_ID else None
+    if tx is not None and (tx.student_id != user.id or tx.amount <= 0):
+        tx = None
+    return _stamps_page(request, db, user, got=tx)
+
+
+@router.post("/stamps/exchange")
+def exchange(
+    request: Request,
+    rule_id: str = Form(""),
+    times: str = Form("1"),
+    user: User = Depends(student_only),
+    db: DbSession = Depends(get_db),
+):
+    try:
+        tx = stamps.exchange(db, user, form_int(rule_id, 1) or 0, form_int(times, 1, stamps.EXCHANGE_TIMES_MAX) or 0)
+    except stamps.StampError as exc:
+        return _stamps_page(request, db, user, error=str(exc))
+    return RedirectResponse(f"/stamps?got={tx.id}", status_code=303)

@@ -106,3 +106,94 @@ def test_huge_ids_in_forms_are_rejected_not_500(client, db):
     assert "Награда: выберите вид" in client.post(f"/tasks/groups/{g.id}/rewards", data={"stamp_type_id": big, "amount": "1"}).text
     r = client.post(f"/shop/groups/{g.id}/items", data={"title": "x", "price_type_id": big, "price_amount": big})
     assert r.status_code == 400 and "Выберите вид штампиков для цены" in r.text
+
+
+# ---------- рисовки и обмен ----------
+
+
+def _rgba_png() -> bytes:
+    from io import BytesIO
+    from PIL import Image
+    buf = BytesIO()
+    Image.new("RGBA", (80, 80), (255, 0, 0, 0)).save(buf, "PNG")
+    return buf.getvalue()
+
+
+def test_student_exchange_shows_drop(client, db):
+    from tests.test_stamps import _kinds, _rule
+    common, rare, legend = _kinds(db)
+    t = make_user(db, role="teacher", login="teach")
+    kid = make_user(db, login="kid")
+    stamps.give(db, t, kid, common.id, 12)
+    login_as(client, "kid")
+    page = client.get("/stamps").text
+    assert "Обмен" in page and "Коллекция" in page and "Нужно 1 (Легендарный)" in page
+    r = client.post("/stamps/exchange", data={"rule_id": _rule(db, common, rare).id, "times": "1"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].startswith("/stamps?got=")
+    assert "+1 Редкий!" in client.get(r.headers["location"]).text
+    r = client.post("/stamps/exchange", data={"rule_id": _rule(db, common, rare).id, "times": "1"})
+    assert r.status_code == 400 and "Не хватает" in r.text
+    assert "+1" not in client.get(f"/stamps?got={10**30}").text.split("Обмен")[0]
+
+
+def test_got_param_shows_only_own_credit(client, db):
+    from tests.test_stamps import _kinds
+    common, _, _ = _kinds(db)
+    t = make_user(db, role="teacher", login="teach")
+    kid = make_user(db, login="kid")
+    other = make_user(db, login="other")
+    tx = stamps.give(db, t, other, common.id, 7)
+    login_as(client, "kid")
+    assert "+7 Обычный!" not in client.get(f"/stamps?got={tx.id}").text
+
+
+def test_admin_variants(client, db):
+    from tests.test_stamps import _kinds
+    from app.models import StampVariant
+    common, rare, legend = _kinds(db)
+    make_user(db, role="admin", login="adm")
+    login_as(client, "adm")
+    r = client.post(f"/school/stamps/{common.id}/variants", data={"name": "Котик"},
+                    files={"image": ("cat.png", _rgba_png(), "image/png")}, follow_redirects=False)
+    assert r.status_code == 303
+    art = db.query(StampVariant).filter(StampVariant.image.is_not(None)).one()
+    assert art.name == "Котик" and art.image.startswith("stamps/")
+    img = client.get(f"/media/{art.image}")
+    from io import BytesIO
+    from PIL import Image
+    assert img.status_code == 200 and Image.open(BytesIO(img.content)).mode == "RGBA"  # прозрачность сохранилась
+    assert "Загрузите картинку" in client.post(f"/school/stamps/{common.id}/variants", data={"icon": "../x"}).text
+    client.post(f"/school/stamps/{rare.id}/variants", data={"icon": "rocket"})
+    rocket = db.query(StampVariant).filter_by(icon="rocket").one()
+    # выпавшую рисовку удалить нельзя, только скрыть
+    kid = make_user(db, login="kid")
+    tx = stamps.give(db, make_user(db, role="teacher", login="teach"), kid, rare.id, 1)
+    tx.variant_id = rocket.id
+    db.commit()
+    assert "можно только скрыть" in client.post(f"/school/stamps/variants/{rocket.id}/delete").text
+    client.post(f"/school/stamps/variants/{rocket.id}/toggle")
+    db.refresh(rocket)
+    assert not rocket.is_active
+    art_id = art.id
+    client.post(f"/school/stamps/variants/{art_id}/delete")
+    db.expire_all()
+    assert db.get(StampVariant, art_id) is None
+
+
+def test_admin_rules(client, db):
+    from tests.test_stamps import _kinds
+    from app.models import ConversionRule
+    common, rare, legend = _kinds(db)
+    make_user(db, role="admin", login="adm")
+    login_as(client, "adm")
+    r = client.post("/school/stamp-rules", data={"from_type_id": common.id, "from_amount": "25", "to_type_id": legend.id, "to_amount": "1"})
+    assert "«Легендарный» нельзя получить обменом" in r.text
+    before = db.query(ConversionRule).count()
+    client.post("/school/stamp-rules", data={"from_type_id": rare.id, "from_amount": "2", "to_type_id": common.id, "to_amount": "21"})
+    assert db.query(ConversionRule).count() == before + 1
+    rule = db.query(ConversionRule).order_by(ConversionRule.id.desc()).first()
+    client.post(f"/school/stamp-rules/{rule.id}/toggle")
+    db.refresh(rule)
+    assert not rule.is_active
+    client.post(f"/school/stamp-rules/{rule.id}/delete")
+    assert db.query(ConversionRule).count() == before

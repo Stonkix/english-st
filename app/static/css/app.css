@@ -973,3 +973,43 @@ a.stamp-balances:active { background: var(--bg-soft); }
 @media (min-width: 900px) {
   .tabbar:has(> .tabbar-item:nth-of-type(7)) .tabbar-item { font-size: 16px; letter-spacing: .03em; }
 }
+
+/* ---------- Рисовки, коллекция и обмен ---------- */
+.stamp-art { flex: none; object-fit: contain; }
+.stamp-drop { align-items: center; text-align: center; gap: 6px; }
+.stamp-drop-art { width: 128px; height: 128px; object-fit: contain; animation: pop .5s ease-out; }
+.stamp-drops { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; }
+.stamp-drop-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.stamp-drop-item .stamp-drop-art { width: 96px; height: 96px; }
+.exchange-list { display: flex; flex-direction: column; gap: 12px; }
+.exchange-card { gap: 12px; padding: 16px; }
+.exchange-formula { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.exchange-arrow { color: var(--faint); font-size: 28px; font-weight: 800; }
+.exchange-go { display: grid; grid-template-columns: 88px 1fr; gap: 12px; }
+.exchange-go input {
+  min-height: 48px;
+  padding: 0 12px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  color: var(--text);
+  font: inherit;
+  font-weight: 800;
+  text-align: center;
+}
+.exchange-card small { text-align: center; }
+.collection-card { gap: 12px; }
+.collection-head { display: flex; justify-content: space-between; align-items: baseline; }
+.collection-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+.collection-item { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; border-radius: var(--radius-sm); background: var(--bg-soft); }
+.collection-item img { width: 64px; height: 64px; object-fit: contain; }
+.collection-item.is-locked img { filter: grayscale(1) brightness(.4); opacity: .25; }
+@media (prefers-reduced-motion: reduce) { .stamp-drop-art { animation: none; } }
+.variant-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.variant-item { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; border: 2px solid var(--border); border-radius: var(--radius-sm); }
+.variant-item img { width: 72px; height: 72px; object-fit: contain; }
+.variant-item small { font-size: 13px; text-align: center; }
+.variant-item form { margin: 0; }
+.rule-form .field { display: grid; grid-template-columns: 96px 1fr; gap: 8px; }
+.rule-form .field label { grid-column: 1 / -1; }
+.item-row-main.exchange-formula { flex-direction: row; justify-content: flex-start; flex-wrap: wrap; gap: 6px; }

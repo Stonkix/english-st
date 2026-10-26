@@ -15,7 +15,11 @@
   {% if awarded %}
   <div class="card stamp-award">
     <strong>Награда</strong>
-    <div class="stamp-balances">{% for tx in awarded %}{{ chip(tx.stamp_type, "+" ~ tx.amount, big=true) }}{% endfor %}</div>
+    <div class="stamp-drops">
+      {% for tx in awarded %}
+      <span class="stamp-drop-item"><img class="stamp-drop-art" src="{{ tx|tx_picture }}" alt="" width="96" height="96"><strong>+{{ tx.amount }} {{ tx.stamp_type.name }}</strong></span>
+      {% endfor %}
+    </div>
   </div>
   {% endif %}
   <div class="streak-card{% if streak %} is-on{% endif %}">
