@@ -1,0 +1,67 @@
+{# Штампик: иконка вида и число на фоне его цвета #}
+{% macro chip(t, amount, big=false) -%}
+<span class="stamp-chip{% if big %} stamp-chip-big{% endif %}{% if amount is number and amount < 0 %} is-negative{% endif %}" style="--tint: {{ t|stamp_tint }}" title="{{ t.name }}">
+  <img src="{{ t|stamp_icon }}" alt="" width="{{ 32 if big else 22 }}" height="{{ 32 if big else 22 }}"><strong>{{ amount }}</strong><span class="visually-hidden"> {{ t.name }}</span>
+</span>
+{%- endmacro %}
+
+{# История операций: список записей журнала #}
+{% macro history_list(rows, describe) -%}
+<ul class="list stamp-history">
+  {% for tx in rows %}
+  <li class="item-row">
+    <img class="stamp-art" src="{{ tx|tx_picture }}" alt="" width="40" height="40" loading="lazy">
+    <span class="item-row-main">
+      <strong>{{ describe(tx) }}</strong>
+      <small>{{ tx.created_at|msk }} · {{ tx.stamp_type.name }}</small>
+    </span>
+    <strong class="stamp-delta{% if tx.amount < 0 %} is-minus{% endif %}">{{ "%+d"|format(tx.amount) }}</strong>
+  </li>
+  {% endfor %}
+</ul>
+{%- endmacro %}
+
+
+{# Награды за задание (группы или теста): список ступеней и форма добавления. base — адрес …/rewards #}
+{% macro rewards_card(rewards, stamp_types, base, error, values, intro) -%}
+<div class="card" id="rewards">
+  <h2>Награды за задание</h2>
+  <p class="muted">{{ intro }} Выдаются один раз в день — за первую попытку, набравшую порог, — и только награды самого высокого достигнутого порога. Пример: «от 50% — 2 обычных», «от 80% — 1 редкий», «100% — 1 легендарный»: при 90% ученик получит 1 редкий. Несколько наград с одним порогом выдаются вместе.</p>
+  {% if rewards %}
+  <ul class="list">
+    {% for r in rewards %}
+    <li class="item-row">
+      {{ chip(r.stamp_type, "+" ~ r.amount) }}
+      <span class="item-row-main"><strong>{% if r.min_score_percent %}от {{ r.min_score_percent }}% верных{% else %}за любое прохождение{% endif %}</strong><small>{{ r.stamp_type.name }}{% if not r.stamp_type.is_active %} · вид отключён{% endif %}</small></span>
+      <form method="post" action="{{ base }}/{{ r.id }}/delete" data-confirm="Убрать награду? Уже выданные штампики останутся у учеников.">
+        <button class="btn btn-secondary mini-btn" type="submit" aria-label="Убрать награду">×</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if error %}<div class="alert-error" role="alert"><p>{{ error }}</p></div>{% endif %}
+  {% if stamp_types %}
+  {% set rv = values or {"stamp_type_id": "", "amount": "1", "min_score_percent": "0"} %}
+  <form method="post" action="{{ base }}" data-once>
+    <div class="field">
+      <label for="reward-percent">Порог: минимум верных ответов, %</label>
+      <input id="reward-percent" name="min_score_percent" type="number" inputmode="numeric" min="0" max="100" value="{{ rv.min_score_percent }}" required>
+    </div>
+    <div class="field">
+      <label for="reward-type">Вид</label>
+      <select id="reward-type" name="stamp_type_id">
+        {% for t in stamp_types %}<option value="{{ t.id }}"{% if rv.stamp_type_id|string == t.id|string %} selected{% endif %}>{{ t.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="reward-amount">Сколько</label>
+      <input id="reward-amount" name="amount" type="number" inputmode="numeric" min="1" max="100" value="{{ rv.amount }}" required>
+    </div>
+    <button class="btn btn-primary btn-block" type="submit">Добавить награду</button>
+  </form>
+  {% else %}
+  <p class="muted">Видов штампиков нет — их заводит администратор.</p>
+  {% endif %}
+</div>
+{%- endmacro %}

@@ -176,3 +176,59 @@ def test_inactive_questions_excluded(db):
     assert todays_source(db, student, DAY) is None
     ids = add_pool(db, teacher, group, 2)
     assert sorted(todays_source(db, student, DAY).question_ids) == sorted(ids)
+
+
+# ---------- темы ----------
+
+
+def _topic_setup(db, per_topic):
+    """Группа с пулами «Грамматика»/«Лексика» и пулом без темы; per_topic — вопросов в каждом пуле."""
+    from app.models import GroupPool, Pool, Question, Topic
+    db.query(Topic).delete()
+    teacher = make_user(db, role="teacher", login="teach")
+    group = make_group(db, teacher)
+    grammar, vocab = Topic(name="Грамматика", sort_order=1), Topic(name="Лексика", sort_order=2)
+    db.add_all([grammar, vocab])
+    db.flush()
+    ids = {}
+    for key, topic in (("grammar", grammar), ("vocab", vocab), ("none", None)):
+        pool = Pool(owner_id=teacher.id, title=key, description="d", level="A1", topic_id=topic.id if topic else None)
+        db.add(pool)
+        db.flush()
+        qs = [Question(owner_id=teacher.id, pool_id=pool.id, type="text_input", prompt=f"{key}{i}", payload={"accepted": ["x"]})
+              for i in range(per_topic)]
+        db.add_all(qs)
+        db.add(GroupPool(group_id=group.id, pool_id=pool.id))
+        db.flush()
+        ids[key] = {q.id for q in qs}
+    db.commit()
+    return group, grammar, vocab, ids
+
+
+def test_topic_quotas_pick_from_each_topic(db):
+    from app.models import GroupTopicQuota
+    group, grammar, vocab, ids = _topic_setup(db, 6)
+    db.add_all([GroupTopicQuota(group_id=group.id, topic_id=grammar.id, count=3),
+                GroupTopicQuota(group_id=group.id, topic_id=vocab.id, count=2)])
+    db.commit()
+    kid = make_user(db, login="kid", group=group)
+    source = todays_source(db, kid, date(2026, 10, 26))
+    picked = set(source.question_ids)
+    assert len(picked) == 5 and len(picked & ids["grammar"]) == 3 and len(picked & ids["vocab"]) == 2
+    assert todays_source(db, kid, date(2026, 10, 26)).question_ids == source.question_ids  # тот же набор весь день
+
+
+def test_topic_shortfall_is_filled_from_other_questions(db):
+    from app.models import GroupTopicQuota
+    group, grammar, vocab, ids = _topic_setup(db, 2)
+    db.add(GroupTopicQuota(group_id=group.id, topic_id=grammar.id, count=4))  # в теме всего 2
+    db.commit()
+    kid = make_user(db, login="kid", group=group)
+    picked = set(todays_source(db, kid, date(2026, 10, 26)).question_ids)
+    assert len(picked) == 4 and ids["grammar"] <= picked
+
+
+def test_without_quotas_question_count_applies(db):
+    group, grammar, vocab, ids = _topic_setup(db, 4)
+    kid = make_user(db, login="kid", group=group)
+    assert len(todays_source(db, kid, date(2026, 10, 26)).question_ids) == 5  # question_count по умолчанию

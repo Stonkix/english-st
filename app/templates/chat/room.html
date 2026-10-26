@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Чат — English ST{% endblock %}
+
+{% block content %}
+{# Переписка на весь экран, без нижнего меню (user в шаблон не передаётся). Сообщения рисует chat.js по #chat-data. #}
+<div class="chat" id="chat">
+  <header class="chat-top">
+    <a class="chat-back" href="/chat" aria-label="Назад к списку чатов">&larr;</a>
+    {% if room.kind == "group" %}
+    <span class="avatar avatar-sm avatar-group" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="22" height="22"><circle cx="12" cy="10.5" r="5.5" fill="#fff"/><path d="M2 28v-1a10 9 0 0 1 20 0v1z" fill="#fff"/><circle cx="22.5" cy="11.5" r="4.5" fill="#fff" opacity=".7"/></svg>
+    </span>
+    {% elif person %}
+    <span class="avatar avatar-sm" aria-hidden="true">
+      {%- if person_avatar %}<img src="{{ person_avatar }}" alt="" width="36" height="36">{% else %}{{ (person.first_name[:1] ~ person.last_name[:1])|upper }}{% endif -%}
+    </span>
+    {% endif %}
+    <h1 class="chat-title">{% if room.kind == "group" %}Группа «{{ title }}»{% else %}{{ title }}{% endif %}</h1>
+    <span class="chat-status" id="chat-status" role="status" hidden>Нет связи…</span>
+  </header>
+
+  <div class="chat-messages" id="chat-messages" aria-live="polite">
+    <noscript><p class="alert-error">Для чата нужен JavaScript. Включи его в браузере.</p></noscript>
+  </div>
+
+  <div class="chat-stickers" id="chat-stickers" hidden></div>
+
+  <footer class="chat-bottom">
+    <p class="chat-error" id="chat-error" role="alert" hidden></p>
+    <form class="chat-form" id="chat-form" autocomplete="off">
+      <button class="chat-tool" id="chat-sticker-btn" type="button" aria-label="Стикеры" aria-expanded="false">
+        <img src="/static/stickers/smile.svg" alt="" width="28" height="28">
+      </button>
+      <label class="chat-tool" aria-label="Отправить фото">
+        <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect x="3" y="7" width="26" height="20" rx="4" fill="#1CB0F6"/><path d="M11 7l2-3h6l2 3z" fill="#1899D6"/><circle cx="16" cy="17" r="6" fill="#fff"/><circle cx="16" cy="17" r="3.5" fill="#1899D6"/></svg>
+        <input id="chat-image" type="file" accept="image/*" hidden>
+      </label>
+      <textarea class="chat-input" id="chat-input" rows="1" maxlength="{{ data.text_max }}" placeholder="Сообщение" aria-label="Сообщение"></textarea>
+      <button class="chat-send" id="chat-send" type="submit" aria-label="Отправить" disabled>
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M3 20.5 21 12 3 3.5 3 10l12 2-12 2z" fill="currentColor"/></svg>
+      </button>
+    </form>
+  </footer>
+</div>
+<script type="application/json" id="chat-data">{{ data|tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/chat.js?v={{ static_v }}" defer></script>
+{% endblock %}

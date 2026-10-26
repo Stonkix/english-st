@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/stamps.html" import chip, history_list %}
 {% block title %}{{ student.first_name }} {{ student.last_name }} — English ST{% endblock %}
 
 {% block content %}
@@ -22,6 +23,72 @@
   </div>
 
   <a class="btn btn-secondary btn-block" href="/tasks/students/{{ student.id }}/results">Результаты заданий</a>
+
+  <div class="card" id="stamps">
+    <h2>Штампики</h2>
+    {% if balances %}<div class="stamp-balances">{% for b in balances %}{{ chip(b.stamp_type, b.amount, big=true) }}{% endfor %}</div>{% endif %}
+    {% if stamped == "given" %}<div class="alert-success" role="status"><p>Штампики выданы</p></div>{% endif %}
+    {% if stamp_error %}<div class="alert-error" role="alert"><p>{{ stamp_error }}</p></div>{% endif %}
+    {% if stamp_types %}
+    {% set v = stamp_values if stamp_values is defined else {"stamp_type_id": "", "amount": "1", "comment": ""} %}
+    <form method="post" action="/teacher/students/{{ student.id }}/stamps" data-once>
+      <div class="field">
+        <label for="stamp-type">Вид</label>
+        <select id="stamp-type" name="stamp_type_id">
+          {% for t in stamp_types %}<option value="{{ t.id }}"{% if v.stamp_type_id|string == t.id|string %} selected{% endif %}>{{ t.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="stamp-amount">Сколько</label>
+        <input id="stamp-amount" name="amount" type="number" inputmode="numeric" min="1" max="1000" value="{{ v.amount }}" required>
+      </div>
+      <div class="field">
+        <label for="stamp-comment">Комментарий (ученик его увидит)</label>
+        <input id="stamp-comment" name="comment" value="{{ v.comment }}" maxlength="200" autocomplete="off" placeholder="Например: за активность на уроке">
+      </div>
+      <button class="btn btn-primary btn-block" type="submit">Выдать</button>
+    </form>
+    {% else %}
+    <p class="muted">Видов штампиков нет — их заводит администратор.</p>
+    {% endif %}
+    {% if stamp_rows %}
+    <details>
+      <summary>Последние операции</summary>
+      {{ history_list(stamp_rows, describe) }}
+    </details>
+    {% endif %}
+  </div>
+
+  <details class="card" id="take"{% if take_error or stamped == "taken" or take_values is defined %} open{% endif %}>
+    <summary>Забрать штампики</summary>
+    {% if stamped == "taken" %}<div class="alert-success" role="status"><p>Штампики забраны. Ученик увидит причину.</p></div>{% endif %}
+    {% if take_error %}<div class="alert-error" role="alert"><p>{{ take_error }}</p></div>{% endif %}
+    {% if balances %}
+    {% set tv = take_values if take_values is defined else {"stamp_type_id": "", "amount": "1", "reason": ""} %}
+    <form method="post" action="/teacher/students/{{ student.id }}/stamps/take" data-once
+          data-confirm="Забрать штампики у {{ student.first_name }}? Ученик увидит причину.">
+      <div class="field">
+        <label for="take-type">Какие</label>
+        <select id="take-type" name="stamp_type_id">
+          {% for b in balances %}<option value="{{ b.stamp_type.id }}"{% if tv.stamp_type_id|string == b.stamp_type.id|string %} selected{% endif %}>{{ b.stamp_type.name }} — есть {{ b.amount }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="take-amount">Сколько</label>
+        <input id="take-amount" name="amount" type="number" inputmode="numeric" min="1" max="1000" value="{{ tv.amount }}" required>
+      </div>
+      <div class="field">
+        <label for="take-reason">За что (ученик увидит)</label>
+        <input id="take-reason" name="reason" value="{{ tv.reason }}" maxlength="200" autocomplete="off" list="take-hints" required placeholder="Например: за поведение на уроке">
+        <datalist id="take-hints">{% for h in penalty_hints %}<option value="{{ h }}">{% endfor %}</datalist>
+      </div>
+      <p class="muted">Можно забрать больше, чем есть: баланс уйдёт в минус, и следующие штампики сначала погасят долг. Пока баланс не выше нуля, ученик не может менять эти штампики в магазине и обменом.</p>
+      <button class="btn btn-danger btn-block" type="submit">Забрать</button>
+    </form>
+    {% else %}
+    <p class="muted">Видов штампиков нет — их заводит администратор.</p>
+    {% endif %}
+  </details>
 
   <form class="card" method="post" action="/teacher/students/{{ student.id }}/edit" data-once>
     <h2>Данные ученика</h2>

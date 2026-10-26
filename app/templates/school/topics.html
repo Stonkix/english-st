@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Темы вопросов — English ST{% endblock %}
+
+{% block content %}
+<section class="page teacher-page">
+  <a class="back-link" href="/school">← Школа</a>
+  <h1>Темы вопросов</h1>
+  <p class="muted">Учитель задаёт тему пулу вопросов, а в «Заданиях группы» — сколько вопросов каждой темы брать в задание дня. Удалённая тема снимается с пулов («без темы»).</p>
+
+  {% for t in topics %}
+  <div class="card">
+    {% if error and error_for == t.id|string %}<div class="alert-error" role="alert"><p>{{ error }}</p></div>{% endif %}
+    <form class="topic-row" method="post" action="/school/topics/{{ t.id }}" data-once>
+      <div class="field">
+        <label for="topic-name-{{ t.id }}">Название <small class="muted">— пулов: {{ used.get(t.id, 0) }}</small></label>
+        <input id="topic-name-{{ t.id }}" name="name" value="{{ t.name }}" maxlength="40" autocomplete="off" required>
+      </div>
+      <div class="field">
+        <label for="topic-order-{{ t.id }}">Порядок</label>
+        <input id="topic-order-{{ t.id }}" name="sort_order" type="number" inputmode="numeric" value="{{ t.sort_order }}" required>
+      </div>
+      <button class="btn btn-primary" type="submit">Сохранить</button>
+    </form>
+    <form method="post" action="/school/topics/{{ t.id }}/delete" data-confirm="Удалить тему «{{ t.name }}»? Пулы с ней станут «без темы».">
+      <button class="btn btn-secondary btn-block" type="submit">Удалить тему</button>
+    </form>
+  </div>
+  {% endfor %}
+
+  <form class="card" method="post" action="/school/topics" data-once>
+    <h2>Новая тема</h2>
+    {% if error and error_for == "new" %}<div class="alert-error" role="alert"><p>{{ error }}</p></div>{% endif %}
+    <div class="field">
+      <label for="topic-new">Название</label>
+      <input id="topic-new" name="name" maxlength="40" autocomplete="off" required placeholder="Например: Времена глаголов">
+    </div>
+    <button class="btn btn-primary btn-block" type="submit">Добавить тему</button>
+  </form>
+</section>
+{% endblock %}

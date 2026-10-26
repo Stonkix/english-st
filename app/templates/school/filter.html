@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Фильтр мата — English ST{% endblock %}
+
+{% block content %}
+<section class="page teacher-page filter-page">
+  <a class="back-link" href="/school">&larr; Школа</a>
+  <h1>Фильтр мата</h1>
+  <p class="muted">Работает в чате и при создании учеников и учителей (имя и фамилия). Бранное слово в сообщении целиком заменяется случайным словом-заменой; исходный текст видят учитель группы и админ.</p>
+
+  <form class="card" method="get" action="/school/filter">
+    <h2>Проверить текст</h2>
+    <div class="field">
+      <label for="check">Текст</label>
+      <input id="check" name="check" value="{{ check }}" maxlength="1000" autocomplete="off">
+    </div>
+    {% if checked is not none %}
+    <p class="lead">{% if checked == check %}Ничего не найдено{% else %}Будет показано: <strong>{{ checked }}</strong>{% endif %}</p>
+    {% endif %}
+    <button class="btn btn-secondary btn-block" type="submit">Проверить</button>
+  </form>
+
+  <form class="card" method="post" action="/school/filter" data-once>
+    <h2>Словарь</h2>
+    {% if saved %}<div class="alert-success" role="status"><p>Словарь сохранён</p></div>{% endif %}
+    {% if errors %}
+    <div class="alert-error" role="alert">{% for e in errors %}<p>{{ e }}</p>{% endfor %}</div>
+    {% endif %}
+    <div class="field">
+      <label for="bad_words">Бранные корни — по одному в строке</label>
+      <small>Корень ищется внутри слова: «пизд» найдёт и «пиздец». «^» в начале — только в начале слова: «^сука» не тронет «сукно». Обходы вроде «xyй», «х.у.й», «бляяя» ловятся сами.</small>
+      <textarea id="bad_words" name="bad_words" spellcheck="false">{{ values.bad_words }}</textarea>
+    </div>
+    <div class="field">
+      <label for="exceptions">Исключения — обычные слова, внутри которых есть корень</label>
+      <small>Например, «страху» спасает «застрахую», «хлеб» — «хлебать».</small>
+      <textarea id="exceptions" name="exceptions" spellcheck="false">{{ values.exceptions }}</textarea>
+    </div>
+    <div class="field">
+      <label for="replacements">Слова-замены</label>
+      <textarea id="replacements" name="replacements" spellcheck="false">{{ values.replacements }}</textarea>
+    </div>
+    <button class="btn btn-primary btn-block" type="submit">Сохранить словарь</button>
+  </form>
+</section>
+{% endblock %}

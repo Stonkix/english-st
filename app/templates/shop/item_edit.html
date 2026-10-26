@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ item.title }} — магазин — English ST{% endblock %}
+
+{% block content %}
+<section class="page teacher-page">
+  <a class="back-link" href="/shop/groups/{{ item.group_id }}">← Магазин группы</a>
+  <h1>{{ item.title }}</h1>
+  <form class="card" method="post" action="/shop/items/{{ item.id }}" enctype="multipart/form-data" data-once>
+    {% include "shop/_item_fields.html" %}
+    {% if item.image %}
+    <img class="shop-img" src="/media/{{ item.image }}" alt="Текущая картинка">
+    <label class="pick"><input type="checkbox" name="remove_image" value="1"> Убрать картинку</label>
+    {% endif %}
+    <p class="muted">Новая цена действует для новых заявок; уже поданные заявки сохраняют свою цену.</p>
+    <button class="btn btn-primary btn-block" type="submit">Сохранить</button>
+  </form>
+  {% if not has_orders %}
+  <form method="post" action="/shop/items/{{ item.id }}/delete" data-confirm="Удалить позицию насовсем?">
+    <button class="btn btn-danger btn-block" type="submit">Удалить позицию</button>
+  </form>
+  {% else %}
+  <p class="muted">На эту позицию уже были заявки, поэтому её нельзя удалить — только скрыть.</p>
+  {% endif %}
+</section>
+{% endblock %}

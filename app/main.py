@@ -1,11 +1,9 @@
 import logging
 from types import SimpleNamespace
 
-from urllib.parse import urlsplit
-
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -16,12 +14,17 @@ from app.auth.deps import LoginRequired, PasswordChangeRequired, get_current_use
 from app.auth.sessions import COOKIE_NAME, set_session_cookie
 from app.config import BASE_DIR, Settings, settings
 from app.db import SessionLocal
+from app.origin import same_site
 from app.routes.auth import router as auth_router
+from app.routes.chat import is_json_path as is_chat_json_path
+from app.routes.chat import router as chat_router
 from app.routes.daily import JSON_PATHS
 from app.routes.daily import router as daily_router
 from app.routes.media import router as media_router
+from app.routes.pets import router as pets_router
 from app.routes.profile import router as profile_router
 from app.routes.school import router as school_router
+from app.routes.shop import router as shop_router
 from app.routes.tasks import router as tasks_router
 from app.routes.teacher import router as teacher_router
 from app.templating import templates
@@ -39,6 +42,7 @@ def check_production_secrets(s: Settings) -> None:
 
 
 check_production_secrets(settings)
+logging.info("English ST: DEBUG=%s, BASE_URL=%s, база %s", settings.debug, settings.base_url, settings.database_url)
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -46,21 +50,7 @@ app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "app" / "static"), name="static")
 
 
-_DEFAULT_PORTS = {"http": 80, "https": 443}
 _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
-
-
-def _origin_of(value: str) -> str | None:
-    """«схема://хост[:порт]» из Origin или полного URL (Referer); None, если не разобрать."""
-    try:
-        parts = urlsplit(value.strip())
-        scheme, host, port = parts.scheme.lower(), parts.hostname, parts.port
-    except ValueError:
-        return None
-    if scheme not in _DEFAULT_PORTS or not host:
-        return None  # в том числе «Origin: null»
-    host = f"[{host}]" if ":" in host else host
-    return f"{scheme}://{host}" + (f":{port}" if port and port != _DEFAULT_PORTS[scheme] else "")
 
 
 @app.middleware("http")
@@ -71,8 +61,11 @@ async def check_origin(request: Request, call_next):
         header = request.headers.get("origin")
         if header is None:
             header = request.headers.get("referer")
-        source = _origin_of(header) if header is not None else None
-        if source is None or source != _origin_of(settings.base_url):
+        if not same_site(header):
+            logging.warning(
+                "403: запрос %s %s пришёл с адреса %r, а BASE_URL=%r — откройте сайт по адресу из BASE_URL",
+                request.method, request.url.path, header, settings.base_url,
+            )
             return templates.TemplateResponse(request, "error.html", {"code": 403}, status_code=403)
     return await call_next(request)
 
@@ -122,7 +115,7 @@ def _error_page_user(request: Request):
 
 @app.exception_handler(StarletteHTTPException)
 async def http_error(request: Request, exc: StarletteHTTPException):
-    if request.url.path in JSON_PATHS:  # плеер ждёт JSON, а не страницу
+    if request.url.path in JSON_PATHS or is_chat_json_path(request.url.path):  # плеер и чат ждут JSON
         return JSONResponse({"error": "Ошибка"}, status_code=exc.status_code, headers=exc.headers)
     user = await run_in_threadpool(_error_page_user, request)  # обращение к БД не блокирует цикл событий
     if exc.status_code == 404:
@@ -136,7 +129,7 @@ async def http_error(request: Request, exc: StarletteHTTPException):
 @app.exception_handler(RequestValidationError)
 async def validation_error(request: Request, exc: RequestValidationError):
     """Ошибка в адресе (не число, ноль, огромный id) — такой страницы нет; ошибка в форме — 400. Без сырого JSON."""
-    if request.url.path in JSON_PATHS:  # JSON-запрос плеера: короткий JSON без подробностей
+    if request.url.path in JSON_PATHS or is_chat_json_path(request.url.path):  # короткий JSON без подробностей
         return JSONResponse({"error": "Некорректный запрос"}, status_code=422)
     user = await run_in_threadpool(_error_page_user, request)
     if any(err.get("loc") and err["loc"][0] == "path" for err in exc.errors()):
@@ -153,12 +146,25 @@ async def server_error(request: Request, exc: Exception):
 
 app.include_router(auth_router)
 app.include_router(daily_router)
+app.include_router(chat_router)
 app.include_router(profile_router)
 app.include_router(media_router)
 app.include_router(teacher_router)
 app.include_router(tasks_router)
 app.include_router(school_router)
+app.include_router(shop_router)
+app.include_router(pets_router)
 setup_admin(app)  # /admin — sqladmin, вход по сессии сайта (только admin)
+
+
+@app.get("/sw.js")
+def service_worker():
+    """Service worker с корня сайта — иначе он управлял бы только /static/. Кэшировать сам файл нельзя: обновления."""
+    return FileResponse(
+        BASE_DIR / "app" / "static" / "js" / "sw.js",
+        media_type="text/javascript",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @app.get("/healthz")

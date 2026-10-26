@@ -12,7 +12,7 @@
     <li><a class="list-item" href="/tasks/pools/{{ p.id }}">
       <span class="list-item-main">
         <strong>{{ p.title }}</strong>
-        <small>{{ p.questions|length }} вопр.{% if user.role == "admin" and owners.get(p.owner_id) %} · {{ owners[p.owner_id].full_name }}{% endif %}</small>
+        <small>{{ p.questions|length }} вопр.{% if p.topic %} · {{ p.topic.name }}{% endif %}{% if user.role == "admin" and owners.get(p.owner_id) %} · {{ owners[p.owner_id].full_name }}{% endif %}</small>
       </span>
       <span class="badge badge-blue">{{ p.level }}</span>
     </a></li>
@@ -40,6 +40,13 @@
       <select id="pool-level" name="level" required>
         <option value="">Выберите уровень</option>
         {% for l in levels %}<option value="{{ l }}"{% if values.level == l %} selected{% endif %}>{{ l }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="pool-topic">Тема</label>
+      <select id="pool-topic" name="topic_id">
+        <option value="">Без темы</option>
+        {% for t in topics %}<option value="{{ t.id }}"{% if values.topic_id|string == t.id|string %} selected{% endif %}>{{ t.name }}</option>{% endfor %}
       </select>
     </div>
     <button class="btn btn-primary btn-block" type="submit">Создать пул</button>

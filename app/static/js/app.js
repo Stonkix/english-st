@@ -58,10 +58,17 @@ document.addEventListener("submit", (event) => {
   const form = event.target;
   if (event.defaultPrevented || !(form instanceof HTMLFormElement) || form.dataset.once === undefined) return;
   // блокируем после того, как браузер соберёт данные формы
-  setTimeout(() => form.querySelectorAll("[type=submit]").forEach((b) => { b.disabled = true; }), 0);
+  setTimeout(() => form.querySelectorAll("[type=submit]:not(:disabled)").forEach((b) => {
+    b.disabled = true;
+    b.dataset.onceDisabled = "";
+  }), 0);
 });
+// возвращаем только те кнопки, что заблокировали сами (выключенные сервером — например, «не хватает штампиков» — не трогаем)
 window.addEventListener("pageshow", () => {
-  document.querySelectorAll("form[data-once] [type=submit]").forEach((b) => { b.disabled = false; });
+  document.querySelectorAll("form[data-once] [data-once-disabled]").forEach((b) => {
+    b.disabled = false;
+    delete b.dataset.onceDisabled;
+  });
 });
 
 // ---------- Подсказка логина (форма нового ученика) ----------
@@ -81,6 +88,13 @@ function initLoginSuggest() {
     if (!event.target.matches("[data-login-suggest]") || !event.detail.successful) return;
     if (login.dataset.manual) return;
     login.value = event.detail.xhr.responseText;
+  });
+}
+
+// ---------- PWA: service worker кэширует только статику (см. static/js/sw.js) ----------
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {}); // без него сайт работает так же
   });
 }
 

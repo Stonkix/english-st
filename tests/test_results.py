@@ -2,6 +2,7 @@ from sqlalchemy import select, text
 
 from datetime import timedelta
 
+from app.db import engine
 from app.daily import check_pair, seed_for, start_or_resume, submit_answer
 from app.questions import pair_ids, public_view
 from app.models import Attempt, GroupPool, Pool, Question, Test, TestQuestion
@@ -82,10 +83,14 @@ def test_attempt_detail_shows_answers(client, db):
     first = db.get(Question, first_id)
     first.prompt = "Новая формулировка"
     first.payload = {"accepted": ["changed"]}
-    db.execute(text("PRAGMA foreign_keys=OFF"))  # приложение вопросы с ответами только скрывает; здесь строка пропала совсем
-    db.execute(text("DELETE FROM questions WHERE id = :i"), {"i": second_id})
     db.commit()
-    db.execute(text("PRAGMA foreign_keys=ON"))
+    # приложение вопросы с ответами только скрывает; здесь строка пропала совсем.
+    # Оба PRAGMA — на одном соединении: иначе соединение без внешних ключей вернётся в пул и сломает другие тесты
+    with engine.connect() as conn:
+        conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        conn.execute(text("DELETE FROM questions WHERE id = :i"), {"i": second_id})
+        conn.commit()
+        conn.exec_driver_sql("PRAGMA foreign_keys=ON")
 
     login_as(client, "teach")
     html = client.get(f"/tasks/students/{kid.id}/results").text

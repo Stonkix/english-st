@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/stamps.html" import chip %}
 {% block title %}{{ group.name }} — English ST{% endblock %}
 
 {% block content %}
@@ -11,6 +12,7 @@
 
   <a class="btn btn-primary btn-block" href="/teacher/groups/{{ group.id }}/students/new">Добавить ученика</a>
   <a class="btn btn-secondary btn-block" href="/tasks/groups/{{ group.id }}">Задания группы</a>
+  <a class="btn btn-secondary btn-block" href="/shop/groups/{{ group.id }}">Магазин группы</a>
   <a class="card" href="/tasks/groups/{{ group.id }}/results"><strong>Сегодня: прошли {{ done }} из {{ students|length }}</strong><span class="muted">Результаты по дням</span></a>
 
   {% if students %}
@@ -24,6 +26,7 @@
       <span class="list-item-main">
         <strong>{{ s.first_name }} {{ s.last_name }}</strong>
         <small>{{ s.login }}</small>
+        {% if stamp_types %}<span class="stamp-row">{% for t in stamp_types %}{{ chip(t, stamp_totals[s.id].get(t.id, 0)) }}{% endfor %}</span>{% endif %}
         {% if flags[s.id].locked or not s.is_active %}
         <span class="list-item-badges">
           {% if flags[s.id].locked %}<span class="badge badge-red">заблокирован</span>{% endif %}

@@ -10,8 +10,11 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
-from app.models import Assignment, Attempt, AttemptAnswer, DailySettings, GroupPool, Question, Test, User
+from app.models import (
+    Assignment, Attempt, AttemptAnswer, DailySettings, GroupPool, GroupTopicQuota, Pool, Question, Test, User,
+)
 from app.questions import grade, grade_pairs, pair_ids, public_view
+from app.stamps import award_daily
 from app.streak import effective_streak, register_completion
 from app.timeutil import moscow_today, utcnow
 
@@ -53,19 +56,46 @@ def _seen_ids(db: DbSession, student_id: int, day: date) -> set[int]:
     return {qid for ids in rows for qid in ids}
 
 
+def topic_quotas(db: DbSession, group_id: int) -> dict[int, int]:
+    """Сколько вопросов каждой темы брать группе: {тема: число}, только ненулевые."""
+    rows = db.execute(select(GroupTopicQuota.topic_id, GroupTopicQuota.count).where(GroupTopicQuota.group_id == group_id))
+    return {topic_id: count for topic_id, count in rows if count > 0}
+
+
+def _pick(rng: random.Random, candidates: list[int], seen: set[int], count: int) -> list[int]:
+    """count вопросов: сначала не встречавшиеся ученику за SEEN_DAYS дней, потом остальные."""
+    fresh = [q for q in candidates if q not in seen]
+    stale = [q for q in candidates if q in seen]
+    chosen = rng.sample(fresh, min(count, len(fresh)))
+    if len(chosen) < count:
+        chosen += rng.sample(stale, min(count - len(chosen), len(stale)))
+    return chosen
+
+
 def _from_pools(db: DbSession, student: User, day: date) -> list[int]:
-    count = settings_for(db, student.group_id).question_count
+    """Вопросы дня из пулов группы. Набор один и тот же весь день (seed = ученик + дата).
+
+    Если у группы заданы темы («Грамматика — 3, Лексика — 2»), из каждой темы берётся столько вопросов;
+    в теме не хватает — добирается из остальных вопросов пулов группы. Иначе — question_count из всех пулов.
+    """
     pool_ids = select(GroupPool.pool_id).where(GroupPool.group_id == student.group_id)
-    available = sorted(db.scalars(select(Question.id).where(Question.pool_id.in_(pool_ids), Question.is_active.is_(True))))
+    rows = db.execute(
+        select(Question.id, Pool.topic_id).join(Pool, Pool.id == Question.pool_id)
+        .where(Question.pool_id.in_(pool_ids), Question.is_active.is_(True))
+        .order_by(Question.id)
+    ).all()
+    available = [qid for qid, _ in rows]
+    quotas = topic_quotas(db, student.group_id)
+    count = sum(quotas.values()) if quotas else settings_for(db, student.group_id).question_count
     if len(available) <= count:
         return available
     rng = random.Random(f"{student.id}:{day.isoformat()}")
     seen = _seen_ids(db, student.id, day)
-    fresh = [q for q in available if q not in seen]
-    stale = [q for q in available if q in seen]
-    chosen = rng.sample(fresh, min(count, len(fresh)))
-    if len(chosen) < count:
-        chosen += rng.sample(stale, count - len(chosen))
+    chosen: list[int] = []
+    for topic_id, quota in sorted(quotas.items()):
+        chosen += _pick(rng, [qid for qid, t in rows if t == topic_id], seen, quota)
+    taken = set(chosen)
+    chosen += _pick(rng, [qid for qid in available if qid not in taken], seen, count - len(chosen))
     return chosen
 
 
@@ -216,8 +246,10 @@ def _finish(db: DbSession, attempt: Attempt, live: list[Question], answers: dict
     attempt.finished_at = utcnow()
     attempt.total_count = len(live)
     attempt.correct_count = sum(1 for q in live if q.id in answers and answers[q.id].is_correct)
+    student = db.get(User, attempt.student_id)
     if first:
-        register_completion(db, db.get(User, attempt.student_id), attempt.date)
+        register_completion(db, student, attempt.date)
+    award_daily(db, attempt, student.group_id)
 
 
 def _current(db: DbSession, attempt: Attempt) -> tuple[list[Question], dict[int, AttemptAnswer], Question | None]:

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from "partials/stamps.html" import chip, history_list %}
+{% block title %}Мои штампики — English ST{% endblock %}
+
+{% block content %}
+<section class="page">
+  <a class="back-link" href="/">← Главная</a>
+  <h1>Мои штампики</h1>
+  {% if balances %}
+  <div class="card stamp-balances">
+    {% for b in balances %}{{ chip(b.stamp_type, b.amount, big=true) }}{% endfor %}
+  </div>
+  {% endif %}
+
+  {% if got %}
+  <div class="card stamp-drop" role="status">
+    <img class="stamp-drop-art" src="{{ got|tx_picture }}" alt="" width="128" height="128">
+    <strong>+{{ got.amount }} {{ got.stamp_type.name }}!</strong>
+    <small class="muted">Обмен прошёл. Рисовка попала в коллекцию.</small>
+  </div>
+  {% endif %}
+  {% if error %}<div class="alert-error" role="alert"><p>{{ error }}</p></div>{% endif %}
+
+  {% if rules %}
+  <h2>Обмен</h2>
+  <div class="exchange-list">
+    {% for r in rules %}
+    {% set can = have.get(r.from_type_id, 0) // r.from_amount %}
+    <form class="card exchange-card" method="post" action="/stamps/exchange" data-once>
+      <input type="hidden" name="rule_id" value="{{ r.id }}">
+      <div class="exchange-formula" aria-label="{{ r.from_amount }} {{ r.from_type.name }} на {{ r.to_amount }} {{ r.to_type.name }}">
+        {{ chip(r.from_type, r.from_amount, big=true) }}
+        <span class="exchange-arrow" aria-hidden="true">→</span>
+        {{ chip(r.to_type, r.to_amount, big=true) }}
+      </div>
+      {% if can > 0 %}
+      <div class="exchange-go">
+        <label class="visually-hidden" for="times-{{ r.id }}">Сколько раз</label>
+        <input id="times-{{ r.id }}" name="times" type="number" inputmode="numeric" min="1" max="{{ [can, 100]|min }}" value="1">
+        <button class="btn btn-primary" type="submit">Обменять</button>
+      </div>
+      {% else %}
+      <small class="muted">Нужно {{ r.from_amount }} ({{ r.from_type.name }}), у тебя {{ have.get(r.from_type_id, 0) }}</small>
+      {% endif %}
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if collection %}
+  <h2>Коллекция</h2>
+  {% for row in collection %}
+  <div class="card collection-card">
+    <div class="collection-head"><strong>{{ row.stamp_type.name }}</strong><small class="muted">{{ row.owned }} из {{ row.variants|length }}</small></div>
+    <div class="collection-grid">
+      {% for v, has in row.variants %}
+      <span class="collection-item{% if not has %} is-locked{% endif %}">
+        <img src="{{ v|variant_url }}" alt="{% if has %}{{ v.name or row.stamp_type.name }}{% else %}ещё не выпадала{% endif %}" width="64" height="64" loading="lazy">
+      </span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <h2>История</h2>
+  {% if rows %}
+  {{ history_list(rows, describe) }}
+  {% else %}
+  <div class="card"><p class="lead">Пока пусто. Проходи задания — за них дают штампики!</p></div>
+  {% endif %}
+</section>
+{% endblock %}

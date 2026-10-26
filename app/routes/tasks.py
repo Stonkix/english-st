@@ -4,18 +4,23 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
+from sqlalchemy.orm import object_session
 from starlette.datastructures import FormData, UploadFile
 
 from app.avatars import read_photo
-from app.daily import settings_for
+from app.daily import settings_for, topic_quotas
+from app import stamps
 from app.db import get_db
 from app.images import InvalidImage, delete_media, is_picture_of, save_picture
-from app.models import Assignment, AttemptAnswer, Group, GroupPool, Pool, Question, Test, TestQuestion, User
+from app.models import (
+    Assignment, AttemptAnswer, DailyReward, Group, GroupPool, GroupTopicQuota, Pool, Question, StampType, Test, TestQuestion,
+    Topic, User,
+)
 from app.models.tasks import LEVELS, QUESTION_TYPES
-from app.params import MAX_ID, Id
+from app.params import MAX_ID, Id, form_int
 from app.questions import PayloadError, picture_paths, validate_payload
 from app.results import day_rows, group_students, history, parse_day
 from app.routes.teacher import own_group, own_student, teacher_only
@@ -229,14 +234,21 @@ def _tasks_page(request: Request, db: DbSession, user: User, values: dict | None
     owner_ids = {p.owner_id for p in pools} | {t.owner_id for t in tests}
     owners = {u.id: u for u in db.scalars(select(User).where(User.id.in_(owner_ids)))} if owner_ids else {}
     context = {
-        "user": user, "pools": pools, "tests": tests, "owners": owners, "levels": LEVELS,
-        "values": values or {"title": "", "description": "", "level": ""}, "error": error,
+        "user": user, "pools": pools, "tests": tests, "owners": owners, "levels": LEVELS, "topics": _topics(db),
+        "values": values or {"title": "", "description": "", "level": "", "topic_id": None}, "error": error,
     }
     return templates.TemplateResponse(request, "tasks/pools.html", context)
 
 
+def _topics(db: DbSession) -> list[Topic]:
+    return list(db.scalars(select(Topic).order_by(Topic.sort_order, Topic.name)))
+
+
 def _pool_page(request: Request, user: User, pool: Pool, **context):
-    context.update(user=user, pool=pool, levels=LEVELS, types=QUESTION_TYPES, labels=TYPE_LABELS, hints=TYPE_HINTS)
+    context.update(
+        user=user, pool=pool, levels=LEVELS, types=QUESTION_TYPES, labels=TYPE_LABELS, hints=TYPE_HINTS,
+        topics=_topics(object_session(pool)),
+    )
     return templates.TemplateResponse(request, "tasks/pool.html", context)
 
 
@@ -253,8 +265,12 @@ def _question_page(
     return templates.TemplateResponse(request, "tasks/question_form.html", context)
 
 
-def _pool_fields(title: str, description: str, level: str) -> tuple[dict, str | None]:
-    values = {"title": title.strip(), "description": description.strip(), "level": level}
+def _pool_fields(db: DbSession, title: str, description: str, level: str, topic_id: str = "") -> tuple[dict, str | None]:
+    """Поля пула и первая ошибка. Тема необязательна: пустая — «без темы»."""
+    topic = form_int(topic_id, 1) if topic_id else None
+    values = {"title": title.strip(), "description": description.strip(), "level": level, "topic_id": topic}
+    if topic_id and (topic is None or db.get(Topic, topic) is None):
+        return values, "Выберите тему из списка"
     if not values["title"]:
         return values, "Введите название пула"
     if len(values["title"]) > TITLE_MAX:
@@ -298,10 +314,11 @@ def create_pool(
     title: str = Form(""),
     description: str = Form(""),
     level: str = Form(""),
+    topic_id: str = Form(""),
     user: User = Depends(teacher_only),
     db: DbSession = Depends(get_db),
 ):
-    values, error = _pool_fields(title, description, level)
+    values, error = _pool_fields(db, title, description, level, topic_id)
     if error:
         return _tasks_page(request, db, user, values, error)
     pool = Pool(owner_id=user.id, **values)
@@ -322,14 +339,16 @@ def edit_pool(
     title: str = Form(""),
     description: str = Form(""),
     level: str = Form(""),
+    topic_id: str = Form(""),
     user: User = Depends(teacher_only),
     db: DbSession = Depends(get_db),
 ):
     pool = own_pool(db, user, pool_id)
-    values, error = _pool_fields(title, description, level)
+    values, error = _pool_fields(db, title, description, level, topic_id)
     if error:
         return _pool_page(request, user, pool, edit_error=error, edit_values=values)
     pool.title, pool.description, pool.level = values["title"], values["description"], values["level"]
+    pool.topic_id = values["topic_id"]
     db.commit()
     return _to_pool(pool)
 
@@ -503,13 +522,18 @@ def _tests_page(request: Request, db: DbSession, user: User, values: dict | None
     return templates.TemplateResponse(request, "tasks/tests.html", context)
 
 
-def _test_page(request: Request, db: DbSession, user: User, test: Test, pool: Pool | None = None, error: str | None = None):
+def _test_page(
+    request: Request, db: DbSession, user: User, test: Test, pool: Pool | None = None, error: str | None = None,
+    reward_error: str | None = None, reward_values: dict | None = None,
+):
     items = [q for q in test.questions if q.is_active]
     in_test = {q.id for q in test.questions}
     context = {
         "user": user, "test": test, "items": items, "pools": _pools_of(db, test.owner_id), "pool": pool,
         "candidates": [q for q in pool.questions if q.id not in in_test] if pool else [],
         "error": error, "types": QUESTION_TYPES, "labels": TYPE_LABELS, "hints": TYPE_HINTS,
+        "rewards": stamps.rewards_for(db, None, test.id), "stamp_types": stamps.active_types(db),
+        "reward_error": reward_error, "reward_values": reward_values,
     }
     return templates.TemplateResponse(request, "tasks/test.html", context)
 
@@ -680,8 +704,23 @@ def _group_tasks_page(request: Request, db: DbSession, user: User, group: Group,
         titles={t.id: t.title for t in tests}, by_id=by_id,
         pools=_pools_of(db, group.teacher_id),
         connected=set(db.scalars(select(GroupPool.pool_id).where(GroupPool.group_id == group.id))),
+        rewards=stamps.rewards_for(db, group.id, None),
+        topics=_topics(db),
+        quotas=topic_quotas(db, group.id),
+        topic_available=_topic_available(db, group.id),
+        stamp_types=stamps.active_types(db),
     )
     return templates.TemplateResponse(request, "tasks/group_daily.html", context)
+
+
+def _topic_available(db: DbSession, group_id: int) -> dict[int | None, int]:
+    """Сколько действующих вопросов каждой темы в пулах группы (None — без темы)."""
+    rows = db.execute(
+        select(Pool.topic_id, func.count(Question.id)).join(Question, Question.pool_id == Pool.id)
+        .where(Pool.id.in_(select(GroupPool.pool_id).where(GroupPool.group_id == group_id)), Question.is_active.is_(True))
+        .group_by(Pool.topic_id)
+    )
+    return dict(rows.all())
 
 
 def _to_group_tasks(group: Group) -> RedirectResponse:
@@ -832,3 +871,108 @@ def student_results(student_id: Id, request: Request, user: User = Depends(teach
     student = own_student(db, user, student_id)
     context = {"user": user, "student": student, "entries": history(db, student, moscow_today())}
     return templates.TemplateResponse(request, "tasks/student_results.html", context)
+
+
+# ---------- награды за задание (группы и теста) ----------
+
+REWARD_INVALID = f"Награда: выберите вид, количество от 1 до {stamps.REWARD_MAX} и порог от 0 до 100%"
+
+
+def _parse_reward(db: DbSession, stamp_type_id: str, amount: str, min_score_percent: str):
+    """(вид, количество, порог) или None, если что-то не так."""
+    type_id = form_int(stamp_type_id, 1)
+    count = form_int(amount, 1, stamps.REWARD_MAX)
+    percent = form_int(min_score_percent or "0", 0, 100)
+    stamp_type = db.get(StampType, type_id) if type_id else None
+    if stamp_type is None or not stamp_type.is_active or count is None or percent is None:
+        return None
+    return stamp_type, count, percent
+
+
+@router.post("/groups/{group_id}/rewards")
+def add_reward(
+    group_id: Id,
+    request: Request,
+    stamp_type_id: str = Form(""),
+    amount: str = Form(""),
+    min_score_percent: str = Form("0"),
+    user: User = Depends(teacher_only),
+    db: DbSession = Depends(get_db),
+):
+    group = own_group(db, user, group_id)
+    parsed = _parse_reward(db, stamp_type_id, amount, min_score_percent)
+    if parsed is None:
+        values = {"stamp_type_id": stamp_type_id, "amount": amount, "min_score_percent": min_score_percent}
+        return _group_tasks_page(request, db, user, group, reward_error=REWARD_INVALID, reward_values=values)
+    stamp_type, count, percent = parsed
+    db.add(DailyReward(group_id=group.id, stamp_type_id=stamp_type.id, amount=count, min_score_percent=percent))
+    db.commit()
+    return RedirectResponse(f"/tasks/groups/{group.id}#rewards", status_code=303)
+
+
+@router.post("/groups/{group_id}/rewards/{reward_id}/delete")
+def delete_reward(group_id: Id, reward_id: Id, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
+    group = own_group(db, user, group_id)
+    reward = db.get(DailyReward, reward_id)
+    if reward is None or reward.group_id != group.id:
+        raise HTTPException(404)
+    db.delete(reward)  # начисленное остаётся в журнале (reward_id станет пустым)
+    db.commit()
+    return RedirectResponse(f"/tasks/groups/{group.id}#rewards", status_code=303)
+
+
+@router.post("/tests/{test_id}/rewards")
+def add_test_reward(
+    test_id: Id,
+    request: Request,
+    stamp_type_id: str = Form(""),
+    amount: str = Form(""),
+    min_score_percent: str = Form("0"),
+    user: User = Depends(teacher_only),
+    db: DbSession = Depends(get_db),
+):
+    test = own_test(db, user, test_id)
+    parsed = _parse_reward(db, stamp_type_id, amount, min_score_percent)
+    if parsed is None:
+        values = {"stamp_type_id": stamp_type_id, "amount": amount, "min_score_percent": min_score_percent}
+        return _test_page(request, db, user, test, reward_error=REWARD_INVALID, reward_values=values)
+    stamp_type, count, percent = parsed
+    db.add(DailyReward(test_id=test.id, stamp_type_id=stamp_type.id, amount=count, min_score_percent=percent))
+    db.commit()
+    return RedirectResponse(f"/tasks/tests/{test.id}#rewards", status_code=303)
+
+
+@router.post("/tests/{test_id}/rewards/{reward_id}/delete")
+def delete_test_reward(test_id: Id, reward_id: Id, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
+    test = own_test(db, user, test_id)
+    reward = db.get(DailyReward, reward_id)
+    if reward is None or reward.test_id != test.id:
+        raise HTTPException(404)
+    db.delete(reward)
+    db.commit()
+    return RedirectResponse(f"/tasks/tests/{test.id}#rewards", status_code=303)
+
+
+# ---------- темы в задании группы ----------
+
+QUOTA_MAX = 30  # как и «вопросов в день»
+
+
+@router.post("/groups/{group_id}/topics")
+async def save_topic_quotas(group_id: Id, request: Request, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
+    """Сколько вопросов каждой темы в задании дня. Все нули — темы не учитываются (берётся «вопросов в день»)."""
+    group = own_group(db, user, group_id)
+    form = await request.form()
+    counts = {}
+    for topic in _topics(db):
+        raw = str(form.get(f"topic_{topic.id}", "") or "0")
+        value = form_int(raw, 0, QUOTA_MAX)
+        if value is None:
+            return _group_tasks_page(request, db, user, group, topics_error=f"Число вопросов темы — от 0 до {QUOTA_MAX}")
+        counts[topic.id] = value
+    if sum(counts.values()) > QUOTA_MAX:
+        return _group_tasks_page(request, db, user, group, topics_error=f"Всего — не больше {QUOTA_MAX} вопросов в день")
+    db.execute(delete(GroupTopicQuota).where(GroupTopicQuota.group_id == group.id))
+    db.add_all([GroupTopicQuota(group_id=group.id, topic_id=t, count=c) for t, c in counts.items() if c > 0])
+    db.commit()
+    return RedirectResponse(f"/tasks/groups/{group.id}#topics", status_code=303)

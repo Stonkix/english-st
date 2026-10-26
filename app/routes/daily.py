@@ -1,6 +1,6 @@
 """Ученик: главная с заданием на сегодня, плеер задания и экран результата."""
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DbSession
@@ -18,11 +18,13 @@ from app.daily import (
     settings_for,
     start_or_resume,
     submit_answer,
+    todays_source,
     todays_status,
 )
+from app import pets, stamps
 from app.db import get_db
-from app.models import Attempt, User
-from app.params import MAX_ID, Id
+from app.models import Attempt, StampTransaction, User
+from app.params import MAX_ID, Id, form_int
 from app.questions import public_view
 from app.templating import templates
 from app.timeutil import moscow_today
@@ -60,7 +62,17 @@ def _own_attempt(db: DbSession, student: User, attempt_id: int) -> Attempt | Non
 def _home_page(request: Request, db: DbSession, user: User, notice: str | None = None):
     status = todays_status(db, user)
     left = max(0, status["max_attempts"] - status["attempts_used"])
-    context = {"user": user, "status": status, "left": left, "notice": notice}
+    rewards = []
+    if status["state"] != "none" and user.group_id:
+        source = todays_source(db, user, moscow_today())
+        rewards = stamps.rewards_for(db, user.group_id, source.test_id if source and source.source == "test" else None)
+    context = {
+        "user": user, "status": status, "left": left, "notice": notice, "balances": stamps.balances(db, user.id),
+        "penalties": stamps.recent_penalties(db, user.id),
+        "rewards": [r for r in rewards if r.stamp_type.is_active],
+        "pet_todo": [p for p in pets.statuses(db, user.id) if not p.done],  # заодно проверяет, не убежал ли кто
+        "pets_gone": pets.runaways(db, user.id, moscow_today()),
+    }
     return templates.TemplateResponse(request, "student/home.html", context)
 
 
@@ -141,5 +153,46 @@ def result(attempt_id: Id, request: Request, user: User = Depends(student_only),
         return RedirectResponse("/daily/play", status_code=303)
     status = todays_status(db, user)
     can_retry = attempt.date == moscow_today() and status["state"] == "done" and status["attempts_used"] < status["max_attempts"]
-    context = {"attempt": attempt, "streak": status["streak"], "can_retry": can_retry}
+    awarded = stamps.awarded_for(db, attempt.id)
+    context = {"attempt": attempt, "streak": status["streak"], "can_retry": can_retry, "awarded": awarded}
     return templates.TemplateResponse(request, "student/result.html", context)
+
+
+def _stamps_page(request: Request, db: DbSession, user: User, got=None, error: str | None = None):
+    balances = stamps.balances(db, user.id)
+    context = {
+        "user": user,
+        "balances": balances,
+        "have": {b.stamp_type.id: b.amount for b in balances},
+        "rules": stamps.exchange_rules(db),
+        "collection": stamps.collection(db, user.id),
+        "rows": stamps.history(db, user.id, limit=100),
+        "describe": stamps.describe,
+        "got": got,
+        "error": error,
+    }
+    return templates.TemplateResponse(request, "student/stamps.html", context, status_code=400 if error else 200)
+
+
+@router.get("/stamps")
+def my_stamps(request: Request, got: int | None = None, user: User = Depends(student_only), db: DbSession = Depends(get_db)):
+    """got — id начисления после обмена: показать, какая рисовка выпала (только своё)."""
+    tx = db.get(StampTransaction, got) if got and 0 < got <= MAX_ID else None
+    if tx is not None and (tx.student_id != user.id or tx.amount <= 0):
+        tx = None
+    return _stamps_page(request, db, user, got=tx)
+
+
+@router.post("/stamps/exchange")
+def exchange(
+    request: Request,
+    rule_id: str = Form(""),
+    times: str = Form("1"),
+    user: User = Depends(student_only),
+    db: DbSession = Depends(get_db),
+):
+    try:
+        tx = stamps.exchange(db, user, form_int(rule_id, 1) or 0, form_int(times, 1, stamps.EXCHANGE_TIMES_MAX) or 0)
+    except stamps.StampError as exc:
+        return _stamps_page(request, db, user, error=str(exc))
+    return RedirectResponse(f"/stamps?got={tx.id}", status_code=303)

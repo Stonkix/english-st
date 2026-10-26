@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% from "partials/stamps.html" import chip %}
+{% block title %}Штампики — English ST{% endblock %}
+
+{# Форма вида: новый (key="new") или существующий (key=id) #}
+{% macro type_form(key, action, v, errs, existing) %}
+<form method="post" action="{{ action }}" data-once>
+  {% if errs %}<div class="alert-error" role="alert">{% for e in errs %}<p>{{ e }}</p>{% endfor %}</div>{% endif %}
+  <div class="field">
+    <label for="name-{{ key }}">Название</label>
+    <input id="name-{{ key }}" name="name" value="{{ v.name }}" maxlength="30" autocomplete="off" required>
+  </div>
+  <div class="field">
+    <span class="field-label">Значок вида (в балансах и ценах)</span>
+    <div class="icon-pick">
+      {% for k, label in icons.items() %}
+      <label class="icon-pick-item"><input type="radio" name="icon" value="{{ k }}"{% if v.icon == k %} checked{% endif %} required><img src="/static/stamps/{{ k }}.svg" alt="{{ label }}" width="36" height="36"></label>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="field">
+    <label for="color-{{ key }}">Цвет</label>
+    <select id="color-{{ key }}" name="color">
+      {% for k, c in colors.items() %}<option value="{{ k }}"{% if v.color == k %} selected{% endif %}>{{ c[0] }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="order-{{ key }}">Порядок (меньше — левее)</label>
+    <input id="order-{{ key }}" name="sort_order" type="number" inputmode="numeric" value="{{ v.sort_order }}" required>
+  </div>
+  {% if existing %}
+  <div class="field">
+    <label class="pick"><input type="checkbox" name="is_active" value="1"{% if v.is_active %} checked{% endif %}> Включён (выключенный не выдаётся и не начисляется; заработанное остаётся)</label>
+    <label class="pick"><input type="checkbox" name="craftable" value="1"{% if v.craftable %} checked{% endif %}> Можно получить обменом (у легендарного — выключено: его только выдают)</label>
+  </div>
+  {% endif %}
+  <button class="btn btn-primary btn-block" type="submit">{% if existing %}Сохранить{% else %}Добавить вид{% endif %}</button>
+</form>
+{% endmacro %}
+
+{% block content %}
+<section class="page teacher-page">
+  <a class="back-link" href="/school">← Школа</a>
+  <h1>Штампики</h1>
+  <p class="muted">Каждый вид — отдельная «валюта» со своим балансом. У вида может быть несколько рисовок: каждый полученный штампик выпадает со случайной рисовкой, ученики собирают их в коллекцию. Удалить вид нельзя, только выключить.</p>
+
+  {% for t in types %}
+  {% set v = values.get(t.id) or {"name": t.name, "icon": t.icon, "color": t.color, "sort_order": t.sort_order, "is_active": t.is_active, "craftable": t.craftable} %}
+  <div class="card" id="type-{{ t.id }}">
+    <h2>{{ chip(t, t.name) }}{% if not t.is_active %} <span class="badge">выключен</span>{% endif %}</h2>
+
+    <h3>Рисовки</h3>
+    {% set verrs = errors.get("v" ~ t.id) %}
+    {% if verrs %}<div class="alert-error" role="alert">{% for e in verrs %}<p>{{ e }}</p>{% endfor %}</div>{% endif %}
+    {% if t.variants %}
+    <ul class="variant-grid">
+      {% for var in t.variants %}
+      <li class="variant-item{% if not var.is_active %} is-hidden-item{% endif %}">
+        <img src="{{ var|variant_url }}" alt="{{ var.name or 'Рисовка' }}" width="72" height="72">
+        {% if var.name %}<small>{{ var.name }}</small>{% endif %}
+        <form method="post" action="/school/stamps/variants/{{ var.id }}/toggle">
+          <button class="btn btn-secondary mini-btn shop-toggle" type="submit">{% if var.is_active %}Скрыть{% else %}Вернуть{% endif %}</button>
+        </form>
+        {% if var.id not in dropped %}
+        <form method="post" action="/school/stamps/variants/{{ var.id }}/delete" data-confirm="Удалить рисовку?">
+          <button class="btn btn-secondary mini-btn" type="submit" aria-label="Удалить рисовку">×</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Рисовок нет — показывается значок вида.</p>
+    {% endif %}
+    <details>
+      <summary>Добавить рисовку</summary>
+      <form method="post" action="/school/stamps/{{ t.id }}/variants" enctype="multipart/form-data" data-once>
+        <div class="field">
+          <label for="art-{{ t.id }}">Картинка (PNG с прозрачным фоном, до 10 МБ)</label>
+          <input id="art-{{ t.id }}" name="image" type="file" accept="image/*">
+        </div>
+        <div class="field">
+          <span class="field-label">…или встроенная</span>
+          <div class="icon-pick">
+            {% for k, label in icons.items() %}
+            <label class="icon-pick-item"><input type="radio" name="icon" value="{{ k }}"><img src="/static/stamps/{{ k }}.svg" alt="{{ label }}" width="36" height="36"></label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="field">
+          <label for="vname-{{ t.id }}">Подпись (необязательно)</label>
+          <input id="vname-{{ t.id }}" name="name" maxlength="30" autocomplete="off">
+        </div>
+        <button class="btn btn-primary btn-block" type="submit">Добавить рисовку</button>
+      </form>
+    </details>
+
+    <details>
+      <summary>Настройки вида</summary>
+      {{ type_form(t.id, "/school/stamps/" ~ t.id, v, errors.get(t.id), t) }}
+    </details>
+  </div>
+  {% endfor %}
+
+  <div class="card" id="rules">
+    <h2>Обмен</h2>
+    <p class="muted">Ученик меняет штампики сам на странице «Мои штампики». В вид, который нельзя получить обменом (легендарный), правило не завести.</p>
+    {% if rules %}
+    <ul class="list">
+      {% for r in rules %}
+      <li class="item-row{% if not r.is_active %} is-hidden-item{% endif %}">
+        <span class="item-row-main exchange-formula">{{ chip(r.from_type, r.from_amount) }} <span class="exchange-arrow" aria-hidden="true">→</span> {{ chip(r.to_type, r.to_amount) }}</span>
+        <form method="post" action="/school/stamp-rules/{{ r.id }}/toggle">
+          <button class="btn btn-secondary mini-btn shop-toggle" type="submit">{% if r.is_active %}Выкл.{% else %}Вкл.{% endif %}</button>
+        </form>
+        <form method="post" action="/school/stamp-rules/{{ r.id }}/delete" data-confirm="Удалить правило обмена?">
+          <button class="btn btn-secondary mini-btn" type="submit" aria-label="Удалить правило">×</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% set rv = values.get("rule") or {"from_type_id": "", "from_amount": "10", "to_type_id": "", "to_amount": "1"} %}
+    {% if errors.get("rule") %}<div class="alert-error" role="alert">{% for e in errors.get("rule") %}<p>{{ e }}</p>{% endfor %}</div>{% endif %}
+    <form class="rule-form" method="post" action="/school/stamp-rules" data-once>
+      <div class="field">
+        <label for="rule-from-amount">Отдать</label>
+        <input id="rule-from-amount" name="from_amount" type="number" inputmode="numeric" min="1" max="1000" value="{{ rv.from_amount }}" required>
+        <select name="from_type_id" aria-label="Какой вид отдать">
+          {% for t in types %}<option value="{{ t.id }}"{% if rv.from_type_id|string == t.id|string %} selected{% endif %}>{{ t.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="rule-to-amount">Получить</label>
+        <input id="rule-to-amount" name="to_amount" type="number" inputmode="numeric" min="1" max="1000" value="{{ rv.to_amount }}" required>
+        <select name="to_type_id" aria-label="Какой вид получить">
+          {% for t in types %}<option value="{{ t.id }}"{% if rv.to_type_id|string == t.id|string %} selected{% endif %}{% if not t.craftable %} disabled{% endif %}>{{ t.name }}{% if not t.craftable %} (только выдать){% endif %}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary btn-block" type="submit">Добавить правило</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Новый вид</h2>
+    {{ type_form("new", "/school/stamps", values.get("new") or {"name": "", "icon": "star", "color": "yellow", "sort_order": types|length + 1}, errors.get("new"), none) }}
+  </div>
+</section>
+{% endblock %}
