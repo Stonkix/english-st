@@ -11,7 +11,7 @@ from app.auth.deps import require_role
 from app.db import SessionLocal, get_db
 from app.images import InvalidImage, delete_media, read_limited, save_shop_image
 from app.models import Order, ShopItem, User
-from app.params import Id
+from app.params import Id, form_int
 from app.routes.teacher import own_group
 from app.templating import templates
 
@@ -106,10 +106,8 @@ def _items_page(request: Request, db: DbSession, user: User, group, **context):
 
 
 def _int(value: str) -> int:
-    try:
-        return int(value.strip())
-    except ValueError:
-        return 0
+    """Число из формы; неверное или вне диапазона БД — 0 (проверки позиции его отклонят)."""
+    return form_int(value) or 0
 
 
 def _read_image(image: UploadFile | None) -> bytes | None:

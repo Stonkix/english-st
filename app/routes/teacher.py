@@ -35,7 +35,7 @@ from app.db import get_db
 from app.images import InvalidImage
 from app.logins import is_valid_login, normalize_login, suggest_login, unique_login
 from app.models import Group, User
-from app.params import MAX_ID, Id
+from app.params import MAX_ID, Id, form_int
 from app.results import done_today, group_students
 from app.templating import templates
 from app.timeutil import moscow_today
@@ -388,13 +388,10 @@ def give_stamps(
 ):
     """Выдать (action=give) или списать (action=take) штампики ученику своей группы."""
     student = own_student(db, user, student_id)
+    count = form_int(amount, 1, stamps.AMOUNT_MAX) or 0
+    type_id = form_int(stamp_type_id, 1) or 0
     try:
-        count = int(amount.strip())
-        type_id = int(stamp_type_id)
-    except ValueError:
-        count, type_id = 0, 0
-    try:
-        stamps.give(db, user, student, type_id, -abs(count) if action == "take" else abs(count), comment)
+        stamps.give(db, user, student, type_id, -count if action == "take" else count, comment)
     except stamps.StampError as exc:
         values = {"stamp_type_id": stamp_type_id, "amount": amount, "comment": comment}
         return _student_page(request, db, user, student, stamp_error=str(exc), stamp_values=values)

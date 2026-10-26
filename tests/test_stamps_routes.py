@@ -93,3 +93,16 @@ def test_stamp_types_admin_only(client, db):
     make_user(db, role="teacher", login="teach")
     login_as(client, "teach")
     assert client.get("/school/stamps").status_code == 403
+
+
+def test_huge_ids_in_forms_are_rejected_not_500(client, db):
+    _types(db)
+    t = make_user(db, role="teacher", login="teach")
+    g = make_group(db, t)
+    kid = make_user(db, login="kid", group=g)
+    login_as(client, "teach")
+    big = str(10**30)
+    assert "Выберите вид" in client.post(f"/teacher/students/{kid.id}/stamps", data={"stamp_type_id": big, "amount": "1"}).text
+    assert "Награда: выберите вид" in client.post(f"/tasks/groups/{g.id}/rewards", data={"stamp_type_id": big, "amount": "1"}).text
+    r = client.post(f"/shop/groups/{g.id}/items", data={"title": "x", "price_type_id": big, "price_amount": big})
+    assert r.status_code == 400 and "Выберите вид штампиков для цены" in r.text

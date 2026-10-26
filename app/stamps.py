@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
 from app.models import Attempt, DailyReward, StampTransaction, StampType, User
+from app.params import MAX_ID
 
 # Иконки — Fluent Emoji (Flat), MIT: app/static/stamps
 ICONS = {
@@ -100,7 +101,7 @@ def history(db: DbSession, student_id: int, limit: int = 50) -> list[StampTransa
 
 def give(db: DbSession, actor: User, student: User, stamp_type_id: int, amount: int, comment: str = "") -> StampTransaction:
     """Ручная выдача (amount > 0) или списание (amount < 0). Списать больше, чем есть, нельзя."""
-    stamp_type = db.get(StampType, stamp_type_id)
+    stamp_type = db.get(StampType, stamp_type_id) if 0 < stamp_type_id <= MAX_ID else None
     if stamp_type is None or not stamp_type.is_active:
         raise StampError("Выберите вид штампиков")
     if amount == 0 or abs(amount) > AMOUNT_MAX:

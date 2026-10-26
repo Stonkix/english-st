@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
 from app.models import Group, Order, ShopItem, StampTransaction, StampType, User
+from app.params import MAX_ID
 from app.stamps import BALANCE_LOCK, balance_of
 from app.timeutil import utcnow
 
@@ -36,7 +37,7 @@ def item_errors(db: DbSession, title: str, description: str, price_type_id: int,
         errors.append(f"Название — от 1 до {TITLE_MAX} символов")
     if len(description) > DESCRIPTION_MAX:
         errors.append(f"Описание — не длиннее {DESCRIPTION_MAX} символов")
-    price_type = db.get(StampType, price_type_id) if price_type_id > 0 else None
+    price_type = db.get(StampType, price_type_id) if 0 < price_type_id <= MAX_ID else None
     if price_type is None or not price_type.is_active:
         errors.append("Выберите вид штампиков для цены")
     if not 1 <= price_amount <= PRICE_MAX:

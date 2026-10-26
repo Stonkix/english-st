@@ -18,7 +18,7 @@ from app.models import (
     Assignment, AttemptAnswer, DailyReward, Group, GroupPool, Pool, Question, StampType, Test, TestQuestion, User,
 )
 from app.models.tasks import LEVELS, QUESTION_TYPES
-from app.params import MAX_ID, Id
+from app.params import MAX_ID, Id, form_int
 from app.questions import PayloadError, picture_paths, validate_payload
 from app.results import day_rows, group_students, history, parse_day
 from app.routes.teacher import own_group, own_student, teacher_only
@@ -855,12 +855,11 @@ def add_reward(
     db: DbSession = Depends(get_db),
 ):
     group = own_group(db, user, group_id)
-    try:
-        type_id, count, percent = int(stamp_type_id), int(amount), int(min_score_percent or 0)
-    except ValueError:
-        type_id = count = percent = -1
-    stamp_type = db.get(StampType, type_id) if type_id > 0 else None
-    if stamp_type is None or not stamp_type.is_active or not 1 <= count <= stamps.REWARD_MAX or not 0 <= percent <= 100:
+    type_id = form_int(stamp_type_id, 1)
+    count = form_int(amount, 1, stamps.REWARD_MAX)
+    percent = form_int(min_score_percent or "0", 0, 100)
+    stamp_type = db.get(StampType, type_id) if type_id else None
+    if stamp_type is None or not stamp_type.is_active or count is None or percent is None:
         values = {"stamp_type_id": stamp_type_id, "amount": amount, "min_score_percent": min_score_percent}
         return _group_tasks_page(request, db, user, group, reward_error=REWARD_INVALID, reward_values=values)
     db.add(DailyReward(group_id=group.id, stamp_type_id=stamp_type.id, amount=count, min_score_percent=percent))
