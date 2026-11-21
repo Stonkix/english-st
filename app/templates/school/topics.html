@@ -1,40 +1,40 @@
 {% extends "base.html" %}
-{% block title %}Темы вопросов — English ST{% endblock %}
+{% block title %}Question topics — English ST{% endblock %}
 
 {% block content %}
 <section class="page teacher-page">
-  <a class="back-link" href="/school">← Школа</a>
-  <h1>Темы вопросов</h1>
-  <p class="muted">Учитель задаёт тему пулу вопросов, а в «Заданиях группы» — сколько вопросов каждой темы брать в задание дня. Удалённая тема снимается с пулов («без темы»).</p>
+  <a class="back-link" href="/school">← School</a>
+  <h1>Question topics</h1>
+  <p class="muted">Assign topics to question pools and set daily question counts by topic under Group assignments. Deleting a topic removes it from its pools.</p>
 
   {% for t in topics %}
   <div class="card">
     {% if error and error_for == t.id|string %}<div class="alert-error" role="alert"><p>{{ error }}</p></div>{% endif %}
     <form class="topic-row" method="post" action="/school/topics/{{ t.id }}" data-once>
       <div class="field">
-        <label for="topic-name-{{ t.id }}">Название <small class="muted">— пулов: {{ used.get(t.id, 0) }}</small></label>
+        <label for="topic-name-{{ t.id }}">Title <small class="muted">· Pools: {{ used.get(t.id, 0) }}</small></label>
         <input id="topic-name-{{ t.id }}" name="name" value="{{ t.name }}" maxlength="40" autocomplete="off" required>
       </div>
       <div class="field">
-        <label for="topic-order-{{ t.id }}">Порядок</label>
+        <label for="topic-order-{{ t.id }}">Display order</label>
         <input id="topic-order-{{ t.id }}" name="sort_order" type="number" inputmode="numeric" value="{{ t.sort_order }}" required>
       </div>
-      <button class="btn btn-primary" type="submit">Сохранить</button>
+      <button class="btn btn-primary" type="submit">Save</button>
     </form>
-    <form method="post" action="/school/topics/{{ t.id }}/delete" data-confirm="Удалить тему «{{ t.name }}»? Пулы с ней станут «без темы».">
-      <button class="btn btn-secondary btn-block" type="submit">Удалить тему</button>
+    <form method="post" action="/school/topics/{{ t.id }}/delete" data-confirm="Delete “{{ t.name }}”? Its pools will have no topic.">
+      <button class="btn btn-secondary btn-block" type="submit">Delete topic</button>
     </form>
   </div>
   {% endfor %}
 
   <form class="card" method="post" action="/school/topics" data-once>
-    <h2>Новая тема</h2>
+    <h2>New topic</h2>
     {% if error and error_for == "new" %}<div class="alert-error" role="alert"><p>{{ error }}</p></div>{% endif %}
     <div class="field">
-      <label for="topic-new">Название</label>
-      <input id="topic-new" name="name" maxlength="40" autocomplete="off" required placeholder="Например: Времена глаголов">
+      <label for="topic-new">Title</label>
+      <input id="topic-new" name="name" maxlength="40" autocomplete="off" required placeholder="For example: Verb tenses">
     </div>
-    <button class="btn btn-primary btn-block" type="submit">Добавить тему</button>
+    <button class="btn btn-primary btn-block" type="submit">Add topic</button>
   </form>
 </section>
 {% endblock %}

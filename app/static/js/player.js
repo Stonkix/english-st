@@ -77,7 +77,7 @@
       if (withImages) {
         const img = el("img");
         img.src = option.image_url;
-        img.alt = option.caption || `Картинка ${i + 1}`;
+        img.alt = option.caption || `Image ${i + 1}`;
         img.loading = "lazy";
         b.append(img);
         if (option.caption) b.append(el("span", "option-caption", option.caption));
@@ -105,11 +105,11 @@
 
   function textInput(q, body) {
     const input = el("input", "answer-input");
-    Object.assign(input, { type: "text", maxLength: 200, autocomplete: "off", spellcheck: false, placeholder: "Напиши ответ" });
+    Object.assign(input, { type: "text", maxLength: 200, autocomplete: "off", spellcheck: false, placeholder: "Type your answer" });
     input.setAttribute("autocapitalize", "off");
     input.setAttribute("autocorrect", "off");
     input.setAttribute("enterkeyhint", "done");
-    input.setAttribute("aria-label", "Ответ");
+    input.setAttribute("aria-label", "Answer");
     input.addEventListener("input", refreshCheck);
     input.addEventListener("keydown", (event) => {
       if (event.key !== "Enter") return;
@@ -128,7 +128,7 @@
 
   function wordBank(q, body) {
     const line = el("div", "wb-line");
-    line.setAttribute("aria-label", "Твой ответ");
+    line.setAttribute("aria-label", "Your answer");
     const bank = el("div", "wb-bank");
     q.tiles.forEach((tile) => {
       const slot = el("span", "wb-slot");
@@ -229,7 +229,7 @@
       if (byId.left.has(l) && byId.right.has(r)) markMatched(byId.left.get(l), byId.right.get(r));
     });
     if (matched === q.left.length) setTimeout(check, 0); // всё было собрано, а ответ не ушёл (обрыв связи)
-    body.append(el("p", "muted q-hint", "Нажми на слово слева, потом на его пару справа"), grid);
+    body.append(el("p", "muted q-hint", "Tap an item on the left, then its match on the right"), grid);
     getAnswer = () => (matched === q.left.length ? {} : null);
     return () => {};
   }
@@ -291,20 +291,20 @@
     markAnswer(res.correct);
     setProgress(res.next_index);
     if (res.correct && !res.typo) {
-      sheetTitle.textContent = "Отлично!";
+      sheetTitle.textContent = "Great job!";
       sheetText.textContent = "";
     } else if (res.correct) {
-      sheetTitle.textContent = "Почти!";
-      sheetText.textContent = `Правильно пишется: ${res.correct_answer}`;
+      sheetTitle.textContent = "Almost!";
+      sheetText.textContent = `Correct spelling: ${res.correct_answer}`;
     } else {
-      sheetTitle.textContent = "Не совсем так";
-      sheetText.textContent = `Правильный ответ: ${res.correct_answer}`;
+      sheetTitle.textContent = "Not quite";
+      sheetText.textContent = `Correct answer: ${res.correct_answer}`;
       shake(stage);
     }
     sheetText.hidden = sheetText.textContent === "";
     sheet.classList.add(res.correct ? "is-good" : "is-bad");
     nextBtn.className = `btn btn-block btn-big ${res.correct ? "btn-primary" : "btn-danger"}`;
-    nextBtn.textContent = res.finished ? "К результату" : "Дальше";
+    nextBtn.textContent = res.finished ? "See results" : "Next";
     sheet.hidden = false;
     requestAnimationFrame(() => requestAnimationFrame(() => sheet.classList.add("is-open")));
     nextBtn.focus({ preventScroll: true });

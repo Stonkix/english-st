@@ -44,8 +44,8 @@ router = APIRouter(prefix="/teacher")
 teacher_only = require_role("teacher")  # админ проходит тоже
 
 GROUP_NAME_MAX = 50
-GROUP_NAME_REQUIRED = "Введите название группы"
-GROUP_NAME_TOO_LONG = f"Название группы — не длиннее {GROUP_NAME_MAX} символов"
+GROUP_NAME_REQUIRED = "Enter a group name"
+GROUP_NAME_TOO_LONG = f"The group name must be at most {GROUP_NAME_MAX} characters"
 
 
 # ---------- доступ ----------
@@ -380,7 +380,7 @@ def lock_student_avatar(
     if period == "":
         return _to_student(student)  # «Оставить как есть»: действующий запрет не трогаем
     if period != "off" and period not in LOCK_PERIODS:
-        raise HTTPException(422, "Неизвестный срок")
+        raise HTTPException(422, "Unknown restriction duration")
     set_avatar_lock(db, student, period)
     return _to_student(student)
 

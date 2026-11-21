@@ -19,9 +19,9 @@ router = APIRouter()
 student_only = require_role("student")
 
 OK_MESSAGES = {
-    "new": "Ура, у тебя новый питомец! Не забывай кормить его 2 раза в день и убирать за ним.",
-    "fed": "Ням! Питомец поел.",
-    "cleaned": "Чисто! Питомец доволен.",
+    "new": "You have a new pet! Feed it twice a day and clean up after it once a day.",
+    "fed": "Yum! Your pet has been fed.",
+    "cleaned": "All clean! Your pet is happy.",
 }
 
 

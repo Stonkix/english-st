@@ -174,15 +174,15 @@ def filter_save(
     bad, exc, rep = _words(bad_words), _words(exceptions), _words(replacements)
     errors = []
     if any(len(w) > FILTER_WORD_MAX for w in bad + exc + rep):
-        errors.append(f"Каждое слово — не длиннее {FILTER_WORD_MAX} символов")
+        errors.append(f"Each entry must be at most {FILTER_WORD_MAX} characters")
     if max(len(bad), len(exc), len(rep)) > FILTER_LIST_MAX:
-        errors.append(f"В каждом списке — не больше {FILTER_LIST_MAX} слов")
+        errors.append(f"Each list can contain up to {FILTER_LIST_MAX} entries")
     if not rep:
-        errors.append("Нужно хотя бы одно слово-замена")
+        errors.append("Enter at least one replacement word")
     flt = compile_filter(bad, exc, rep)
     rude = [w for w in rep if contains_profanity(w, flt)]
     if rude:
-        errors.append("Слова-замены сами попадают под фильтр: " + ", ".join(rude))
+        errors.append("These replacement words are flagged by the filter: " + ", ".join(rude))
     if errors:
         return _filter_page(request, db, user, values=values, errors=errors)
     db.execute(delete(BadWord))
@@ -210,13 +210,13 @@ def _stamps_page(request: Request, db: DbSession, user: User, errors: dict | Non
 def _stamp_errors(db: DbSession, name: str, icon: str, color: str, sort_order: str, own_id: int | None) -> list[str]:
     errors = []
     if not name or len(name) > stamps.NAME_MAX:
-        errors.append(f"Название — от 1 до {stamps.NAME_MAX} символов")
+        errors.append(f"Enter a name of 1–{stamps.NAME_MAX} characters")
     elif db.scalar(select(StampType.id).where(StampType.name == name, StampType.id != (own_id or 0))) is not None:
-        errors.append("Такое название уже есть")
+        errors.append("This name is already in use")
     if icon not in stamps.ICONS or color not in stamps.COLORS:
-        errors.append("Выберите картинку и цвет")
+        errors.append("Choose an icon and a color")
     if not sort_order.strip().lstrip("-").isdigit() or abs(int(sort_order)) > 1000:
-        errors.append("Порядок — число от -1000 до 1000")
+        errors.append("Enter a display order from -1000 to 1000")
     return errors
 
 
@@ -305,9 +305,9 @@ def add_variant(
         if image is not None and image.filename:
             rel = save_stamp_art(read_limited(image.file))
     except InvalidImage:
-        return _stamps_page(request, db, user, errors={f"v{type_id}": ["Картинка не подошла: это не изображение или файл больше 10 МБ"]})
+        return _stamps_page(request, db, user, errors={f"v{type_id}": ["Upload a valid image of up to 10 MB"]})
     if rel is None and icon not in stamps.ICONS:
-        return _stamps_page(request, db, user, errors={f"v{type_id}": ["Загрузите картинку или выберите встроенную"]})
+        return _stamps_page(request, db, user, errors={f"v{type_id}": ["Upload an image or choose a built-in design"]})
     order = max((v.sort_order for v in stamp_type.variants), default=0) + 1
     db.add(StampVariant(stamp_type_id=stamp_type.id, name=name, icon=None if rel else icon, image=rel, sort_order=order))
     db.commit()
@@ -335,7 +335,7 @@ def delete_variant(variant_id: Id, request: Request, user: User = Depends(admin_
     """Удалить можно только рисовку, которая ещё никому не выпадала (иначе пропала бы из коллекций)."""
     variant = _variant_or_404(db, variant_id)
     if db.scalar(select(StampTransaction.id).where(StampTransaction.variant_id == variant.id).limit(1)) is not None:
-        return _stamps_page(request, db, user, errors={f"v{variant.stamp_type_id}": ["Эта рисовка уже у учеников — её можно только скрыть"]})
+        return _stamps_page(request, db, user, errors={f"v{variant.stamp_type_id}": ["Hide designs that students have already collected."]})
     type_id, image = variant.stamp_type_id, variant.image
     db.delete(variant)
     db.commit()
@@ -403,11 +403,11 @@ def _topics_page(request: Request, db: DbSession, user: User, error: str | None 
 
 def _topic_error(db: DbSession, name: str, own_id: int | None) -> str | None:
     if not name or len(name) > TOPIC_NAME_MAX:
-        return f"Название темы — от 1 до {TOPIC_NAME_MAX} символов"
+        return f"Enter a topic name of 1–{TOPIC_NAME_MAX} characters"
     # сравниваем в Python: lower() в SQLite не знает кириллицу
     taken = db.scalars(select(Topic.name).where(Topic.id != (own_id or 0)))
     if name.casefold() in {n.casefold() for n in taken}:
-        return "Такая тема уже есть"
+        return "This topic already exists"
     return None
 
 
@@ -444,7 +444,7 @@ def edit_topic(
     error = _topic_error(db, name, topic.id)
     order = form_int(sort_order, -1000, 1000)
     if error or order is None:
-        return _topics_page(request, db, user, error or "Порядок — число от -1000 до 1000", str(topic.id))
+        return _topics_page(request, db, user, error or "Enter a display order from -1000 to 1000", str(topic.id))
     topic.name, topic.sort_order = name, order
     db.commit()
     return RedirectResponse("/school/topics", status_code=303)
@@ -494,15 +494,15 @@ async def save_pets_settings(request: Request, user: User = Depends(admin_only),
         "runaway_days": form_int(get("runaway_days"), 1, 30),
     }
     if currency is None or not currency.is_active:
-        return _pets_page(request, db, user, "Выберите вид штампиков для цен")
+        return _pets_page(request, db, user, "Choose the stamp type to use as currency")
     if None in values.values():
-        return _pets_page(request, db, user, "Проверьте числа: цена пачки 1–1000, порций в пачке 1–100, запас 1–1000, дней 1–30")
+        return _pets_page(request, db, user, "Use these ranges: pack price 1–1000, portions per pack 1–100, stock limit 1–1000, days without care 1–30")
     if values["food_max"] < values["food_pack_size"]:
-        return _pets_page(request, db, user, "Запас корма должен вмещать хотя бы одну пачку")
+        return _pets_page(request, db, user, "The food stock limit must fit at least one pack")
     species = pets.species_list(db, active_only=False)
     prices = {sp.id: form_int(get(f"price_{sp.id}"), 1, 10000) for sp in species}
     if None in prices.values():
-        return _pets_page(request, db, user, "Цена питомца — от 1 до 10000")
+        return _pets_page(request, db, user, "Enter a pet price from 1 to 10,000")
     cfg.price_type_id = currency.id
     for key, value in values.items():
         setattr(cfg, key, value)

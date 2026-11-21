@@ -80,7 +80,7 @@ def test_invalid_login_is_rejected_with_message(client, db):
     admin(client, db)
     kid = make_user(db, login="kid1")
     r = client.post(f"/admin/user/edit/{kid.id}", data=user_form(kid, login="Кид!"))
-    assert r.status_code == 400 and "Логин" in r.text
+    assert r.status_code == 400 and "username" in r.text
     db.expire_all()
     assert db.get(User, kid.id).login == "kid1"
 
@@ -90,7 +90,7 @@ def test_taken_login_is_rejected_with_message(client, db):
     make_user(db, login="taken")
     kid = make_user(db, login="kid1")
     r = client.post(f"/admin/user/edit/{kid.id}", data=user_form(kid, login="TAKEN"))
-    assert r.status_code == 400 and "занят" in r.text
+    assert r.status_code == 400 and "already taken" in r.text
     db.expire_all()
     assert db.get(User, kid.id).login == "kid1"
 

@@ -4,11 +4,11 @@
 {# Строки списков: JS (editor.js) добавляет и убирает их, перенумеровывает радиокнопки и имена файлов.
    Без JS форма остаётся рабочей с теми строками, что нарисовал сервер. #}
 {% macro remove_btn() -%}
-<button type="button" class="btn btn-secondary row-remove" data-row-remove aria-label="Убрать строку" hidden>×</button>
+<button type="button" class="btn btn-secondary row-remove" data-row-remove aria-label="Remove row" hidden>×</button>
 {%- endmacro %}
 
 {% macro radio(i, checked) -%}
-<input class="row-radio" type="radio" name="correct" value="{{ i }}" data-index-value aria-label="Это правильный ответ"{% if checked %} checked{% endif %}>
+<input class="row-radio" type="radio" name="correct" value="{{ i }}" data-index-value aria-label="Mark as correct"{% if checked %} checked{% endif %}>
 {%- endmacro %}
 
 {% macro text_row(name, value, placeholder, maxlength) -%}
@@ -21,7 +21,7 @@
 {% macro option_row(i, value, checked) -%}
 <div class="edit-row" data-row>
   {{ radio(i, checked) }}
-  <input name="options" value="{{ value }}" placeholder="Вариант" maxlength="100" autocomplete="off">
+  <input name="options" value="{{ value }}" placeholder="Option" maxlength="100" autocomplete="off">
   {{ remove_btn() }}
 </div>
 {%- endmacro %}
@@ -32,8 +32,8 @@
   <div class="edit-row-body">
     {% if row.image %}<img class="thumb" data-thumb src="/media/{{ row.image }}" alt="" width="96" height="96">{% endif %}
     <input type="hidden" name="option_images" value="{{ row.image }}">
-    <input type="file" name="option_file_{{ i }}" data-name-prefix="option_file_" accept="image/*" aria-label="Картинка">
-    <input name="captions" value="{{ row.caption }}" placeholder="Подпись (по желанию)" maxlength="50" autocomplete="off">
+    <input type="file" name="option_file_{{ i }}" data-name-prefix="option_file_" accept="image/*" aria-label="Image">
+    <input name="captions" value="{{ row.caption }}" placeholder="Caption (optional)" maxlength="50" autocomplete="off">
   </div>
   {{ remove_btn() }}
 </div>
@@ -41,8 +41,8 @@
 
 {% macro pair_row(pair) -%}
 <div class="edit-row" data-row>
-  <input name="left" value="{{ pair[0] }}" placeholder="Слева" maxlength="60" autocomplete="off">
-  <input name="right" value="{{ pair[1] }}" placeholder="Справа" maxlength="60" autocomplete="off">
+  <input name="left" value="{{ pair[0] }}" placeholder="Left side" maxlength="60" autocomplete="off">
+  <input name="right" value="{{ pair[1] }}" placeholder="Right side" maxlength="60" autocomplete="off">
   {{ remove_btn() }}
 </div>
 {%- endmacro %}
@@ -59,87 +59,87 @@
     {% if errors %}
     <div class="alert-error" role="alert">
       {% for e in errors %}<p>{{ e }}</p>{% endfor %}
-      {% if qtype == "choice_image" %}<p>Если выбирали картинки, выберите их ещё раз.</p>{% endif %}
+      {% if qtype == "choice_image" %}<p>Select any image files you chose again.</p>{% endif %}
     </div>
     {% endif %}
     <input type="hidden" name="type" value="{{ qtype }}">
 
     <div class="field">
-      <label for="prompt">Текст вопроса</label>
+      <label for="prompt">Question text</label>
       <textarea id="prompt" name="prompt" rows="2" maxlength="300" required>{{ values.prompt }}</textarea>
     </div>
 
     {% if qtype == "choice_text" %}
     <div class="field">
-      <label>Варианты <small class="muted">(кружок — правильный)</small></label>
+      <label>Answer choices <small class="muted">(select the correct answer)</small></label>
       <div class="rows" data-rows data-min="2" data-max="6">
         {% for o in values.options %}{{ option_row(loop.index0, o, values.correct == loop.index0) }}{% endfor %}
         <template data-row-template>{{ option_row(0, "", false) }}</template>
-        {{ add_btn("+ Вариант") }}
+        {{ add_btn("+ Option") }}
       </div>
     </div>
 
     {% elif qtype == "choice_image" %}
     <div class="field">
-      <label>Картинки <small class="muted">(кружок — правильная)</small></label>
+      <label>Images <small class="muted">(select the correct image)</small></label>
       <div class="rows" data-rows data-min="2" data-max="4">
         {% for r in values.rows %}{{ image_row(loop.index0, r, values.correct == loop.index0) }}{% endfor %}
         <template data-row-template>{{ image_row(0, {"image": "", "caption": ""}, false) }}</template>
-        {{ add_btn("+ Картинка") }}
+        {{ add_btn("+ Image") }}
       </div>
     </div>
 
     {% elif qtype == "text_input" %}
     <div class="field">
-      <label>Правильные ответы <small class="muted">(первый показываем ученику, если он ошибся)</small></label>
+      <label>Accepted answers <small class="muted">(students see the first answer if they get it wrong)</small></label>
       <div class="rows" data-rows data-min="1" data-max="10">
-        {% for a in values.accepted %}{{ text_row("accepted", a, "Ответ", 200) }}{% endfor %}
-        <template data-row-template>{{ text_row("accepted", "", "Ответ", 200) }}</template>
-        {{ add_btn("+ Ещё ответ") }}
+        {% for a in values.accepted %}{{ text_row("accepted", a, "Answer", 200) }}{% endfor %}
+        <template data-row-template>{{ text_row("accepted", "", "Answer", 200) }}</template>
+        {{ add_btn("+ Answer") }}
       </div>
     </div>
 
     {% elif qtype == "word_bank" %}
     <div class="field">
-      <label for="answer">Правильная фраза <small class="muted">(2–12 слов)</small></label>
+      <label for="answer">Correct phrase <small class="muted">(2–12 words)</small></label>
       <input id="answer" name="answer" value="{{ values.answer }}" maxlength="200" autocomplete="off" required>
     </div>
     <div class="field">
-      <label>Лишние слова <small class="muted">(по желанию, до 6, по одному слову)</small></label>
+      <label>Extra words <small class="muted">(optional, up to 6, one word per field)</small></label>
       <div class="rows" data-rows data-min="0" data-max="6">
-        {% for d in values.distractors %}{{ text_row("distractors", d, "Слово", 50) }}{% endfor %}
-        <template data-row-template>{{ text_row("distractors", "", "Слово", 50) }}</template>
-        {{ add_btn("+ Слово") }}
+        {% for d in values.distractors %}{{ text_row("distractors", d, "Word", 50) }}{% endfor %}
+        <template data-row-template>{{ text_row("distractors", "", "Word", 50) }}</template>
+        {{ add_btn("+ Word") }}
       </div>
     </div>
 
     {% else %}
     <div class="field">
-      <label>Пары <small class="muted">(от 2 до 6)</small></label>
+      <label>Pairs <small class="muted">(2–6 pairs)</small></label>
       <div class="rows" data-rows data-min="2" data-max="6">
         {% for p in values.pairs %}{{ pair_row(p) }}{% endfor %}
         <template data-row-template>{{ pair_row(["", ""]) }}</template>
-        {{ add_btn("+ Пара") }}
+        {{ add_btn("+ Pair") }}
       </div>
     </div>
     {% endif %}
 
     <details class="field"{% if values.image %} open{% endif %}>
-      <summary>Картинка к вопросу (по желанию)</summary>
+      <summary>Question image (optional)</summary>
       {% if values.image %}
       <img class="thumb" data-thumb src="/media/{{ values.image }}" alt="" width="96" height="96">
       <input type="hidden" name="image_keep" value="{{ values.image }}">
-      <label class="check"><input type="checkbox" name="image_remove" value="1"> Убрать картинку</label>
+      <label class="check"><input type="checkbox" name="image_remove" value="1"> Remove image</label>
       {% endif %}
-      <input type="file" name="image" accept="image/*" aria-label="Картинка к вопросу">
+      <input type="file" name="image" accept="image/*" aria-label="Question image">
     </details>
 
-    <button class="btn btn-primary btn-block" type="submit">{% if question %}Сохранить{% else %}Добавить вопрос{% endif %}</button>
+    <button class="btn btn-primary btn-block" type="submit">{% if question %}Save{% else %}Add question{% endif %}</button>
   </form>
 
   {% if question %}
-  <form class="card" method="post" action="/tasks/questions/{{ question.id }}/delete" data-confirm="Удалить вопрос?">
-    <button class="btn btn-danger btn-block" type="submit">Удалить вопрос</button>
+  <form class="card" method="post" action="/tasks/questions/{{ question.id }}/delete" data-confirm="Delete this question?">
+    <button class="btn btn-danger btn-block" type="submit">Delete question</button>
   </form>
   {% endif %}
 </section>

@@ -16,7 +16,7 @@ def test_ui_kit_hidden_in_prod(client, monkeypatch):
 
 def test_404_page(client):
     r = client.get("/no-such-page")
-    assert r.status_code == 404 and "Страница не найдена" in r.text
+    assert r.status_code == 404 and "Page not found" in r.text
 
 
 def test_error_page_shows_code(client):

@@ -1,120 +1,120 @@
 {% extends "base.html" %}
 {% from "partials/stamps.html" import chip, rewards_card %}
-{% block title %}Задания группы — English ST{% endblock %}
+{% block title %}Group assignments — English ST{% endblock %}
 
 {% block content %}
 <section class="page teacher-page">
   <a class="back-link" href="/teacher/groups/{{ group.id }}">← {{ group.name }}</a>
   <div>
-    <h1>Задания группы</h1>
-    <p class="muted">{{ group.name }}{% if user.role == "admin" %} · учитель: {{ group.teacher.full_name }}{% endif %}</p>
+    <h1>Group assignments</h1>
+    <p class="muted">{{ group.name }}{% if user.role == "admin" %} · teacher: {{ group.teacher.full_name }}{% endif %}</p>
   </div>
 
   <form class="card" method="post" action="/tasks/groups/{{ group.id }}/pools" data-once>
-    <h2>Пулы для ежедневного задания</h2>
-    <p class="muted">Если на день не назначен тест, ученики получают вопросы из этих пулов.</p>
+    <h2>Question pools for daily assignments</h2>
+    <p class="muted">On days without an assigned test, students get questions from these pools.</p>
     {% if pools %}
     <div class="field">
       {% for p in pools %}
       <label class="pick"><input type="checkbox" name="pool_ids" value="{{ p.id }}"{% if p.id in connected %} checked{% endif %}> {{ p.title }} <span class="badge badge-blue">{{ p.level }}</span></label>
       {% endfor %}
     </div>
-    <button class="btn btn-primary btn-block" type="submit">Сохранить пулы</button>
+    <button class="btn btn-primary btn-block" type="submit">Save pools</button>
     {% else %}
-    <p class="lead">Пулов пока нет. <a href="/tasks">Создайте пул</a> в разделе «Задания».</p>
+    <p class="lead">No question pools yet. <a href="/tasks">Create a pool</a> in Assignments.</p>
     {% endif %}
   </form>
 
   <form class="card" method="post" action="/tasks/groups/{{ group.id }}/settings" data-once>
-    <h2>Настройки</h2>
+    <h2>Settings</h2>
     {% if settings_errors %}
     <div class="alert-error" role="alert">{% for e in settings_errors %}<p>{{ e }}</p>{% endfor %}</div>
     {% endif %}
     <div class="field">
-      <label for="question-count">Вопросов в день</label>
+      <label for="question-count">Questions per day</label>
       <input id="question-count" name="question_count" type="number" inputmode="numeric" min="1" max="30" value="{{ settings_values.question_count }}" required>
-      {% if quotas %}<small>Сейчас число вопросов задаётся темами ниже ({{ quotas.values()|sum }}).</small>{% endif %}
+      {% if quotas %}<small>The topic settings below currently set the total to {{ quotas.values()|sum }}.</small>{% endif %}
     </div>
     <div class="field">
-      <label for="max-attempts">Попыток в день</label>
+      <label for="max-attempts">Attempts per day</label>
       <input id="max-attempts" name="max_attempts" type="number" inputmode="numeric" min="1" max="10" value="{{ settings_values.max_attempts }}" required>
     </div>
     <div class="field">
-      <label class="pick"><input type="checkbox" name="shuffle_questions" value="1"{% if settings_values.shuffle_questions %} checked{% endif %}> Перемешивать вопросы</label>
-      <label class="pick"><input type="checkbox" name="shuffle_options" value="1"{% if settings_values.shuffle_options %} checked{% endif %}> Перемешивать варианты ответов</label>
+      <label class="pick"><input type="checkbox" name="shuffle_questions" value="1"{% if settings_values.shuffle_questions %} checked{% endif %}> Shuffle questions</label>
+      <label class="pick"><input type="checkbox" name="shuffle_options" value="1"{% if settings_values.shuffle_options %} checked{% endif %}> Shuffle answer choices</label>
     </div>
-    <button class="btn btn-primary btn-block" type="submit">Сохранить настройки</button>
+    <button class="btn btn-primary btn-block" type="submit">Save settings</button>
   </form>
 
   <form class="card" id="topics" method="post" action="/tasks/groups/{{ group.id }}/topics" data-once>
-    <h2>Вопросы по темам</h2>
-    <p class="muted">Сколько вопросов каждой темы брать в задание дня, когда не назначен тест. Если в теме не хватает вопросов, задание добирается из остальных вопросов пулов группы. Все нули — темы не учитываются, берётся «Вопросов в день» из всех пулов. Тема задаётся пулу в разделе «Задания».</p>
+    <h2>Questions by topic</h2>
+    <p class="muted">Set how many questions to draw from each topic on days without an assigned test. The remaining slots are filled from other questions in the group’s pools. Set all topics to zero to use Questions per day for the whole pool. You can set a pool’s topic in Assignments.</p>
     {% if topics_error is defined and topics_error %}<div class="alert-error" role="alert"><p>{{ topics_error }}</p></div>{% endif %}
     {% if topics %}
     {% for t in topics %}
     <div class="field topic-quota">
-      <label for="topic-{{ t.id }}">{{ t.name }} <small class="muted">— в пулах группы {{ topic_available.get(t.id, 0) }}</small></label>
+      <label for="topic-{{ t.id }}">{{ t.name }} <small class="muted">· In the group’s pools: {{ topic_available.get(t.id, 0) }}</small></label>
       <input id="topic-{{ t.id }}" name="topic_{{ t.id }}" type="number" inputmode="numeric" min="0" max="30" value="{{ quotas.get(t.id, 0) }}">
     </div>
     {% endfor %}
-    {% if topic_available.get(none) %}<p class="muted">Без темы: {{ topic_available.get(none) }} — идут на добор.</p>{% endif %}
-    {% if quotas %}<p class="lead">Сейчас в задании {{ quotas.values()|sum }} вопросов.</p>{% endif %}
-    <button class="btn btn-primary btn-block" type="submit">Сохранить темы</button>
+    {% if topic_available.get(none) %}<p class="muted">No topic: {{ topic_available.get(none) }} available to fill remaining slots.</p>{% endif %}
+    {% if quotas %}<p class="lead">Current assignment size: {{ quotas.values()|sum }}.</p>{% endif %}
+    <button class="btn btn-primary btn-block" type="submit">Save topics</button>
     {% else %}
-    <p class="muted">Тем пока нет — их заводит администратор.</p>
+    <p class="muted">An administrator needs to add a topic first.</p>
     {% endif %}
   </form>
 
   {{ rewards_card(rewards, stamp_types, "/tasks/groups/" ~ group.id ~ "/rewards", reward_error, reward_values if reward_values is defined else none,
-     "Штампики за ежедневное задание группы. Если в этот день назначен тест со своими наградами, выдаются награды теста.") }}
+     "These are the group’s daily rewards. An assigned test uses its own rewards when configured.") }}
 
-  <h2>Назначенные тесты</h2>
+  <h2>Assigned tests</h2>
   {% if assignments %}
   <ul class="list">
     {% for a in assignments %}
     <li class="item-row">
       <span class="item-row-main">
-        <strong>{{ a.date.strftime("%d.%m.%Y") }}{% if a.date == today %} · сегодня{% endif %}</strong>
-        <small>{{ titles.get(a.test_id, "Тест") }} · {% if a.student_id %}{% set s = by_id.get(a.student_id) %}{{ s.first_name ~ " " ~ s.last_name if s else "ученик" }}{% else %}вся группа{% endif %}</small>
+        <strong>{{ a.date.isoformat() }}{% if a.date == today %} · today{% endif %}</strong>
+        <small>{{ titles.get(a.test_id, "Test") }} · {% if a.student_id %}{% set s = by_id.get(a.student_id) %}{{ s.first_name ~ " " ~ s.last_name if s else "student" }}{% else %}Entire group{% endif %}</small>
       </span>
-      <form method="post" action="/tasks/groups/{{ group.id }}/assignments/{{ a.id }}/delete" data-confirm="Убрать назначение?">
-        <button class="btn btn-secondary mini-btn" type="submit" aria-label="Убрать назначение">×</button>
+      <form method="post" action="/tasks/groups/{{ group.id }}/assignments/{{ a.id }}/delete" data-confirm="Remove this assignment?">
+        <button class="btn btn-secondary mini-btn" type="submit" aria-label="Remove assignment">×</button>
       </form>
     </li>
     {% endfor %}
   </ul>
   {% else %}
-  <div class="card"><p class="muted">Тесты на ближайшие дни не назначены.</p></div>
+  <div class="card"><p class="muted">No upcoming tests assigned.</p></div>
   {% endif %}
 
   <form class="card" method="post" action="/tasks/groups/{{ group.id }}/assignments" data-once>
-    <h2>Назначить тест</h2>
+    <h2>Assign a test</h2>
     {% if assign_error %}
     <div class="alert-error" role="alert"><p>{{ assign_error }}</p></div>
     {% endif %}
     {% set v = assign_values if assign_values is defined else {"test_id": "", "date": today.isoformat(), "target": "group"} %}
     {% if tests %}
     <div class="field">
-      <label for="assign-test">Тест</label>
+      <label for="assign-test">Test</label>
       <select id="assign-test" name="test_id" required>
-        <option value="">Выберите тест</option>
+        <option value="">Select a test</option>
         {% for t in tests %}<option value="{{ t.id }}"{% if v.test_id|string == t.id|string %} selected{% endif %}>{{ t.title }}</option>{% endfor %}
       </select>
     </div>
     <div class="field">
-      <label for="assign-date">Дата</label>
+      <label for="assign-date">Date</label>
       <input id="assign-date" name="date" type="date" min="{{ today.isoformat() }}" value="{{ v.date }}" required>
     </div>
     <div class="field">
-      <label for="assign-target">Кому</label>
+      <label for="assign-target">Assign to</label>
       <select id="assign-target" name="target">
-        <option value="group">Всей группе</option>
+        <option value="group">Entire group</option>
         {% for s in students %}<option value="{{ s.id }}"{% if v.target|string == s.id|string %} selected{% endif %}>{{ s.first_name }} {{ s.last_name }}</option>{% endfor %}
       </select>
     </div>
-    <button class="btn btn-primary btn-block" type="submit">Назначить</button>
+    <button class="btn btn-primary btn-block" type="submit">Assign</button>
     {% else %}
-    <p class="lead">Тестов пока нет. <a href="/tasks/tests">Создайте тест</a>, чтобы назначить его.</p>
+    <p class="lead">No tests yet. <a href="/tasks/tests">Create a test</a> to assign it.</p>
     {% endif %}
   </form>
 </section>

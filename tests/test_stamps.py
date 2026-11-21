@@ -34,7 +34,7 @@ def test_give_and_take(db):
     stamps.give(db, t, s, star.id, 5, "  молодец  ")
     stamps.take(db, t, s, star.id, 2, "  за   поведение ")
     assert stamps.balance_of(db, s.id, star.id) == 3
-    with pytest.raises(stamps.StampError, match="за что"):
+    with pytest.raises(stamps.StampError, match="Enter a reason"):
         stamps.take(db, t, s, star.id, 1, "   ")
     for bad in (0, -1, 1001):
         with pytest.raises(stamps.StampError):
@@ -47,8 +47,8 @@ def test_give_and_take(db):
         stamps.give(db, t, s, gem.id, 1)
     rows = stamps.history(db, s.id)
     assert [r.amount for r in rows] == [-2, 5] and rows[1].comment == "молодец" and rows[1].actor_id == t.id
-    assert stamps.describe(rows[1]) == "От учителя: молодец"
-    assert (rows[0].reason, stamps.describe(rows[0])) == ("penalty", "Учитель забрал: за поведение")
+    assert stamps.describe(rows[1]) == "Awarded by your teacher: молодец"
+    assert (rows[0].reason, stamps.describe(rows[0])) == ("penalty", "Removed by your teacher: за поведение")
     assert [p.id for p in stamps.recent_penalties(db, s.id)] == [rows[0].id]
 
 
@@ -158,12 +158,12 @@ def test_exchange_common_to_rare_and_back(db):
     got = stamps.exchange(db, kid, _rule(db, common, rare).id, times=2)
     assert got.amount == 2 and got.variant.stamp_type_id == rare.id
     assert stamps.balance_of(db, kid.id, common.id) == 5 and stamps.balance_of(db, kid.id, rare.id) == 2
-    with pytest.raises(stamps.StampError, match="нужно 10"):
+    with pytest.raises(stamps.StampError, match="need 10"):
         stamps.exchange(db, kid, _rule(db, common, rare).id)
     stamps.exchange(db, kid, _rule(db, rare, common).id)
     assert stamps.balance_of(db, kid.id, common.id) == 15 and stamps.balance_of(db, kid.id, rare.id) == 1
     rows = stamps.history(db, kid.id)
-    assert rows[0].reason == "conversion" and stamps.describe(rows[0]) == "Обмен: 1 Редкий → 10 Обычный"
+    assert rows[0].reason == "conversion" and stamps.describe(rows[0]) == "Exchange: 1 Rare → 10 Common"
 
 
 def test_legendary_exchanges_down_only(db):
@@ -174,13 +174,13 @@ def test_legendary_exchanges_down_only(db):
     stamps.exchange(db, kid, _rule(db, legend, common).id)
     assert stamps.balance_of(db, kid.id, common.id) == 25 and stamps.balance_of(db, kid.id, legend.id) == 0
     # правило «в легендарный» нельзя завести, а заведённое в обход — не работает
-    assert any("нельзя получить обменом" in e for e in stamps.rule_errors(db, common.id, 25, legend.id, 1))
+    assert any("available as an award only" in e for e in stamps.rule_errors(db, common.id, 25, legend.id, 1))
     from app.models import ConversionRule
     bad = ConversionRule(from_type_id=common.id, from_amount=25, to_type_id=legend.id, to_amount=1, is_active=True)
     db.add(bad)
     db.commit()
     assert bad not in stamps.exchange_rules(db)
-    with pytest.raises(stamps.StampError, match="Такого обмена нет"):
+    with pytest.raises(stamps.StampError, match="Exchange rule not found"):
         stamps.exchange(db, kid, bad.id)
 
 
@@ -195,7 +195,7 @@ def test_exchange_validation(db):
     db.commit()
     with pytest.raises(stamps.StampError):
         stamps.exchange(db, kid, rule.id)
-    assert stamps.rule_errors(db, common.id, 1, common.id, 1) == ["Обменивать вид сам на себя нельзя"]
+    assert stamps.rule_errors(db, common.id, 1, common.id, 1) == ["Choose two different stamp types"]
 
 
 def test_variants_drop_randomly_and_collect(db):
@@ -234,7 +234,7 @@ def test_take_can_go_negative_and_debt_is_paid_first(db):
     item = ShopItem(group_id=g.id, title="Наклейка", price_type_id=star.id, price_amount=1)
     db.add(item)
     db.commit()
-    with pytest.raises(shop.ShopError, match="нужно 1, у тебя -3"):
+    with pytest.raises(shop.ShopError, match="need 1 stamps and have -3"):
         shop.place_order(db, kid, item.id)
     stamps.give(db, t, kid, star.id, 4)
     assert stamps.balance_of(db, kid.id, star.id) == 1  # долг погашен
@@ -246,7 +246,7 @@ def test_exchange_blocked_while_in_debt(db):
     t = make_user(db, role="teacher", login="teach")
     kid = make_user(db, login="kid")
     stamps.take(db, t, kid, common.id, 5, "За мат")
-    with pytest.raises(stamps.StampError, match="у тебя -5"):
+    with pytest.raises(stamps.StampError, match="and have -5"):
         stamps.exchange(db, kid, _rule(db, common, rare).id)
 
 

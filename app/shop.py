@@ -21,7 +21,7 @@ COMMENT_MAX = 200
 ORDER_LIMIT = 3  # заявок
 ORDER_WINDOW = timedelta(minutes=5)  # за любые 5 минут, отменённые тоже считаются
 
-STATUS_TEXT = {"pending": "Ждёт учителя", "issued": "Выдано", "rejected": "Отклонено", "cancelled": "Отменено"}
+STATUS_TEXT = {"pending": "Awaiting teacher", "issued": "Fulfilled", "rejected": "Declined", "cancelled": "Canceled"}
 
 
 class ShopError(ValueError):
@@ -34,14 +34,14 @@ class ShopError(ValueError):
 def item_errors(db: DbSession, title: str, description: str, price_type_id: int, price_amount: int) -> list[str]:
     errors = []
     if not title or len(title) > TITLE_MAX:
-        errors.append(f"Название — от 1 до {TITLE_MAX} символов")
+        errors.append(f"Enter a title of 1–{TITLE_MAX} characters")
     if len(description) > DESCRIPTION_MAX:
-        errors.append(f"Описание — не длиннее {DESCRIPTION_MAX} символов")
+        errors.append(f"The description must be at most {DESCRIPTION_MAX} characters")
     price_type = db.get(StampType, price_type_id) if 0 < price_type_id <= MAX_ID else None
     if price_type is None or not price_type.is_active:
-        errors.append("Выберите вид штампиков для цены")
+        errors.append("Choose the stamp type to use as currency")
     if not 1 <= price_amount <= PRICE_MAX:
-        errors.append(f"Цена — от 1 до {PRICE_MAX}")
+        errors.append(f"Enter a price from 1 to {PRICE_MAX}")
     return errors
 
 
@@ -83,16 +83,16 @@ def wait_minutes(db: DbSession, student_id: int, now: datetime | None = None) ->
 def place_order(db: DbSession, student: User, item_id: int, now: datetime | None = None) -> Order:
     item = db.get(ShopItem, item_id)
     if item is None or not item.is_active or item.group_id != student.group_id:
-        raise ShopError("Такой позиции нет в магазине")
+        raise ShopError("This item is not available in the shop")
     if not item.price_type.is_active:
-        raise ShopError("Эту позицию сейчас нельзя обменять")
+        raise ShopError("This item is currently unavailable")
     with BALANCE_LOCK:
         minutes = wait_minutes(db, student.id, now)
         if minutes:
-            raise ShopError(f"Слишком много заявок подряд. Можно снова через {minutes} мин.")
+            raise ShopError(f"Too many requests. Try again in {minutes} min.")
         have = balance_of(db, student.id, item.price_type_id)
         if have < item.price_amount:
-            raise ShopError(f"Не хватает штампиков: нужно {item.price_amount}, у тебя {have}")
+            raise ShopError(f"You need {item.price_amount} stamps and have {have}")
         order = Order(
             student_id=student.id, item_id=item.id, price_type_id=item.price_type_id,
             price_amount=item.price_amount, created_at=now or utcnow(),
@@ -112,9 +112,9 @@ def cancel_order(db: DbSession, student: User, order_id: int) -> None:
     with BALANCE_LOCK:
         order = db.get(Order, order_id)
         if order is None or order.student_id != student.id:
-            raise ShopError("Заявка не найдена")
+            raise ShopError("Request not found")
         if order.status != "pending":
-            raise ShopError("Учитель уже ответил на эту заявку")
+            raise ShopError("Your teacher already processed this request")
         order.status, order.decided_at, order.decided_by = "cancelled", utcnow(), student.id
         _refund(db, order, student.id)
         db.commit()
@@ -124,11 +124,11 @@ def decide(db: DbSession, teacher: User, order: Order, issue: bool, comment: str
     """Учитель: «Выдано» или «Отклонить» (с возвратом штампиков). Права на заявку проверяет вызывающий."""
     comment = " ".join(comment.split())
     if len(comment) > COMMENT_MAX:
-        raise ShopError(f"Комментарий — не длиннее {COMMENT_MAX} символов")
+        raise ShopError(f"The comment must be at most {COMMENT_MAX} characters")
     with BALANCE_LOCK:
         db.refresh(order)
         if order.status != "pending":
-            raise ShopError("Заявка уже обработана")
+            raise ShopError("This request has already been processed")
         order.status = "issued" if issue else "rejected"
         order.teacher_comment = comment or None
         order.decided_at, order.decided_by = utcnow(), teacher.id

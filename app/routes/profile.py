@@ -15,8 +15,8 @@ from app.templating import templates
 
 router = APIRouter()
 
-WRONG_CURRENT = "Текущий пароль указан неверно"
-SAME_PASSWORD = "Новый пароль совпадает с текущим"
+WRONG_CURRENT = "Incorrect current password"
+SAME_PASSWORD = "Choose a password different from your current one"
 
 
 def _page(request: Request, user: User, status: int = 200, **context):

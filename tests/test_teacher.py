@@ -35,7 +35,7 @@ def test_create_student_shows_temp_password_once(client, db):
         f"/teacher/groups/{g.id}/students",
         data={"first_name": "Петя", "last_name": "Котов", "login": "petya.kotov"},
     )
-    assert r.status_code == 200 and "больше он не покажется" in r.text
+    assert r.status_code == 200 and "It’s shown only once." in r.text
     pwd = re.search(r'data-temp-password="([^"]+)"', r.text).group(1)
     s = db.query(User).filter_by(login="petya.kotov").one()
     assert s.group_id == g.id and s.must_change_password and s.role == "student"
@@ -59,7 +59,7 @@ def test_duplicate_login_friendly(client, db):
     data = {"first_name": "Петя", "last_name": "Котов", "login": "petya"}
     client.post(f"/teacher/groups/{g.id}/students", data=data)
     r = client.post(f"/teacher/groups/{g.id}/students", data=data)
-    assert r.status_code == 200 and "Логин уже занят" in r.text
+    assert r.status_code == 200 and "That username is already taken" in r.text
     assert db.query(User).filter_by(login="petya").count() == 1
 
 
@@ -71,18 +71,18 @@ def test_duplicate_login_race_is_friendly(client, db, monkeypatch):
 
     monkeypatch.setattr(teacher, "login_taken", lambda db, login: False)
     r = new_student(client, g, login="petya")
-    assert r.status_code == 200 and "Логин уже занят" in r.text
+    assert r.status_code == 200 and "That username is already taken" in r.text
     assert db.query(User).filter_by(login="petya").count() == 1
 
 
 def test_create_student_validation(client, db):
     t, g = setup_teacher(client, db)
     r = new_student(client, g, login="Пе")
-    assert "Логин: латинские буквы, цифры, точка, дефис, подчёркивание; от 3 до 32 символов" in r.text
+    assert "Use 3–32 characters in the username: English letters, numbers, periods, hyphens, or underscores" in r.text
     r = new_student(client, g, first_name="  ", login="ok.login")
-    assert "Введите имя и фамилию" in r.text
+    assert "Enter a first and last name" in r.text
     r = new_student(client, g, last_name="К" * 51, login="ok.login")
-    assert "Имя и фамилия — не длиннее 50 символов" in r.text
+    assert "First and last names must each be at most 50 characters" in r.text
     assert db.query(User).filter_by(role="student").count() == 0
     # введённое не пропадает
     assert 'value="Петя"' in r.text
@@ -186,7 +186,7 @@ def test_create_group(client, db):
 def test_create_group_requires_name(client, db):
     setup_teacher(client, db)
     r = client.post("/teacher/groups", data={"name": "   "})
-    assert r.status_code == 200 and "Введите название группы" in r.text
+    assert r.status_code == 200 and "Enter a group name" in r.text
     assert db.query(Group).count() == 1
 
 
@@ -197,7 +197,7 @@ def test_rename_group(client, db):
     db.refresh(g)
     assert g.name == "Ракеты"
     r = client.post(f"/teacher/groups/{g.id}/rename", data={"name": ""})
-    assert "Введите название группы" in r.text
+    assert "Enter a group name" in r.text
     db.refresh(g)
     assert g.name == "Ракеты"
 
@@ -212,9 +212,9 @@ def test_group_page_badges(client, db):
     r = client.get(f"/teacher/groups/{g.id}")
     assert r.status_code == 200
     rows = {m.group(1): m.group(0) for m in re.finditer(r'<li[^>]*data-login="([^"]+)".*?</li>', r.text, re.S)}
-    assert "не активен" not in rows["okkid"] and "заблокирован" not in rows["okkid"]
-    assert "не активен" in rows["offkid"]
-    assert "заблокирован" in rows["lockkid"]
+    assert "Inactive" not in rows["okkid"] and "Locked" not in rows["okkid"]
+    assert "Inactive" in rows["offkid"]
+    assert "Locked" in rows["lockkid"]
 
 
 # ---------- карточка ученика ----------
@@ -226,9 +226,9 @@ def test_student_page_actions(client, db):
     r = client.get(f"/teacher/students/{s.id}")
     assert r.status_code == 200
     assert f"/teacher/students/{s.id}/reset-password" in r.text and "data-confirm" in r.text
-    assert "Деактивировать" in r.text and "Активировать" not in r.text.replace("Деактивировать", "")
+    assert "Deactivate" in r.text and "Activate" not in r.text.replace("Deactivate", "")
     client.post(f"/teacher/students/{s.id}/deactivate")
-    assert "Активировать" in client.get(f"/teacher/students/{s.id}").text
+    assert "Activate" in client.get(f"/teacher/students/{s.id}").text
 
 
 def test_reset_password_kicks_student(client, db):
@@ -236,7 +236,7 @@ def test_reset_password_kicks_student(client, db):
     s = make_user(db, login="kid", group=g)
     kid = kid_client()
     r = client.post(f"/teacher/students/{s.id}/reset-password")
-    assert r.status_code == 200 and "больше он не покажется" in r.text
+    assert r.status_code == 200 and "It’s shown only once." in r.text
     assert r.headers["cache-control"] == "no-store"
     pwd = re.search(r'data-temp-password="([^"]+)"', r.text).group(1)
     db.refresh(s)
@@ -279,12 +279,12 @@ def test_unlock_clears_classroom_ip_block(client, db):
     for i in range(19):
         login_guard.register_failure(db, f"other{i}", "testclient")  # 20 неудач с одного IP: блок на весь класс
     assert login_guard.blocked_until(db, "mate", "testclient") is not None
-    assert "заблокирован" in client.get(f"/teacher/students/{s.id}").text
-    assert "Разблокировать вход" in client.get(f"/teacher/students/{s.id}").text
+    assert "Locked" in client.get(f"/teacher/students/{s.id}").text
+    assert "Unlock sign-in" in client.get(f"/teacher/students/{s.id}").text
     client.post(f"/teacher/students/{s.id}/unlock")
     db.expire_all()
     assert login_guard.blocked_until(db, "mate", "testclient") is None
-    assert "Разблокировать вход" not in client.get(f"/teacher/students/{s.id}").text
+    assert "Unlock sign-in" not in client.get(f"/teacher/students/{s.id}").text
 
 
 def test_edit_student_name(client, db):
@@ -297,7 +297,7 @@ def test_edit_student_name(client, db):
     db.refresh(s)
     assert (s.first_name, s.last_name) == ("Маша", "Ким")
     r = client.post(f"/teacher/students/{s.id}/edit", data={"first_name": "", "last_name": "Ким", "group_id": g.id})
-    assert "Введите имя и фамилию" in r.text
+    assert "Enter a first and last name" in r.text
     db.refresh(s)
     assert s.first_name == "Маша"
 
@@ -324,7 +324,7 @@ def test_create_student_rejects_bad_name(client, db):
     seed_filter(db)
     t, g = setup_teacher(client, db)
     r = new_student(client, g, first_name="Сука", login="ok.login")
-    assert "В имени или фамилии недопустимое слово" in r.text
+    assert "Choose a name without flagged words" in r.text
     assert db.query(User).filter_by(role="student").count() == 0
     assert new_student(client, g, first_name="Мандарин", login="ok.login2").status_code == 200
     assert db.query(User).filter_by(login="ok.login2").count() == 1

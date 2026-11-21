@@ -34,21 +34,21 @@ DESCRIPTION_MAX = 500
 PROMPT_MAX = 300
 
 TYPE_LABELS = {
-    "choice_text": "Выбор из слов",
-    "choice_image": "Выбор картинки",
-    "text_input": "Ввод ответа",
-    "word_bank": "Собрать фразу",
-    "match_pairs": "Соединить пары",
+    "choice_text": "Text choices",
+    "choice_image": "Image choices",
+    "text_input": "Typed answer",
+    "word_bank": "Build a phrase",
+    "match_pairs": "Match pairs",
 }
 TYPE_HINTS = {
-    "choice_text": "Вопрос и несколько вариантов, один верный",
-    "choice_image": "Вопрос и картинки на выбор, одна верная",
-    "text_input": "Ученик вводит слово или фразу сам",
-    "word_bank": "Ученик собирает фразу из слов",
-    "match_pairs": "Ученик соединяет левую часть с правой",
+    "choice_text": "Students choose the correct answer from a list",
+    "choice_image": "Students choose the correct image",
+    "text_input": "Students type a word or phrase",
+    "word_bank": "Students put words in order to build a phrase",
+    "match_pairs": "Students match each item on the left to one on the right",
 }
-BAD_PICTURE = "Не получилось открыть картинку. Попробуйте другую."
-PICTURE_MISSING = "Картинка не найдена, загрузите заново"
+BAD_PICTURE = "We couldn’t open the image. Try a different one."
+PICTURE_MISSING = "Image not found. Upload it again."
 
 
 # ---------- доступ ----------
@@ -151,7 +151,7 @@ def _parse_payload(form: FormData, qtype: str, owner_id: int, saved: list[str]) 
         options = []
         for r in rows:
             if not r["image"]:
-                raise PayloadError("Загрузите картинку для каждого варианта")
+                raise PayloadError("Upload an image for every answer choice")
             options.append({"image": r["image"] if r["new"] else _kept(owner_id, r["image"]), "caption": r["caption"]})
         return {"options": options, "correct": correct}
 
@@ -171,9 +171,9 @@ def _parse_question(form: FormData, qtype: str, owner_id: int, saved: list[str])
     """(текст, картинка вопроса, проверенный payload). Бросает PayloadError; новые файлы — в saved."""
     prompt = str(form.get("prompt") or "").strip()
     if not prompt:
-        raise PayloadError("Введите текст вопроса")
+        raise PayloadError("Enter the question text")
     if len(prompt) > PROMPT_MAX:
-        raise PayloadError(f"Текст вопроса — не длиннее {PROMPT_MAX} символов")
+        raise PayloadError(f"The question must be at most {PROMPT_MAX} characters")
     keep = str(form.get("image_keep") or "")
     image = _upload(form, "image", owner_id, saved)
     if not image and keep and not form.get("image_remove"):
@@ -270,17 +270,17 @@ def _pool_fields(db: DbSession, title: str, description: str, level: str, topic_
     topic = form_int(topic_id, 1) if topic_id else None
     values = {"title": title.strip(), "description": description.strip(), "level": level, "topic_id": topic}
     if topic_id and (topic is None or db.get(Topic, topic) is None):
-        return values, "Выберите тему из списка"
+        return values, "Select a topic from the list"
     if not values["title"]:
-        return values, "Введите название пула"
+        return values, "Enter a pool title"
     if len(values["title"]) > TITLE_MAX:
-        return values, f"Название — не длиннее {TITLE_MAX} символов"
+        return values, f"The title must be at most {TITLE_MAX} characters"
     if not values["description"]:
-        return values, "Введите описание пула"
+        return values, "Enter a pool description"
     if len(values["description"]) > DESCRIPTION_MAX:
-        return values, f"Описание — не длиннее {DESCRIPTION_MAX} символов"
+        return values, f"The description must be at most {DESCRIPTION_MAX} characters"
     if level not in LEVELS:
-        return values, "Выберите уровень из списка"
+        return values, "Select a level from the list"
     return values, None
 
 
@@ -357,7 +357,7 @@ def edit_pool(
 def delete_pool(pool_id: Id, request: Request, user: User = Depends(teacher_only), db: DbSession = Depends(get_db)):
     pool = own_pool(db, user, pool_id)
     if pool.questions:
-        return _pool_page(request, user, pool, delete_error="Сначала удалите вопросы")
+        return _pool_page(request, user, pool, delete_error="Remove the questions before deleting this pool")
     db.delete(pool)
     db.commit()
     return RedirectResponse("/tasks", status_code=303)
@@ -554,11 +554,11 @@ def create_test(
     values = {"title": title.strip(), "description": description.strip()}
     error = None
     if not values["title"]:
-        error = "Введите название теста"
+        error = "Enter a test title"
     elif len(values["title"]) > TITLE_MAX:
-        error = f"Название — не длиннее {TITLE_MAX} символов"
+        error = f"The title must be at most {TITLE_MAX} characters"
     elif len(values["description"]) > DESCRIPTION_MAX:
-        error = f"Описание — не длиннее {DESCRIPTION_MAX} символов"
+        error = f"The description must be at most {DESCRIPTION_MAX} characters"
     if error:
         return _tests_page(request, db, user, values, error)
     test = Test(owner_id=user.id, **values)
@@ -600,7 +600,7 @@ def add_question(
     if question.pool_id is None or question.owner_id != test.owner_id:
         raise HTTPException(404)
     if db.get(TestQuestion, (test.id, question.id)) is not None:
-        return _test_page(request, db, user, test, db.get(Pool, question.pool_id), "Этот вопрос уже в тесте")
+        return _test_page(request, db, user, test, db.get(Pool, question.pool_id), "This question is already in the test")
     db.add(TestQuestion(test_id=test.id, question_id=question.id, position=_next_position(db, test)))
     try:
         db.commit()
@@ -674,10 +674,10 @@ def remove_from_test(test_id: Id, question_id: Id, user: User = Depends(teacher_
 
 # ---------- задания группы ----------
 
-COUNT_RANGE = "Число вопросов — от 1 до 30"
-ATTEMPTS_RANGE = "Попыток — от 1 до 10"
-DATE_PASSED = "Дата уже прошла"
-DATE_TAKEN = "На эту дату уже назначен тест"
+COUNT_RANGE = "Enter between 1 and 30 questions per day"
+ATTEMPTS_RANGE = "Enter between 1 and 10 attempts per day"
+DATE_PASSED = "Choose today or a future date"
+DATE_TAKEN = "A test is already assigned for this date"
 
 
 def _group_tasks_page(request: Request, db: DbSession, user: User, group: Group, **context):
@@ -788,18 +788,18 @@ def _assignment_error(db: DbSession, group: Group, test_id: str, day: str, targe
     """(test_id, student_id | None, дата) или текст ошибки."""
     test = db.get(Test, int(test_id)) if test_id.isdigit() and int(test_id) <= MAX_ID else None
     if test is None or test.owner_id != group.teacher_id:
-        return "Выберите тест из списка"
+        return "Select a test from the list"
     try:
         when = date.fromisoformat(day)
     except ValueError:
-        return "Укажите дату"
+        return "Select a date"
     if when < moscow_today():
         return DATE_PASSED
     if target == "group":
         return test.id, None, when
     student = db.get(User, int(target)) if target.isdigit() and int(target) <= MAX_ID else None
     if student is None or student.role != "student" or student.group_id != group.id:
-        return "Выберите, кому назначить тест"
+        return "Choose who should take the test"
     return test.id, student.id, when
 
 
@@ -875,7 +875,7 @@ def student_results(student_id: Id, request: Request, user: User = Depends(teach
 
 # ---------- награды за задание (группы и теста) ----------
 
-REWARD_INVALID = f"Награда: выберите вид, количество от 1 до {stamps.REWARD_MAX} и порог от 0 до 100%"
+REWARD_INVALID = f"Choose a stamp type, a quantity from 1 to {stamps.REWARD_MAX}, and a threshold from 0 to 100%"
 
 
 def _parse_reward(db: DbSession, stamp_type_id: str, amount: str, min_score_percent: str):
@@ -968,10 +968,10 @@ async def save_topic_quotas(group_id: Id, request: Request, user: User = Depends
         raw = str(form.get(f"topic_{topic.id}", "") or "0")
         value = form_int(raw, 0, QUOTA_MAX)
         if value is None:
-            return _group_tasks_page(request, db, user, group, topics_error=f"Число вопросов темы — от 0 до {QUOTA_MAX}")
+            return _group_tasks_page(request, db, user, group, topics_error=f"Enter 0–{QUOTA_MAX} questions per topic")
         counts[topic.id] = value
     if sum(counts.values()) > QUOTA_MAX:
-        return _group_tasks_page(request, db, user, group, topics_error=f"Всего — не больше {QUOTA_MAX} вопросов в день")
+        return _group_tasks_page(request, db, user, group, topics_error=f"Use at most {QUOTA_MAX} questions per day in total")
     db.execute(delete(GroupTopicQuota).where(GroupTopicQuota.group_id == group.id))
     db.add_all([GroupTopicQuota(group_id=group.id, topic_id=t, count=c) for t, c in counts.items() if c > 0])
     db.commit()

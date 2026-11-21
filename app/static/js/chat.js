@@ -24,14 +24,14 @@
 
   // ---------- вывод ----------
 
-  const DAY_FMT = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long" });
+  const DAY_FMT = new Intl.DateTimeFormat("en", { day: "numeric", month: "long" });
 
   function dayLabel(day) {
     const today = new Date();
     const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const yesterday = new Date(today.getTime() - 86400000);
-    if (day === iso(today)) return "Сегодня";
-    if (day === iso(yesterday)) return "Вчера";
+    if (day === iso(today)) return "Today";
+    if (day === iso(yesterday)) return "Yesterday";
     const [y, m, d] = day.split("-").map(Number);
     return DAY_FMT.format(new Date(y, m - 1, d));
   }
@@ -58,22 +58,31 @@
     return box;
   }
 
+  function addDeletedLabel(body, before = null) {
+    body.insertBefore(el("p", "msg-deleted-label", "Deleted"), before);
+  }
+
   function render(m) {
     const mine = m.author.id === data.me;
-    const node = el("div", "msg" + (mine ? " is-mine" : "") + (m.deleted ? " is-deleted" : ""));
+    const showDeleted = m.deleted && data.moderator && !m.author.teacher;
+    const node = el("div", "msg" + (mine ? " is-mine" : ""));
+    node.classList.toggle("is-deleted", m.deleted);
+    node.classList.toggle("shows-deleted-content", showDeleted);
     node.dataset.id = m.id;
     node.dataset.day = m.day;
     node.dataset.author = m.author.id;
+    node.dataset.studentAuthor = String(!m.author.teacher);
     if (!mine && data.kind === "group") node.append(avatar(m.author));
-    const media = m.deleted ? "" : { sticker: " is-sticker", image: " is-media" }[m.kind] || "";
+    const media = !m.deleted || showDeleted ? { sticker: " is-sticker", image: " is-media" }[m.kind] || "" : "";
     const body = el("div", "msg-body" + media);
     if (!mine && data.kind === "group") {
       const name = el("div", "msg-name", m.author.name);
-      if (m.author.teacher) name.append(" ", el("span", "msg-teacher", "учитель"));
+      if (m.author.teacher) name.append(" ", el("span", "msg-teacher", "teacher"));
       body.append(name);
     }
-    if (m.deleted) {
-      body.append(el("p", "msg-text", "Сообщение удалено"));
+    if (showDeleted) addDeletedLabel(body);
+    if (m.deleted && !showDeleted) {
+      body.append(el("p", "msg-text", "Message deleted"));
     } else if (m.kind === "sticker") {
       const img = el("img", "msg-sticker");
       img.src = m.sticker;
@@ -87,19 +96,19 @@
       link.rel = "noopener";
       const img = el("img", "msg-image");
       img.src = m.image;
-      img.alt = "Фото";
+      img.alt = "Photo";
       img.loading = "lazy";
       link.append(img);
       body.append(link);
     } else {
-      body.append(el("p", "msg-text", m.text || ""));
+      body.append(el("p", "msg-text", m.text || (showDeleted && m.kind === "image" ? "Photo unavailable" : "")));
       if (m.original) {
         const orig = el("p", "msg-original");
-        orig.append(el("strong", "", "Отфильтровано. Было: "), m.original);
+        orig.append(el("strong", "", "Filtered. Original: "), m.original);
         body.append(orig);
-        if (!m.author.teacher) {
+        if (!m.deleted && !m.author.teacher) {
           // учитель сразу забирает штампик: карточка ученика с готовой причиной
-          const take = el("a", "msg-take", "Забрать штампик за мат");
+          const take = el("a", "msg-take", "Remove a stamp for swearing");
           take.href = `/teacher/students/${m.author.id}?take_reason=${encodeURIComponent(data.swear_reason)}#take`;
           body.append(take);
         }
@@ -108,7 +117,7 @@
     const meta = el("div", "msg-meta");
     meta.append(el("time", "", m.time));
     if (!m.deleted && (mine || data.moderator)) {
-      const del = el("button", "msg-delete", "Удалить");
+      const del = el("button", "msg-delete", "Delete");
       del.type = "button";
       del.dataset.delete = m.id;
       meta.append(del);
@@ -189,7 +198,7 @@
 
   function showEmpty() {
     if (!byId.size && !list.querySelector(".chat-empty")) {
-      list.append(el("p", "chat-empty", "Сообщений пока нет. Напиши первым!"));
+      list.append(el("p", "chat-empty", "No messages yet. Start the conversation!"));
     }
   }
 
@@ -200,12 +209,18 @@
 
   function markDeleted(id) {
     const node = byId.get(id);
-    if (!node) return;
+    if (!node || node.classList.contains("is-deleted")) return;
     node.classList.add("is-deleted");
     const body = node.querySelector(".msg-body");
+    if (data.moderator && node.dataset.studentAuthor === "true") {
+      node.classList.add("shows-deleted-content");
+      body.querySelectorAll(".msg-take, .msg-delete").forEach((n) => n.remove());
+      addDeletedLabel(body, body.querySelector(".msg-text, .msg-sticker, .msg-image-link, .msg-meta"));
+      return;
+    }
     body.classList.remove("is-media", "is-sticker");
     body.querySelectorAll(".msg-text, .msg-sticker, .msg-image-link, .msg-original, .msg-take, .msg-delete").forEach((n) => n.remove());
-    body.insertBefore(el("p", "msg-text", "Сообщение удалено"), body.querySelector(".msg-meta"));
+    body.insertBefore(el("p", "msg-text", "Message deleted"), body.querySelector(".msg-meta"));
   }
 
   function showError(text) {
@@ -230,7 +245,7 @@
       body = null;
     }
     if (!response.ok || body === null) {
-      throw new Error((body && body.error) || "Не получилось. Попробуй ещё раз.");
+      throw new Error((body && body.error) || "Something went wrong. Try again.");
     }
     return body;
   }
@@ -294,7 +309,7 @@
 
   function sendPayload(payload, text) {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
-      showError("Нет связи. Сообщение не отправлено — попробуй ещё раз через минуту.");
+      showError("You’re offline. Try sending your message again in a moment.");
       return false;
     }
     const clientId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -360,13 +375,13 @@
     imageInput.value = "";
     if (!file) return;
     if (file.size > 15 * 1024 * 1024) {
-      showError("Фото больше 15 МБ. Выбери другое.");
+      showError("Choose a photo of up to 15 MB.");
       return;
     }
     const body = new FormData();
     body.append("image", file);
     showError("");
-    statusBox.textContent = "Отправляем фото…";
+    statusBox.textContent = "Sending photo…";
     statusBox.hidden = false;
     try {
       const result = await fetchJSON(`/chat/${ROOM}/image`, { method: "POST", body });
@@ -375,14 +390,14 @@
     } catch (err) {
       showError(err.message);
     } finally {
-      statusBox.textContent = "Нет связи…";
+      statusBox.textContent = "Disconnected…";
       statusBox.hidden = !!socket && socket.readyState === WebSocket.OPEN;
     }
   });
 
   list.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-delete]");
-    if (!button || !window.confirm("Удалить сообщение у всех?")) return;
+    if (!button || !window.confirm("Delete this message for everyone?")) return;
     button.disabled = true;
     try {
       await fetchJSON(`/chat/messages/${button.dataset.delete}/delete`, { method: "POST" });

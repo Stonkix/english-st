@@ -1,37 +1,37 @@
 {% extends "base.html" %}
 {% from "partials/stamps.html" import chip %}
-{% block title %}Магазин — English ST{% endblock %}
+{% block title %}Shop — English ST{% endblock %}
 
 {% block content %}
 <section class="page shop-page">
-  <h1>Магазин</h1>
+  <h1>Shop</h1>
   {% if balances %}<div class="stamp-balances">{% for b in balances %}{{ chip(b.stamp_type, b.amount, big=true) }}{% endfor %}</div>{% endif %}
   {% if ok %}<div class="alert-success" role="status"><p>{{ ok }}</p></div>{% endif %}
   {% if error %}<div class="alert-error" role="alert"><p>{{ error }}</p></div>{% endif %}
 
   {% set currency = pet_cfg.price_type %}
   {% if currency and currency.is_active and species %}
-  <h2>Питомцы</h2>
-  <p class="muted">Питомца нужно кормить 2 раза в день и убирать за ним 1 раз в день. Если {{ pet_cfg.runaway_days }} дн. подряд не ухаживать — он убежит.</p>
+  <h2>Pets</h2>
+  <p class="muted">Feed your pet twice a day and clean up once a day. If you miss {{ pet_cfg.runaway_days }} days of care in a row, your pet will run away.</p>
   <div class="shop-grid">
     {% for sp in species %}
     {% set owned = sp.id in owned_species %}
     {% set enough = have.get(currency.id, 0) >= sp.price %}
     <article class="card shop-item pet-offer">
       <img class="pet-offer-img" src="{{ sp|pet_image }}" alt="" width="96" height="96">
-      <h3>{{ sp.name }}</h3>
+      <h3>{{ sp.display_name }}</h3>
       {% if owned %}
-      <a class="btn btn-secondary btn-block" href="/pets">Уже у тебя</a>
+      <a class="btn btn-secondary btn-block" href="/pets">Already adopted</a>
       {% else %}
       <form class="pet-buy" method="post" action="/shop/pets/{{ sp.id }}/buy" data-once>
-        <label class="visually-hidden" for="pet-name-{{ sp.id }}">Имя питомца</label>
-        <input id="pet-name-{{ sp.id }}" name="name" maxlength="20" autocomplete="off" required placeholder="Имя питомца"{% if not enough %} disabled{% endif %}>
+        <label class="visually-hidden" for="pet-name-{{ sp.id }}">Pet name</label>
+        <input id="pet-name-{{ sp.id }}" name="name" maxlength="20" autocomplete="off" required placeholder="Pet name"{% if not enough %} disabled{% endif %}>
         <div class="shop-buy">
           {{ chip(currency, sp.price) }}
-          <button class="btn btn-primary" type="submit"{% if not enough %} disabled{% endif %}>Купить</button>
+          <button class="btn btn-primary" type="submit"{% if not enough %} disabled{% endif %}>Buy</button>
         </div>
       </form>
-      {% if not enough %}<small class="muted">Не хватает: ещё {{ sp.price - have.get(currency.id, 0) }}</small>{% endif %}
+      {% if not enough %}<small class="muted">You still need {{ sp.price - have.get(currency.id, 0) }}</small>{% endif %}
       {% endif %}
     </article>
     {% endfor %}
@@ -40,25 +40,25 @@
   <div class="card food-card" id="food">
     <div class="food-head">
       <img src="/static/pets/food.svg" alt="" width="56" height="56">
-      <div><strong>Корм для питомцев</strong><small class="muted">Пачка — {{ pet_cfg.food_pack_size }} порций за {{ pet_cfg.food_pack_price }} ({{ currency.name }}). У тебя {{ food }} из {{ pet_cfg.food_max }}.</small></div>
+      <div><strong>Pet food</strong><small class="muted">{{ pet_cfg.food_pack_size }} portions per pack, for {{ pet_cfg.food_pack_price }} ({{ currency.display_name }}). You have {{ food }} out of {{ pet_cfg.food_max }} portions.</small></div>
     </div>
     {% set room = (pet_cfg.food_max - food) // pet_cfg.food_pack_size %}
     {% set can_pay = have.get(currency.id, 0) // pet_cfg.food_pack_price if pet_cfg.food_pack_price else 0 %}
     {% set packs = [room, can_pay, packs_max]|min %}
     {% if packs > 0 %}
     <form class="exchange-go" method="post" action="/shop/food" data-once>
-      <label class="visually-hidden" for="food-packs">Сколько пачек</label>
+      <label class="visually-hidden" for="food-packs">Number of packs</label>
       <input id="food-packs" name="packs" type="number" inputmode="numeric" min="1" max="{{ packs }}" value="1">
-      <button class="btn btn-primary" type="submit">Купить корм</button>
+      <button class="btn btn-primary" type="submit">Buy food</button>
     </form>
     {% elif room <= 0 %}
-    <small class="muted">Запас полный.</small>
+    <small class="muted">Your food stock is full.</small>
     {% else %}
-    <small class="muted">Не хватает штампиков на пачку.</small>
+    <small class="muted">You need more stamps to buy a pack.</small>
     {% endif %}
   </div>
 
-  <h2>Призы</h2>
+  <h2>Prizes</h2>
   {% endif %}
 
   {% if items %}
@@ -71,31 +71,31 @@
       {% if item.description %}<p class="muted">{{ item.description }}</p>{% endif %}
       <div class="shop-buy">
         {{ chip(item.price_type, item.price_amount) }}
-        <form method="post" action="/shop/items/{{ item.id }}/order" data-once data-confirm="Обменять {{ item.price_amount }} ({{ item.price_type.name }}) на «{{ item.title }}»?">
-          <button class="btn btn-primary" type="submit"{% if not enough %} disabled{% endif %}>Обменять</button>
+        <form method="post" action="/shop/items/{{ item.id }}/order" data-once data-confirm="Redeem {{ item.price_amount }} ({{ item.price_type.display_name }}) for “{{ item.title }}”?">
+          <button class="btn btn-primary" type="submit"{% if not enough %} disabled{% endif %}>Exchange</button>
         </form>
       </div>
-      {% if not enough %}<small class="muted">Не хватает: ещё {{ item.price_amount - have.get(item.price_type_id, 0) }}</small>{% endif %}
+      {% if not enough %}<small class="muted">You still need {{ item.price_amount - have.get(item.price_type_id, 0) }}</small>{% endif %}
     </article>
     {% endfor %}
   </div>
   {% else %}
-  <div class="card"><p class="lead">{% if user.group_id %}В магазине пока ничего нет. Скоро учитель что-нибудь добавит!{% else %}Магазин появится, когда учитель добавит тебя в группу.{% endif %}</p></div>
+  <div class="card"><p class="lead">{% if user.group_id %}The shop is empty for now.{% else %}The shop will open once your teacher adds you to a group.{% endif %}</p></div>
   {% endif %}
 
   {% if orders %}
-  <h2>Мои заявки</h2>
+  <h2>My requests</h2>
   <ul class="list">
     {% for o in orders %}
     <li class="item-row">
       <span class="item-row-main">
         <strong>{{ o.item.title }}</strong>
-        <small>{{ o.created_at|msk }} · {{ o.price_amount }} {{ o.price_type.name }}{% if o.teacher_comment %} · «{{ o.teacher_comment }}»{% endif %}</small>
+        <small>{{ o.created_at|msk }} · {{ o.price_amount }} {{ o.price_type.display_name }}{% if o.teacher_comment %} · “{{ o.teacher_comment }}”{% endif %}</small>
       </span>
       <span class="badge {{ {'pending': 'badge-blue', 'issued': 'badge-green', 'rejected': 'badge-red'}.get(o.status, '') }}">{{ status_text[o.status] }}</span>
       {% if o.status == "pending" %}
-      <form method="post" action="/shop/orders/{{ o.id }}/cancel" data-once data-confirm="Отменить заявку? Штампики вернутся.">
-        <button class="btn btn-secondary mini-btn" type="submit" aria-label="Отменить заявку">×</button>
+      <form method="post" action="/shop/orders/{{ o.id }}/cancel" data-once data-confirm="Cancel this request? You’ll get your stamps back.">
+        <button class="btn btn-secondary mini-btn" type="submit" aria-label="Cancel request">×</button>
       </form>
       {% endif %}
     </li>

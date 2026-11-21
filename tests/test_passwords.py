@@ -58,11 +58,11 @@ def test_policy_codes_order():
 
 def test_rule_text():
     assert RULE_TEXT == {
-        "length": "Не короче 10 символов",
-        "lower": "Есть строчная латинская буква (a–z)",
-        "upper": "Есть заглавная латинская буква (A–Z)",
-        "digit": "Есть цифра",
-        "charset": "Только латиница, цифры и знаки — без русских букв и пробелов",
+        "length": "At least 10 characters",
+        "lower": "At least one lowercase English letter (a–z)",
+        "upper": "At least one uppercase English letter (A–Z)",
+        "digit": "At least one digit",
+        "charset": "English letters, numbers, and symbols only (no spaces)",
     }
 
 

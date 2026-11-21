@@ -298,7 +298,7 @@ def _shown(question: Question, answer, seed: str, mistakes: int) -> str:
     """Ответ ученика словами — для истории (не меняется от будущих правок вопроса)."""
     p = question.payload
     if question.type == "match_pairs":
-        return "без ошибок" if mistakes == 0 else f"ошибок: {mistakes}"
+        return "No mistakes" if mistakes == 0 else f"Mistakes: {mistakes}"
     if not isinstance(answer, dict):
         return ""
     if question.type == "text_input":
@@ -309,7 +309,7 @@ def _shown(question: Question, answer, seed: str, mistakes: int) -> str:
         if not _is_int(i) or not 0 <= i < len(p["options"]):
             return ""
         option = p["options"][i]
-        return option if question.type == "choice_text" else (option["caption"] or f"вариант {i + 1}")
+        return option if question.type == "choice_text" else (option["caption"] or f"Option {i + 1}")
     tiles = answer.get("tiles")  # word_bank: id плиток -> слова (тот же seed, что у плеера)
     if not isinstance(tiles, list):
         return ""

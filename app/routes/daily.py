@@ -76,7 +76,7 @@ def _home_page(request: Request, db: DbSession, user: User, notice: str | None =
     return templates.TemplateResponse(request, "student/home.html", context)
 
 
-NO_ATTEMPTS = "Попытки на сегодня закончились. Приходи завтра!"
+NO_ATTEMPTS = "You’re out of attempts for today. Come back tomorrow!"
 
 
 @router.get("/")
@@ -122,26 +122,26 @@ def play(request: Request, user: User = Depends(student_only), db: DbSession = D
 def answer(body: AnswerIn, user: User = Depends(student_only), db: DbSession = Depends(get_db)):
     attempt = _own_attempt(db, user, body.attempt_id)
     if attempt is None:
-        return _error(404, "Попытка не найдена")
+        return _error(404, "Attempt not found")
     try:
         return submit_answer(db, attempt, body.question_id, body.answer)
     except AttemptFinished:
-        return _error(409, "Попытка уже завершена")
+        return _error(409, "This attempt is already complete")
     except ValueError:
-        return _error(409, "Этот вопрос сейчас не задан")
+        return _error(409, "This is not the current question")
 
 
 @router.post("/daily/pair")
 def pair(body: PairIn, user: User = Depends(student_only), db: DbSession = Depends(get_db)):
     attempt = _own_attempt(db, user, body.attempt_id)
     if attempt is None:
-        return _error(404, "Попытка не найдена")
+        return _error(404, "Attempt not found")
     try:
         return {"ok": check_pair(db, attempt, body.question_id, body.left, body.right)}
     except AttemptFinished:
-        return _error(409, "Попытка уже завершена")
+        return _error(409, "This attempt is already complete")
     except ValueError:
-        return _error(409, "Этот вопрос сейчас не задан")
+        return _error(409, "This is not the current question")
 
 
 @router.get("/daily/result/{attempt_id}")

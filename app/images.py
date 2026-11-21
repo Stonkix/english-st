@@ -54,7 +54,7 @@ def read_limited(stream: BinaryIO, limit: int = MAX_UPLOAD_BYTES) -> bytes:
             return b"".join(parts)
         parts.append(chunk)
         total += len(chunk)
-    raise InvalidImage(f"Файл больше {limit // (1024 * 1024)} МБ")
+    raise InvalidImage(f"The file exceeds {limit // (1024 * 1024)} MB")
 
 
 def _shrink(img: Image.Image) -> Image.Image:
@@ -94,11 +94,11 @@ def _shrink_fit(img: Image.Image) -> Image.Image:
 def _decode(data: bytes, draft_side: int, shrink, finish, limit: int = MAX_UPLOAD_BYTES, keep_alpha: bool = False) -> Image.Image:
     """Общая часть аватара и картинки вопроса: открыть, уменьшить полосами, повернуть по EXIF, убрать прозрачность."""
     if not data or len(data) > limit:
-        raise InvalidImage("Пустой файл или слишком большой")
+        raise InvalidImage("The file is empty or too large")
     try:
         img = Image.open(BytesIO(data))
         if img.width * img.height > MAX_PIXELS:
-            raise InvalidImage("Слишком большое изображение")
+            raise InvalidImage("The image dimensions are too large")
         img.draft("RGB", (draft_side, draft_side))  # JPEG декодируется сразу уменьшенным
         img.load()  # единственный полноразмерный кадр в памяти
         orientation = img.getexif().get(0x0112)

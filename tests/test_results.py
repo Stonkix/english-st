@@ -64,14 +64,14 @@ def test_day_results_statuses(client, db):
     html = page.text
     assert html.index("Анна") < html.index("Борис") < html.index("Вера")
     assert "Чужой" not in html
-    assert "пройдено" in html and "в процессе" in html and "не начинал" in html
-    assert "Лучший результат: 2 из 2" in html and "первая попытка: 1 из 2" in html
-    assert "попыток: 2" in html
+    assert "Completed" in html and "In progress" in html and "Not started" in html
+    assert "Best score: 2 out of 2" in html and "first attempt: 1 out of 2" in html
+    assert "Attempts: 2" in html
     assert f"/tasks/students/{done.id}/results" in html
-    assert "Позже" not in html  # сегодня — «вперёд» скрыт
+    assert "Next day" not in html  # сегодня — «вперёд» скрыт
 
     # на странице группы — блок «Сегодня»
-    assert "Сегодня: прошли 1 из 3" in client.get(f"/teacher/groups/{group.id}").text
+    assert "Completed today: 1 of 3" in client.get(f"/teacher/groups/{group.id}").text
 
 
 def test_attempt_detail_shows_answers(client, db):
@@ -95,11 +95,11 @@ def test_attempt_detail_shows_answers(client, db):
     login_as(client, "teach")
     html = client.get(f"/tasks/students/{kid.id}/results").text
     assert "Новая формулировка" in html
-    assert "Вопрос удалён" in html
+    assert "Question deleted" in html
     assert "oops" in html  # ответ ученика из снимка
-    assert 'badge-red">неверно<' in html and 'badge-green">верно<' in html
-    assert "Правильный ответ:" in html and "changed" not in html
-    assert "Пул вопросов" in html and "1 из 2" in html
+    assert 'badge-red">Incorrect<' in html and 'badge-green">Correct<' in html
+    assert "Correct answer:" in html and "changed" not in html
+    assert "Question pool" in html and "1 out of 2" in html
     assert "<script" not in html.split("</head>")[-1].replace('src="/static', "")  # без inline-скриптов
 
 
@@ -119,8 +119,8 @@ def test_history_window_and_test_source(client, db):
 
     login_as(client, "teach")
     html = client.get(f"/tasks/students/{kid.id}/results").text
-    assert "Тест «Мой тест»" in html and "3 из 4" in html and "2 из 5" in html and "1 из 5" not in html
-    assert html.index("3 из 4") < html.index("2 из 5")  # новые сверху
+    assert "Test “Мой тест”" in html and "3 out of 4" in html and "2 out of 5" in html and "1 out of 5" not in html
+    assert html.index("3 out of 4") < html.index("2 out of 5")  # новые сверху
 
 
 def test_day_param_navigation(client, db):
@@ -131,7 +131,7 @@ def test_day_param_navigation(client, db):
     old_attempt(db, kid, yesterday, 1, 1)
     login_as(client, "teach")
     html = client.get(f"/tasks/groups/{group.id}/results?day={yesterday.isoformat()}").text
-    assert yesterday.strftime("%d.%m.%Y") in html and "Лучший результат: 1 из 1" in html
+    assert yesterday.isoformat() in html and "Best score: 1 out of 1" in html
     assert f"day={today.isoformat()}" in html  # «Позже» ведёт на сегодня
     assert f"day={(yesterday - timedelta(days=1)).isoformat()}" in html
 
@@ -143,7 +143,7 @@ def test_day_param_invalid_falls_back_to_today(client, db):
     future = (today + timedelta(days=3)).isoformat()
     for bad in ("garbage", "2026-13-45", future, "", "0001-01-01"):
         html = client.get(f"/tasks/groups/{group.id}/results", params={"day": bad}).text
-        assert f"{today.strftime('%d.%m.%Y')} · сегодня" in html, bad
+        assert f"{today.isoformat()} · today" in html, bad
 
 
 def test_foreign_results_404(client, db):
@@ -180,9 +180,9 @@ def test_typo_and_abandoned_labels(client, db):
     yesterday = moscow_today() - timedelta(days=1)
     old_attempt(db, old, yesterday, 0, 1, finished=False)
     login_as(client, "teach")
-    assert "опечатка засчитана" in client.get(f"/tasks/students/{kid.id}/results").text
+    assert "Typo accepted" in client.get(f"/tasks/students/{kid.id}/results").text
     past = client.get(f"/tasks/groups/{group.id}/results?day={yesterday.isoformat()}").text
-    assert "не завершил" in past and "в процессе" not in past
+    assert "Incomplete" in past and "In progress" not in past
 
 
 def test_word_bank_and_pairs_snapshots(client, db):
@@ -210,5 +210,5 @@ def test_word_bank_and_pairs_snapshots(client, db):
             submit_answer(db, attempt, qid, {})
     login_as(client, "teach")
     html = client.get(f"/tasks/students/{kid.id}/results").text
-    assert "Ответ ученика: I like cats" in html
-    assert "Ответ ученика: ошибок: 1" in html and "кошка" in html
+    assert "Student’s answer: I like cats" in html
+    assert "Student’s answer: Mistakes: 1" in html and "кошка" in html

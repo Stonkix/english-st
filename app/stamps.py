@@ -18,20 +18,20 @@ from app.timeutil import utcnow
 
 # Иконки — Fluent Emoji (Flat), MIT: app/static/stamps
 ICONS = {
-    "star": "Звезда", "gem": "Кристалл", "crown": "Корона", "heart": "Сердце", "medal": "Медаль",
-    "clover": "Клевер", "rainbow": "Радуга", "rocket": "Ракета", "sparkles": "Искры", "apple": "Яблоко",
+    "star": "Star", "gem": "Crystal", "crown": "Crown", "heart": "Heart", "medal": "Medal",
+    "clover": "Clover", "rainbow": "Rainbow", "rocket": "Rocket", "sparkles": "Sparkles", "apple": "Apple",
 }
 COLORS = {
-    "yellow": ("Жёлтый", "#FFF4CC"), "blue": ("Голубой", "#DDF4FF"), "green": ("Зелёный", "#D7FFB8"),
-    "red": ("Красный", "#FFDFE0"), "purple": ("Фиолетовый", "#F3E3FF"), "orange": ("Оранжевый", "#FFE7CC"),
+    "yellow": ("Yellow", "#FFF4CC"), "blue": ("Blue", "#DDF4FF"), "green": ("Green", "#D7FFB8"),
+    "red": ("Red", "#FFDFE0"), "purple": ("Purple", "#F3E3FF"), "orange": ("Orange", "#FFE7CC"),
 }
 REASON_TEXT = {
-    "manual": "От учителя", "penalty": "Учитель забрал", "daily": "За задание", "order": "Обмен в магазине", "refund": "Возврат",
-    "conversion": "Обмен", "pet": "Питомец", "pet_food": "Корм для питомцев",
+    "manual": "Awarded by your teacher", "penalty": "Removed by your teacher", "daily": "Assignment reward", "order": "Shop redemption", "refund": "Refund",
+    "conversion": "Exchange", "pet": "Pet", "pet_food": "Pet food",
 }
 # подсказки причины в форме «Забрать штампики» (учитель может написать свою)
-PENALTY_REASON_SWEARING = "За мат"
-PENALTY_HINTS = (PENALTY_REASON_SWEARING, "За поведение на уроке", "За грубость", "За опоздание", "За невыполненное домашнее задание", "За списывание")
+PENALTY_REASON_SWEARING = "For swearing"
+PENALTY_HINTS = (PENALTY_REASON_SWEARING, "For classroom conduct", "For being rude", "For arriving late", "For missing homework", "For cheating")
 NAME_MAX = 30
 AMOUNT_MAX = 1000  # за одну операцию
 RULE_AMOUNT_MAX = 1000
@@ -111,9 +111,9 @@ def give(db: DbSession, actor: User, student: User, stamp_type_id: int, amount: 
     """Ручная выдача: amount > 0 штампиков активного вида, комментарий необязателен."""
     stamp_type = db.get(StampType, stamp_type_id) if 0 < stamp_type_id <= MAX_ID else None
     if stamp_type is None or not stamp_type.is_active:
-        raise StampError("Выберите вид штампиков")
+        raise StampError("Choose a stamp type")
     if not 1 <= amount <= AMOUNT_MAX:
-        raise StampError(f"Количество — от 1 до {AMOUNT_MAX}")
+        raise StampError(f"Enter a quantity from 1 to {AMOUNT_MAX}")
     comment = _clean_comment(comment)
     with BALANCE_LOCK:
         tx = StampTransaction(
@@ -133,12 +133,12 @@ def take(db: DbSession, actor: User, student: User, stamp_type_id: int, amount: 
     """
     stamp_type = db.get(StampType, stamp_type_id) if 0 < stamp_type_id <= MAX_ID else None
     if stamp_type is None:
-        raise StampError("Выберите вид штампиков")
+        raise StampError("Choose a stamp type")
     if not 1 <= amount <= AMOUNT_MAX:
-        raise StampError(f"Количество — от 1 до {AMOUNT_MAX}")
+        raise StampError(f"Enter a quantity from 1 to {AMOUNT_MAX}")
     reason = _clean_comment(reason)
     if not reason:
-        raise StampError("Напишите, за что забираете штампики — ученик это увидит")
+        raise StampError("Enter a reason. The student will see it.")
     with BALANCE_LOCK:
         tx = StampTransaction(
             student_id=student.id, stamp_type_id=stamp_type.id, amount=-amount, reason="penalty",
@@ -152,7 +152,7 @@ def take(db: DbSession, actor: User, student: User, stamp_type_id: int, amount: 
 def _clean_comment(text: str) -> str:
     text = " ".join(text.split())
     if len(text) > COMMENT_MAX:
-        raise StampError(f"Комментарий — не длиннее {COMMENT_MAX} символов")
+        raise StampError(f"The comment must be at most {COMMENT_MAX} characters")
     return text
 
 
@@ -276,7 +276,7 @@ def collection(db: DbSession, student_id: int) -> list[CollectionRow]:
 
 
 def rule_text(rule: ConversionRule) -> str:
-    return f"{rule.from_amount} {rule.from_type.name} → {rule.to_amount} {rule.to_type.name}"
+    return f"{rule.from_amount} {rule.from_type.display_name} → {rule.to_amount} {rule.to_type.display_name}"
 
 
 def rule_errors(db: DbSession, from_type_id: int, from_amount: int, to_type_id: int, to_amount: int) -> list[str]:
@@ -284,13 +284,13 @@ def rule_errors(db: DbSession, from_type_id: int, from_amount: int, to_type_id: 
     src = db.get(StampType, from_type_id) if 0 < from_type_id <= MAX_ID else None
     dst = db.get(StampType, to_type_id) if 0 < to_type_id <= MAX_ID else None
     if src is None or dst is None:
-        errors.append("Выберите оба вида")
+        errors.append("Choose both stamp types")
     elif src.id == dst.id:
-        errors.append("Обменивать вид сам на себя нельзя")
+        errors.append("Choose two different stamp types")
     elif not dst.craftable:
-        errors.append(f"«{dst.name}» нельзя получить обменом — только выдать")
+        errors.append(f"“{dst.display_name}” is available as an award only")
     if not 1 <= from_amount <= RULE_AMOUNT_MAX or not 1 <= to_amount <= RULE_AMOUNT_MAX:
-        errors.append(f"Количество — от 1 до {RULE_AMOUNT_MAX}")
+        errors.append(f"Enter a quantity from 1 to {RULE_AMOUNT_MAX}")
     return errors
 
 
@@ -311,14 +311,14 @@ def exchange(db: DbSession, student: User, rule_id: int, times: int = 1) -> Stam
     """Обмен по правилу times раз: списание и начисление одной транзакцией БД. Возвращает начисление."""
     rule = db.get(ConversionRule, rule_id) if 0 < rule_id <= MAX_ID else None
     if rule is None or not _usable(rule):
-        raise StampError("Такого обмена нет")
+        raise StampError("Exchange rule not found")
     if not 1 <= times <= EXCHANGE_TIMES_MAX:
-        raise StampError(f"За раз — от 1 до {EXCHANGE_TIMES_MAX} обменов")
+        raise StampError(f"Choose 1–{EXCHANGE_TIMES_MAX} exchanges at a time")
     cost, gain = rule.from_amount * times, rule.to_amount * times
     with BALANCE_LOCK:
         have = balance_of(db, student.id, rule.from_type_id)
         if have < cost:
-            raise StampError(f"Не хватает: нужно {cost} ({rule.from_type.name}), у тебя {have}")
+            raise StampError(f"You need {cost} ({rule.from_type.display_name}) and have {have}")
         text = rule_text(rule) + (f" × {times}" if times > 1 else "")
         db.add(StampTransaction(
             student_id=student.id, stamp_type_id=rule.from_type_id, amount=-cost, reason="conversion",

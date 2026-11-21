@@ -79,7 +79,7 @@ def food(db: DbSession, student_id: int) -> int:
 def _currency(db: DbSession, cfg: PetConfig) -> StampType:
     currency = db.get(StampType, cfg.price_type_id) if cfg.price_type_id else None
     if currency is None or not currency.is_active:
-        raise PetError("Питомцы сейчас недоступны")
+        raise PetError("Pets are currently unavailable")
     return currency
 
 
@@ -87,7 +87,7 @@ def _pay(db: DbSession, student: User, currency: StampType, cost: int, reason: s
     """Списание под BALANCE_LOCK (вызывающий держит замок): не хватает — PetError."""
     have = balance_of(db, student.id, currency.id)
     if have < cost:
-        raise PetError(f"Не хватает штампиков: нужно {cost} ({currency.name}), у тебя {have}")
+        raise PetError(f"You need {cost} ({currency.display_name}) and have {have}")
     db.add(StampTransaction(
         student_id=student.id, stamp_type_id=currency.id, amount=-cost, reason=reason, comment=comment,
         actor_id=student.id,
@@ -100,14 +100,14 @@ def _pay(db: DbSession, student: User, currency: StampType, cost: int, reason: s
 def buy_pet(db: DbSession, student: User, species_id: int, name: str, today: date | None = None) -> Pet:
     species = db.get(PetSpecies, species_id) if 0 < species_id <= MAX_ID else None
     if species is None or not species.is_active:
-        raise PetError("Такого питомца нет в магазине")
+        raise PetError("This pet is not available in the shop")
     name = " ".join(name.split())
     if not name:
-        raise PetError("Придумай питомцу имя")
+        raise PetError("Choose a name for your pet")
     if len(name) > NAME_MAX:
-        raise PetError(f"Имя — не длиннее {NAME_MAX} символов")
+        raise PetError(f"The name must be at most {NAME_MAX} characters")
     if contains_profanity(name, load_filter(db)):
-        raise PetError("Такое имя не подойдёт. Придумай другое")
+        raise PetError("Choose a different name for your pet")
     cfg = config(db)
     currency = _currency(db, cfg)
     with BALANCE_LOCK:
@@ -115,8 +115,8 @@ def buy_pet(db: DbSession, student: User, species_id: int, name: str, today: dat
             Pet.student_id == student.id, Pet.species_id == species.id, Pet.ran_away_on.is_(None)
         ))
         if alive is not None:
-            raise PetError(f"{species.name} у тебя уже есть")
-        _pay(db, student, currency, species.price, "pet", f"{species.name} «{name}»")
+            raise PetError(f"You already have this type of pet")
+        _pay(db, student, currency, species.price, "pet", f"{species.display_name} “{name}”")
         pet = Pet(student_id=student.id, species_id=species.id, name=name, bought_on=today or moscow_today())
         db.add(pet)
         db.commit()
@@ -126,7 +126,7 @@ def buy_pet(db: DbSession, student: User, species_id: int, name: str, today: dat
 def buy_food(db: DbSession, student: User, packs: int) -> int:
     """Покупка packs пачек корма; возвращает новый запас в порциях."""
     if not 1 <= packs <= PACKS_MAX:
-        raise PetError("Выбери, сколько пачек купить")
+        raise PetError("Choose how many packs to buy")
     cfg = config(db)
     currency = _currency(db, cfg)
     with BALANCE_LOCK:
@@ -134,8 +134,8 @@ def buy_food(db: DbSession, student: User, packs: int) -> int:
         have = row.portions if row else 0
         add = packs * cfg.food_pack_size
         if have + add > cfg.food_max:
-            raise PetError(f"Столько не поместится: запас — не больше {cfg.food_max} порций, у тебя {have}")
-        _pay(db, student, currency, packs * cfg.food_pack_price, "pet_food", f"Корм: {add} порций")
+            raise PetError(f"You can store up to {cfg.food_max} portions and already have {have}")
+        _pay(db, student, currency, packs * cfg.food_pack_price, "pet_food", f"Food: {add} portions")
         if row is None:
             db.add(PetFood(student_id=student.id, portions=add))
         else:
@@ -158,9 +158,9 @@ def _care(db: DbSession, pet_id: int, day: date, create: bool = False) -> PetCar
 def _own_living(db: DbSession, student: User, pet_id: int) -> Pet:
     pet = db.get(Pet, pet_id) if 0 < pet_id <= MAX_ID else None
     if pet is None or pet.student_id != student.id:
-        raise PetError("Питомец не найден")
+        raise PetError("Pet not found")
     if pet.ran_away_on is not None:
-        raise PetError(f"{pet.name} убежал(а)")
+        raise PetError(f"{pet.name} ran away")
     return pet
 
 
@@ -170,10 +170,10 @@ def feed(db: DbSession, student: User, pet_id: int, today: date | None = None) -
         pet = _own_living(db, student, pet_id)
         care = _care(db, pet.id, day, create=True)
         if care.feedings >= FEEDINGS_PER_DAY:
-            raise PetError(f"{pet.name} уже сыт(а) сегодня. Покорми завтра!")
+            raise PetError(f"{pet.name} has already had enough food today. Feed them again tomorrow!")
         stock = db.get(PetFood, student.id)
         if stock is None or stock.portions < 1:
-            raise PetError("Корм закончился. Купи его в магазине")
+            raise PetError("You’re out of food. Buy more in the shop")
         stock.portions -= 1
         care.feedings += 1
         db.commit()
@@ -186,7 +186,7 @@ def clean(db: DbSession, student: User, pet_id: int, today: date | None = None) 
         pet = _own_living(db, student, pet_id)
         care = _care(db, pet.id, day, create=True)
         if care.cleaned:
-            raise PetError("Сегодня уже убрано")
+            raise PetError("You’ve already cleaned up today")
         care.cleaned = True
         db.commit()
     return care

@@ -3,15 +3,15 @@
 
 {% block content %}
 <section class="page teacher-page">
-  <a class="back-link" href="/tasks">← Задания</a>
+  <a class="back-link" href="/tasks">← Assignments</a>
   <div>
     <h1>{{ pool.title }}</h1>
-    <p class="muted"><span class="badge badge-blue">{{ pool.level }}</span>{% if pool.topic %} <span class="badge">{{ pool.topic.name }}</span>{% else %} <span class="badge">без темы</span>{% endif %}</p>
+    <p class="muted"><span class="badge badge-blue">{{ pool.level }}</span>{% if pool.topic %} <span class="badge">{{ pool.topic.name }}</span>{% else %} <span class="badge">no topic</span>{% endif %}</p>
     <p>{{ pool.description }}</p>
   </div>
 
   <div class="card">
-    <h2>Добавить вопрос</h2>
+    <h2>Add question</h2>
     <div class="type-grid">
       {% for t in types %}
       <a class="btn btn-secondary type-btn" href="/tasks/pools/{{ pool.id }}/questions/new?type={{ t }}">
@@ -21,7 +21,7 @@
     </div>
   </div>
 
-  <h2>Вопросы ({{ pool.questions|length }})</h2>
+  <h2>Questions ({{ pool.questions|length }})</h2>
   {% if pool.questions %}
   <ul class="list">
     {% for q in pool.questions %}
@@ -34,47 +34,47 @@
     {% endfor %}
   </ul>
   {% else %}
-  <div class="card"><p class="lead">В пуле пока нет вопросов. Выберите тип вопроса выше.</p></div>
+  <div class="card"><p class="lead">This pool has no questions yet. Choose a question type above.</p></div>
   {% endif %}
 
   <details class="card"{% if edit_error %} open{% endif %}>
-    <summary>Изменить пул</summary>
+    <summary>Edit pool</summary>
     <form method="post" action="/tasks/pools/{{ pool.id }}/edit" data-once>
       {% if edit_error %}
       <div class="alert-error" role="alert"><p>{{ edit_error }}</p></div>
       {% endif %}
       {% set v = edit_values if edit_values is defined else {"title": pool.title, "description": pool.description, "level": pool.level, "topic_id": pool.topic_id} %}
       <div class="field">
-        <label for="pool-title">Название</label>
+        <label for="pool-title">Title</label>
         <input id="pool-title" name="title" value="{{ v.title }}" maxlength="80" autocomplete="off" required>
       </div>
       <div class="field">
-        <label for="pool-description">Описание</label>
+        <label for="pool-description">Description</label>
         <textarea id="pool-description" name="description" rows="3" maxlength="500" required>{{ v.description }}</textarea>
       </div>
       <div class="field">
-        <label for="pool-level">Уровень</label>
+        <label for="pool-level">Level</label>
         <select id="pool-level" name="level" required>
           {% for l in levels %}<option value="{{ l }}"{% if v.level == l %} selected{% endif %}>{{ l }}</option>{% endfor %}
         </select>
       </div>
       <div class="field">
-        <label for="pool-topic">Тема</label>
+        <label for="pool-topic">Topic</label>
         <select id="pool-topic" name="topic_id">
-          <option value="">Без темы</option>
+          <option value="">No topic</option>
           {% for t in topics %}<option value="{{ t.id }}"{% if v.topic_id|string == t.id|string %} selected{% endif %}>{{ t.name }}</option>{% endfor %}
         </select>
       </div>
-      <button class="btn btn-secondary btn-block" type="submit">Сохранить</button>
+      <button class="btn btn-secondary btn-block" type="submit">Save</button>
     </form>
   </details>
 
-  <form class="card" method="post" action="/tasks/pools/{{ pool.id }}/delete" data-confirm="Удалить пул «{{ pool.title }}»?">
+  <form class="card" method="post" action="/tasks/pools/{{ pool.id }}/delete" data-confirm="Delete the pool “{{ pool.title }}”?">
     {% if delete_error %}
     <div class="alert-error" role="alert"><p>{{ delete_error }}</p></div>
     {% endif %}
-    <button class="btn btn-danger btn-block" type="submit">Удалить пул</button>
-    <small class="muted">Удалить можно только пустой пул.</small>
+    <button class="btn btn-danger btn-block" type="submit">Delete pool</button>
+    <small class="muted">Only empty pools can be deleted.</small>
   </form>
 </section>
 {% endblock %}

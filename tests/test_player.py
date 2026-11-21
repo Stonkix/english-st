@@ -72,7 +72,7 @@ def test_full_flow(client, db):
     ])
     login_as(client, "kid")
     home = client.get("/")
-    assert "Задание на сегодня" in home.text and "Начать" in home.text
+    assert "Today’s assignment" in home.text and "Start" in home.text
 
     r = client.post("/daily/start", follow_redirects=False)
     assert (r.status_code, r.headers["location"]) == (303, "/daily/play")
@@ -98,9 +98,9 @@ def test_full_flow(client, db):
     db.refresh(student)
     assert student.current_streak == 1 and student.last_completed_date == moscow_today()
     result = client.get(f"/daily/result/{attempt.id}")
-    assert "Верно 3 из 3" in result.text and "Ещё раз" in result.text
+    assert "3 out of 3 correct" in result.text and "Try again" in result.text
     assert client.get("/daily/play", follow_redirects=False).headers["location"] == "/"  # активной попытки нет
-    assert "Пройдено 3 из 3" in client.get("/").text
+    assert "Best score: 3 out of 3" in client.get("/").text
 
 
 def test_answer_snapshot_and_typo(client, db):
@@ -138,7 +138,7 @@ def test_resume_after_reload(client, db):
     # «Начать» ещё раз (вторая вкладка) возвращает ту же попытку
     client.post("/daily/start")
     assert len(db.scalars(select(Attempt)).all()) == 1
-    assert "Продолжить" in client.get("/").text
+    assert "Continue" in client.get("/").text
 
 
 def test_double_submit_counted_once(client, db):
@@ -209,9 +209,9 @@ def test_attempt_limit(client, db):
     data = player_data(client)
     answer(client, data, data["questions"][0], {"text": "a"})
     r = client.post("/daily/start")
-    assert "Попытки на сегодня закончились" in r.text
+    assert "You’re out of attempts for today" in r.text
     assert len(db.scalars(select(Attempt)).all()) == 1
-    assert "Ещё раз" not in client.get(f"/daily/result/{data['attempt_id']}").text
+    assert "Try again" not in client.get(f"/daily/result/{data['attempt_id']}").text
     finished = client.post("/daily/answer", json={"attempt_id": data["attempt_id"], "question_id": data["questions"][0]["id"] + 1000, "answer": {}})
     assert finished.status_code == 409
 
@@ -252,7 +252,7 @@ def test_question_deleted_mid_attempt(client, db):
     attempt = db.scalar(select(Attempt))
     db.refresh(attempt)
     assert (attempt.correct_count, attempt.total_count) == (2, 2)
-    assert "Верно 2 из 2" in client.get(f"/daily/result/{attempt.id}").text
+    assert "2 out of 2 correct" in client.get(f"/daily/result/{attempt.id}").text
 
 
 def test_last_question_deleted_finishes_attempt(client, db):
@@ -343,7 +343,7 @@ def test_status_and_errors_without_tasks(client, db):
     except NothingToday:
         pass
     login_as(client, "kid")
-    assert "Сегодня заданий нет" in client.get("/").text
+    assert "No assignment today" in client.get("/").text
     r = client.post("/daily/start", follow_redirects=False)
     assert r.headers["location"] == "/"
 

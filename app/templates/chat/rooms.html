@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Чат — English ST{% endblock %}
+{% block title %}Chat — English ST{% endblock %}
 
 {% block content %}
 <section class="page chat-list-page">
-  <h1>Чат</h1>
+  <h1>Chat</h1>
   {% if items %}
   <ul class="list">
     {% for item in items %}
@@ -19,20 +19,20 @@
       </span>
       {% endif %}
       <span class="list-item-main">
-        <strong>{% if item.room.kind == "group" %}Группа «{{ item.title }}»{% else %}{{ item.title }}{% endif %}</strong>
+        <strong>{% if item.room.kind == "group" %}Group “{{ item.title }}”{% else %}{{ item.title }}{% endif %}</strong>
         <small class="chat-preview">{{ item.preview }}</small>
       </span>
       <span class="chat-list-meta">
         {% if item.time %}<small>{{ item.time }}</small>{% endif %}
-        {% if item.unread %}<span class="chat-unread" aria-label="непрочитанных: {{ item.unread }}">{{ item.unread if item.unread < 100 else "99+" }}</span>{% endif %}
+        {% if item.unread %}<span class="chat-unread" aria-label="Unread: {{ item.unread }}">{{ item.unread if item.unread < 100 else "99+" }}</span>{% endif %}
       </span>
     </a></li>
     {% endfor %}
   </ul>
   {% elif user.role == "student" %}
-  <div class="card"><p class="lead">Чат появится, когда учитель добавит тебя в группу.</p></div>
+  <div class="card"><p class="lead">Chat will be available once your teacher adds you to a group.</p></div>
   {% else %}
-  <div class="card"><p class="lead">Создайте группу в разделе «Группы» — у неё сразу появится общий чат, а у каждого ученика — личный чат с вами.</p></div>
+  <div class="card"><p class="lead">Create a group to open a group chat and a private chat with each student.</p></div>
   {% endif %}
 </section>
 {% endblock %}

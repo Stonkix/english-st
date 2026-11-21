@@ -17,8 +17,8 @@ def test_login_success_sets_cookie(client, db):
 def test_wrong_password_generic(client, db):
     make_user(db, login="ivan")
     r = login_as(client, "ivan", "Wrong12345a")
-    assert r.status_code == 200 and "Неверный логин или пароль" in r.text
-    assert "Неверный логин или пароль" in login_as(client, "nobody", "x").text
+    assert r.status_code == 200 and "Incorrect username or password" in r.text
+    assert "Incorrect username or password" in login_as(client, "nobody", "x").text
 
 
 def test_lockout_case_insensitive(client, db):
@@ -26,12 +26,12 @@ def test_lockout_case_insensitive(client, db):
     for name in ["ivan", "IVAN", "Ivan", "iVan", "ivaN"]:
         login_as(client, name, "Wrong12345a")
     r = login_as(client, "ivan")  # верный пароль, но блок
-    assert r.status_code == 429 and "Попробуйте через 10 мин" in r.text
+    assert r.status_code == 429 and "Try again in 10 min" in r.text
 
 
 def test_layout_hint(client, db):
     make_user(db, login="ivan")
-    assert "Проверьте раскладку" in login_as(client, "ivan", "Пароль12345").text
+    assert "Check that your keyboard is set to English." in login_as(client, "ivan", "Пароль12345").text
 
 
 def test_must_change_flow(client, db):
@@ -39,7 +39,7 @@ def test_must_change_flow(client, db):
     assert login_as(client, "kid").headers["location"] == "/password/new"
     assert client.get("/", follow_redirects=False).headers["location"] == "/password/new"
     r = client.post("/password/new", data={"new": "short", "repeat": "short"})
-    assert "Не короче 10 символов" in r.text
+    assert "At least 10 characters" in r.text
     r = client.post("/password/new", data={"new": "NewPassw0rd", "repeat": "NewPassw0rd"}, follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/"
     client.post("/logout")
@@ -61,7 +61,7 @@ def test_anonymous_redirected(client):
 def test_inactive_user_same_as_wrong_password(client, db):
     make_user(db, login="ivan", is_active=False)
     r = login_as(client, "ivan")  # пароль верный
-    assert r.status_code == 200 and "Неверный логин или пароль" in r.text
+    assert r.status_code == 200 and "Incorrect username or password" in r.text
     assert "est_session" not in r.headers.get("set-cookie", "")
     assert db.scalars(select(LoginAttempt).where(LoginAttempt.key == "ivan|testclient")).one().failures == 1
 
@@ -96,7 +96,7 @@ def test_blocked_login_skips_password_check(client, db, monkeypatch):
 def test_very_long_password_is_just_wrong(client, db):
     make_user(db, login="ivan")
     r = login_as(client, "ivan", "Aa1" * 200)
-    assert r.status_code == 200 and "Неверный логин или пароль" in r.text
+    assert r.status_code == 200 and "Incorrect username or password" in r.text
 
 
 def test_unencodable_password_is_just_wrong(client, db):
@@ -107,7 +107,7 @@ def test_unencodable_password_is_just_wrong(client, db):
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         follow_redirects=False,
     )
-    assert r.status_code == 200 and "Неверный логин или пароль" in r.text
+    assert r.status_code == 200 and "Incorrect username or password" in r.text
 
 
 def test_verify_error_is_just_wrong(client, db, monkeypatch):
@@ -119,7 +119,7 @@ def test_verify_error_is_just_wrong(client, db, monkeypatch):
 
     monkeypatch.setattr(mod, "verify_password", boom)
     r = login_as(client, "ivan")
-    assert r.status_code == 200 and "Неверный логин или пароль" in r.text
+    assert r.status_code == 200 and "Incorrect username or password" in r.text
 
 
 def test_guard_key_is_truncated(client, db):
@@ -131,7 +131,7 @@ def test_guard_key_is_truncated(client, db):
 def test_long_login_does_not_match_32_char_account(client, db):
     make_user(db, login="a" * 32)
     r = login_as(client, "a" * 32 + "b")
-    assert r.status_code == 200 and "Неверный логин или пароль" in r.text
+    assert r.status_code == 200 and "Incorrect username or password" in r.text
 
 
 def test_blocked_message_rounds_minutes_up(client, db):
@@ -144,13 +144,13 @@ def test_blocked_message_rounds_minutes_up(client, db):
 
     row.blocked_until = utcnow() + timedelta(minutes=2, seconds=5)
     db.commit()
-    assert "через 3 мин" in login_as(client, "ivan").text
+    assert "in 3 min" in login_as(client, "ivan").text
 
 
 def test_layout_hint_only_for_non_latin_failure(client, db):
     make_user(db, login="ivan")
-    assert "Проверьте раскладку" not in login_as(client, "ivan", "Wrong12345a").text
-    assert "Проверьте раскладку" not in login_as(client, "nobody", "x").text
+    assert "Check that your keyboard is set to English." not in login_as(client, "ivan", "Wrong12345a").text
+    assert "Check that your keyboard is set to English." not in login_as(client, "nobody", "x").text
 
 
 def test_login_page_keeps_login_not_password(client, db):
@@ -173,7 +173,7 @@ def test_login_page_when_logged_in_redirects_home(client, db):
 def test_login_page_renders(client):
     r = client.get("/login")
     assert r.status_code == 200 and 'name="login"' in r.text and 'name="password"' in r.text
-    assert "Забыли пароль? Попросите учителя его сбросить" in r.text
+    assert "Forgot your password? Ask your teacher to reset it." in r.text
     assert "<nav" not in r.text
 
 
@@ -214,7 +214,7 @@ def test_password_new_mismatch(client, db):
     make_user(db, login="kid", must_change=True)
     login_as(client, "kid")
     r = client.post("/password/new", data={"new": "NewPassw0rd", "repeat": "NewPassw0rd1"})
-    assert r.status_code == 200 and "Пароли не совпадают" in r.text
+    assert r.status_code == 200 and "Passwords do not match" in r.text
     assert db.scalars(select(SessionRow)).one()  # сессия жива, флаг не снят
     assert client.get("/", follow_redirects=False).headers["location"] == "/password/new"
 
@@ -223,7 +223,7 @@ def test_password_new_shows_all_broken_rules(client, db):
     make_user(db, login="kid", must_change=True)
     login_as(client, "kid")
     r = client.post("/password/new", data={"new": "пароль", "repeat": "пароль"})
-    for text in ("Не короче 10 символов", "строчная латинская", "заглавная латинская", "Есть цифра", "без русских букв"):
+    for text in ("At least 10 characters", "lowercase English letter", "uppercase English letter", "At least one digit", "no spaces"):
         assert text in r.text
 
 
@@ -232,7 +232,7 @@ def test_password_new_too_long(client, db):
     login_as(client, "kid")
     long = "Aa1" + "b" * 300
     r = client.post("/password/new", data={"new": long, "repeat": long})
-    assert r.status_code == 200 and "Не длиннее 256 символов" in r.text
+    assert r.status_code == 200 and "At most 256 characters" in r.text
 
 
 def test_password_new_page_has_rules_and_toggle(client, db):
@@ -243,7 +243,7 @@ def test_password_new_page_has_rules_and_toggle(client, db):
     for code in ("length", "lower", "upper", "digit", "charset"):
         assert f'data-rule="{code}"' in r.text
     assert "data-toggle-password" in r.text and "<nav" not in r.text  # на принудительной смене меню нет
-    assert "Выйти" in r.text
+    assert "Sign out" in r.text
 
 
 def test_password_new_only_for_forced_change(client, db):
@@ -282,7 +282,7 @@ def test_student_home_greets_by_name(client, db):
     login_as(client, "ivan")
     r = client.get("/")
     assert r.status_code == 200
-    assert "Привет, Маша &lt;b&gt;!" in r.text
+    assert "Hi, Маша &lt;b&gt;!" in r.text
     assert "<nav" in r.text
 
 
@@ -292,7 +292,7 @@ def test_error_pages_keep_nav_for_logged_in(client, db):
     make_user(db, login="ivan")
     login_as(client, "ivan")
     r = client.get("/no-such-page")
-    assert r.status_code == 404 and "Страница не найдена" in r.text and "<nav" in r.text
+    assert r.status_code == 404 and "Page not found" in r.text and "<nav" in r.text
 
 
 def test_error_pages_anonymous_have_no_nav(client):

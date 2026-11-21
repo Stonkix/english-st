@@ -1,16 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Заявки — English ST{% endblock %}
+{% block title %}Requests — English ST{% endblock %}
 
 {% macro order_head(o) %}
 <span class="item-row-main">
   <strong>{{ o.student.full_name }} — {{ o.item.title }}</strong>
-  <small>{{ o.created_at|msk }} · {{ o.price_amount }} {{ o.price_type.name }}</small>
+  <small>{{ o.created_at|msk }} · {{ o.price_amount }} {{ o.price_type.display_name }}</small>
 </span>
 {% endmacro %}
 
 {% block content %}
 <section class="page teacher-page">
-  <h1>Заявки</h1>
+  <h1>Requests</h1>
   {% if error %}<div class="alert-error" role="alert"><p>{{ error }}</p></div>{% endif %}
   {% if pending %}
   {% for o in pending %}
@@ -18,27 +18,27 @@
     <div class="item-row">{{ order_head(o) }}</div>
     <div class="stamp-actions">
       <form method="post" action="/orders/{{ o.id }}/issue" data-once>
-        <button class="btn btn-primary btn-block" type="submit">Выдано</button>
+        <button class="btn btn-primary btn-block" type="submit">Mark fulfilled</button>
       </form>
       <details class="order-reject">
-        <summary class="btn btn-secondary btn-block">Отклонить</summary>
+        <summary class="btn btn-secondary btn-block">Decline</summary>
         <form method="post" action="/orders/{{ o.id }}/reject" data-once>
           <div class="field">
-            <label for="comment-{{ o.id }}">Почему (ученик увидит)</label>
+            <label for="comment-{{ o.id }}">Reason (visible to the student)</label>
             <input id="comment-{{ o.id }}" name="comment" maxlength="200" autocomplete="off">
           </div>
-          <button class="btn btn-danger btn-block" type="submit">Отклонить и вернуть штампики</button>
+          <button class="btn btn-danger btn-block" type="submit">Decline and return stamps</button>
         </form>
       </details>
     </div>
   </div>
   {% endfor %}
   {% else %}
-  <div class="card"><p class="lead">Новых заявок нет.</p></div>
+  <div class="card"><p class="lead">No new requests.</p></div>
   {% endif %}
 
   {% if done %}
-  <h2>Обработанные</h2>
+  <h2>Processed</h2>
   <ul class="list">
     {% for o in done %}
     <li class="item-row">

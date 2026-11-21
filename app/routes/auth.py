@@ -31,10 +31,10 @@ from app.timeutil import utcnow
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-WRONG_CREDENTIALS = "Неверный логин или пароль"
+WRONG_CREDENTIALS = "Incorrect username or password"
 # Для несуществующего логина пароль сверяется с этим хешем, чтобы время ответа не выдавало, есть ли такой логин
 _DUMMY_HASH = hash_password("dummy-password-for-timing")
-_NON_LATIN = re.compile(r"[^\x21-\x7E]")
+_NON_LATIN = re.compile(r"[^!-~]")
 
 
 def _clean(value: str) -> str:
@@ -48,7 +48,7 @@ def _login_page(request: Request, login: str, error: str | None, hint: bool, sta
 
 def _blocked_page(request: Request, login: str, until: datetime):
     minutes = max(1, math.ceil((until - utcnow()).total_seconds() / 60))
-    return _login_page(request, login, f"Слишком много попыток. Попробуйте через {minutes} мин.", False, 429)
+    return _login_page(request, login, f"Too many sign-in attempts. Try again in {minutes} min.", False, 429)
 
 
 @router.get("/login")

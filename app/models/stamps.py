@@ -7,6 +7,7 @@ from app.db import Base
 from app.timeutil import utcnow
 
 REASONS = ("manual", "penalty", "daily", "order", "refund", "conversion", "pet", "pet_food")
+BUILT_IN_NAMES = {"Обычный": "Common", "Редкий": "Rare", "Легендарный": "Legendary"}
 
 
 class StampType(Base):
@@ -27,8 +28,12 @@ class StampType(Base):
         order_by="(StampVariant.sort_order, StampVariant.id)", cascade="all, delete-orphan", passive_deletes=True,
     )
 
+    @property
+    def display_name(self) -> str:
+        return BUILT_IN_NAMES.get(self.name, self.name)
+
     def __str__(self) -> str:
-        return self.name
+        return self.display_name
 
 
 class StampVariant(Base):

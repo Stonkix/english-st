@@ -12,7 +12,7 @@ def admin(client, db):
 def test_admin_creates_teacher(client, db):
     make_user(db, role="admin", login="boss"); login_as(client, "boss")
     r = client.post("/school/teachers", data={"first_name": "Анна", "last_name": "Смирнова", "login": "anna"})
-    assert "больше он не покажется" in r.text
+    assert "It’s shown only once." in r.text
     assert r.headers["cache-control"] == "no-store"
     t = db.query(User).filter_by(login="anna").one()
     assert t.role == "teacher" and t.must_change_password
@@ -40,7 +40,7 @@ def test_admin_nav_has_school(client, db):
 def test_school_index_and_list(client, db):
     admin(client, db)
     make_user(db, role="teacher", login="teach1", first_name="Анна", last_name="Смирнова")
-    assert "Учителя" in client.get("/school").text
+    assert "Teachers" in client.get("/school").text
     page = client.get("/school/teachers").text
     assert "teach1" in page and "Анна Смирнова" in page
 
@@ -48,7 +48,7 @@ def test_school_index_and_list(client, db):
 def test_school_index_has_reset_login_blocks_button(client, db):
     admin(client, db)
     page = client.get("/school").text
-    assert 'action="/school/login-blocks/reset"' in page and "Снять все блокировки входа" in page
+    assert 'action="/school/login-blocks/reset"' in page and "Clear all sign-in lockouts" in page
     assert 'data-confirm="' in page.split('action="/school/login-blocks/reset"')[1].split(">")[0]
 
 
@@ -65,7 +65,7 @@ def test_admin_resets_all_login_blocks(client, db):
     assert r.status_code == 303 and r.headers["location"] == "/school?unlocked=1"
     db.expire_all()
     assert db.query(LoginAttempt).count() == 0
-    assert "Блокировки входа сняты" in client.get("/school?unlocked=1").text
+    assert "Sign-in lockouts cleared" in client.get("/school?unlocked=1").text
 
 
 def test_teacher_cannot_reset_all_login_blocks(client, db):
@@ -83,11 +83,11 @@ def test_create_teacher_validation(client, db):
     admin(client, db)
     make_user(db, role="student", login="taken")
     r = client.post("/school/teachers", data={"first_name": "А", "last_name": "Б", "login": "Пе"})
-    assert "Логин: латинские буквы" in r.text
+    assert "Use 3–32 characters in the username" in r.text
     r = client.post("/school/teachers", data={"first_name": " ", "last_name": "Б", "login": "okok"})
-    assert "Введите имя и фамилию" in r.text
+    assert "Enter a first and last name" in r.text
     r = client.post("/school/teachers", data={"first_name": "А", "last_name": "Б", "login": "taken"})
-    assert "Логин уже занят" in r.text
+    assert "That username is already taken" in r.text
     assert db.query(User).filter_by(role="teacher").count() == 0
 
 
@@ -98,7 +98,7 @@ def test_reset_password_revokes_sessions(client, db):
     login_as(other, "teach1")
     assert db.query(Session).filter_by(user_id=t.id).count() == 1
     r = client.post(f"/school/teachers/{t.id}/reset-password")
-    assert "больше он не покажется" in r.text and r.headers["cache-control"] == "no-store"
+    assert "It’s shown only once." in r.text and r.headers["cache-control"] == "no-store"
     db.expire_all()
     assert db.query(Session).filter_by(user_id=t.id).count() == 0
     assert db.get(User, t.id).must_change_password

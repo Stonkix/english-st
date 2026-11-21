@@ -36,10 +36,10 @@ def test_teacher_creates_item_with_image(client, db):
     assert item.title == "Наклейка" and item.image.startswith(f"shop/{g.id}/")
     assert client.get(f"/media/{item.image}").status_code == 200
     r = client.post(f"/shop/groups/{g.id}/items", data={"title": "", "price_type_id": star.id, "price_amount": "0"})
-    assert r.status_code == 400 and "Название" in r.text and "Цена — от 1" in r.text
+    assert r.status_code == 400 and "Enter a title" in r.text and "Enter a price from 1" in r.text
     r = client.post(f"/shop/groups/{g.id}/items", data={"title": "X", "price_type_id": star.id, "price_amount": "1"},
                     files={"image": ("a.png", b"nope", "image/png")})
-    assert "Картинка не подошла" in r.text
+    assert "Upload a valid image" in r.text
 
 
 def test_item_without_image_and_foreign_group(client, db):
@@ -61,17 +61,17 @@ def test_student_orders_and_cancels(client, db):
     db.commit()
     login_as(client, "kid")
     page = client.get("/shop").text
-    assert "Наклейка" in page and "Не хватает: ещё 45" in page
+    assert "Наклейка" in page and "You still need 45" in page
     r = client.post(f"/shop/items/{cheap.id}/order", follow_redirects=False)
     assert r.status_code == 303
-    assert "Заявка отправлена" in client.get("/shop?ok=ordered").text
+    assert "Request sent" in client.get("/shop?ok=ordered").text
     assert stamps.balance_of(db, kid.id, star.id) == 1
     r = client.post(f"/shop/items/{pricey.id}/order")
-    assert r.status_code == 400 and "Не хватает штампиков" in r.text
+    assert r.status_code == 400 and "You need" in r.text
     order = db.query(Order).one()
     client.post(f"/shop/orders/{order.id}/cancel")
     assert stamps.balance_of(db, kid.id, star.id) == 5
-    assert "Отменено" in client.get("/shop").text
+    assert "Canceled" in client.get("/shop").text
 
 
 def test_teacher_queue_issue_and_reject(client, db):
@@ -85,7 +85,7 @@ def test_teacher_queue_issue_and_reject(client, db):
     client.post("/logout")
     login_as(client, "teach")
     page = client.get("/orders").text
-    assert page.count("Наклейка") == 2 and 'aria-label="новых заявок: 2"' in page
+    assert page.count("Наклейка") == 2 and 'aria-label="New requests: 2"' in page
     first, second = db.query(Order).order_by(Order.id).all()
     client.post(f"/orders/{first.id}/issue")
     client.post(f"/orders/{second.id}/reject", data={"comment": "закончились"})
@@ -93,7 +93,7 @@ def test_teacher_queue_issue_and_reject(client, db):
     db.refresh(second)
     assert (first.status, second.status, second.teacher_comment) == ("issued", "rejected", "закончились")
     assert stamps.balance_of(db, kid.id, star.id) == 7
-    assert "Заявка уже обработана" in client.post(f"/orders/{first.id}/reject").text
+    assert "This request has already been processed" in client.post(f"/orders/{first.id}/reject").text
     assert client.post(f"/orders/{first.id}/explode").status_code == 404
 
 
@@ -107,7 +107,7 @@ def test_other_teacher_cannot_decide(client, db):
     make_user(db, role="teacher", login="other")
     login_as(client, "other")
     assert client.post(f"/orders/{order.id}/issue").status_code == 404
-    assert "Новых заявок нет" in client.get("/orders").text
+    assert "No new requests" in client.get("/orders").text
 
 
 def test_edit_toggle_delete(client, db):
@@ -134,7 +134,7 @@ def test_edit_toggle_delete(client, db):
     from app import shop
     shop.place_order(db, kid, item.id)
     r = client.post(f"/shop/items/{item.id}/delete")
-    assert "можно только скрыть" in r.text and db.query(ShopItem).count() == 1
+    assert "Hide" in r.text and db.query(ShopItem).count() == 1
 
 
 def test_shop_image_access(client, db):

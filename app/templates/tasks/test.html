@@ -4,13 +4,13 @@
 
 {% block content %}
 <section class="page teacher-page">
-  <a class="back-link" href="/tasks/tests">← Тесты</a>
+  <a class="back-link" href="/tasks/tests">← Tests</a>
   <div>
     <h1>{{ test.title }}</h1>
     {% if test.description %}<p>{{ test.description }}</p>{% endif %}
   </div>
 
-  <h2>Вопросы ({{ items|length }})</h2>
+  <h2>Questions ({{ items|length }})</h2>
   {% if items %}
   <ul class="list">
     {% for q in items %}
@@ -21,24 +21,24 @@
       </a>
       <form method="post" action="/tasks/tests/{{ test.id }}/questions/{{ q.id }}/move">
         <input type="hidden" name="direction" value="up">
-        <button class="btn btn-secondary mini-btn" type="submit" aria-label="Выше"{% if loop.first %} disabled{% endif %}>↑</button>
+        <button class="btn btn-secondary mini-btn" type="submit" aria-label="Move up"{% if loop.first %} disabled{% endif %}>↑</button>
       </form>
       <form method="post" action="/tasks/tests/{{ test.id }}/questions/{{ q.id }}/move">
         <input type="hidden" name="direction" value="down">
-        <button class="btn btn-secondary mini-btn" type="submit" aria-label="Ниже"{% if loop.last %} disabled{% endif %}>↓</button>
+        <button class="btn btn-secondary mini-btn" type="submit" aria-label="Move down"{% if loop.last %} disabled{% endif %}>↓</button>
       </form>
-      <form method="post" action="/tasks/tests/{{ test.id }}/questions/{{ q.id }}/remove" data-confirm="Убрать вопрос из теста?">
-        <button class="btn btn-secondary mini-btn" type="submit" aria-label="Убрать из теста">×</button>
+      <form method="post" action="/tasks/tests/{{ test.id }}/questions/{{ q.id }}/remove" data-confirm="Remove this question from the test?">
+        <button class="btn btn-secondary mini-btn" type="submit" aria-label="Remove from test">×</button>
       </form>
     </li>
     {% endfor %}
   </ul>
   {% else %}
-  <div class="card"><p class="lead">В тесте пока нет вопросов. Добавьте их из пула или создайте новые ниже.</p></div>
+  <div class="card"><p class="lead">This test has no questions yet. Add questions from a pool or create them below.</p></div>
   {% endif %}
 
   <div class="card">
-    <h2>Добавить из пула</h2>
+    <h2>Add from a pool</h2>
     {% if error %}
     <div class="alert-error" role="alert"><p>{{ error }}</p></div>
     {% endif %}
@@ -46,19 +46,19 @@
     <ul class="list">
       {% for p in pools %}
       <li><a class="list-item" href="/tasks/tests/{{ test.id }}?pool={{ p.id }}">
-        <span class="list-item-main"><strong>{{ p.title }}</strong><small>{{ p.questions|length }} вопр.</small></span>
+        <span class="list-item-main"><strong>{{ p.title }}</strong><small>{% set question_count = p.questions|length %}{{ question_count }} {{ "question" if question_count == 1 else "questions" }}</small></span>
         <span class="badge badge-blue">{{ p.level }}</span>
       </a></li>
       {% endfor %}
     </ul>
     {% else %}
-    <p class="muted">Пулов пока нет.</p>
+    <p class="muted">No question pools yet.</p>
     {% endif %}
   </div>
 
   {% if pool %}
   <div class="card">
-    <h2>Пул «{{ pool.title }}»</h2>
+    <h2>Pool “{{ pool.title }}”</h2>
     {% if candidates %}
     <ul class="list">
       {% for q in candidates %}
@@ -66,19 +66,19 @@
         <span class="item-row-main"><strong>{{ q.prompt }}</strong><small>{{ labels[q.type] }}</small></span>
         <form method="post" action="/tasks/tests/{{ test.id }}/add" data-once>
           <input type="hidden" name="question_id" value="{{ q.id }}">
-          <button class="btn btn-primary mini-btn" type="submit" aria-label="Добавить в тест">+</button>
+          <button class="btn btn-primary mini-btn" type="submit" aria-label="Add to test">+</button>
         </form>
       </li>
       {% endfor %}
     </ul>
     {% else %}
-    <p class="muted">Все вопросы этого пула уже в тесте (или пул пуст).</p>
+    <p class="muted">No more questions to add from this pool.</p>
     {% endif %}
   </div>
   {% endif %}
 
   <div class="card">
-    <h2>Создать вопрос в тесте</h2>
+    <h2>Create a question for this test</h2>
     <div class="type-grid">
       {% for t in types %}
       <a class="btn btn-secondary type-btn" href="/tasks/tests/{{ test.id }}/questions/new?type={{ t }}">
@@ -89,6 +89,6 @@
   </div>
 
   {{ rewards_card(rewards, stamp_types, "/tasks/tests/" ~ test.id ~ "/rewards", reward_error, reward_values,
-     "Свои награды этого теста. Когда тест назначен группе или ученику, выдаются они вместо наград группы; если их нет — награды группы.") }}
+     "An assigned test uses these rewards. If none are set, students earn the group’s daily rewards.") }}
 </section>
 {% endblock %}

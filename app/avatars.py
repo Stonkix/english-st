@@ -9,7 +9,7 @@ from app.images import InvalidImage, delete_media, read_limited, save_avatar
 from app.models import AvatarHistory, User
 from app.timeutil import moscow_str, utcnow
 
-BAD_IMAGE = "Не получилось открыть картинку. Попробуйте другое фото."
+BAD_IMAGE = "We couldn’t open the image. Try a different photo."
 
 LOCK_PERIODS: dict[str, timedelta | None] = {
     "1": timedelta(days=1),
@@ -22,7 +22,7 @@ LOCK_PERIODS: dict[str, timedelta | None] = {
 def read_photo(photo: Any) -> bytes:
     """Читает загруженный файл (не больше лимита) и сразу закрывает временный файл multipart."""
     if photo is None:
-        raise InvalidImage("Файл не выбран")
+        raise InvalidImage("Choose a file")
     try:
         return read_limited(photo.file)
     finally:
@@ -40,8 +40,8 @@ def lock_message(user: User, now: datetime | None = None) -> str | None:
     if not avatar_locked(user, now):
         return None
     if user.avatar_locked_forever:
-        return "Учитель запретил менять фото навсегда"
-    return f"Учитель запретил менять фото до {moscow_str(user.avatar_locked_until)}"
+        return "Photo changes are disabled indefinitely"
+    return f"Photo changes are disabled until {moscow_str(user.avatar_locked_until)}"
 
 
 def set_avatar_lock(db: DbSession, user: User, period: str | None, now: datetime | None = None) -> None:

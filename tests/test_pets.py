@@ -32,10 +32,10 @@ def test_buy_pet(db):
     pet = pets.buy_pet(db, kid, cat.id, "  Мурка ", today=DAY)
     assert (pet.name, pet.bought_on) == ("Мурка", DAY)
     assert stamps.balance_of(db, kid.id, common.id) == 5
-    assert stamps.history(db, kid.id)[0].comment == "Кошечка «Мурка»"
-    with pytest.raises(pets.PetError, match="уже есть"):
+    assert stamps.history(db, kid.id)[0].comment == "Cat “Мурка”"
+    with pytest.raises(pets.PetError, match="already have"):
         pets.buy_pet(db, kid, cat.id, "Вторая")
-    with pytest.raises(pets.PetError, match="нужно 15"):
+    with pytest.raises(pets.PetError, match="need 15"):
         pets.buy_pet(db, kid, dog.id, "Шарик")
     assert db.query(Pet).count() == 1
 
@@ -43,12 +43,12 @@ def test_buy_pet(db):
 def test_pet_name_rules(db):
     seed_filter(db)
     kid, common, cat, dog = _setup(db)
-    for bad, msg in (("  ", "имя"), ("x" * 21, "не длиннее"), ("Сука", "не подойдёт")):
+    for bad, msg in (("  ", "Choose a name"), ("x" * 21, "at most"), ("Сука", "Choose a different name")):
         with pytest.raises(pets.PetError, match=msg):
             pets.buy_pet(db, kid, cat.id, bad)
     dog.is_active = False
     db.commit()
-    with pytest.raises(pets.PetError, match="нет в магазине"):
+    with pytest.raises(pets.PetError, match="not available in the shop"):
         pets.buy_pet(db, kid, dog.id, "Шарик")
 
 
@@ -56,7 +56,7 @@ def test_buy_food_pack_and_limit(db):
     kid, common, cat, dog = _setup(db, balance=10)
     assert pets.buy_food(db, kid, 3) == 30
     assert stamps.balance_of(db, kid.id, common.id) == 7
-    with pytest.raises(pets.PetError, match="не больше 50 порций, у тебя 30"):
+    with pytest.raises(pets.PetError, match="up to 50 portions and already have 30"):
         pets.buy_food(db, kid, 3)
     assert pets.buy_food(db, kid, 2) == 50
     with pytest.raises(pets.PetError):
@@ -66,21 +66,21 @@ def test_buy_food_pack_and_limit(db):
 def test_feed_twice_and_clean_once(db):
     kid, common, cat, dog = _setup(db)
     pet = pets.buy_pet(db, kid, cat.id, "Мурка", today=DAY)
-    with pytest.raises(pets.PetError, match="Корм закончился"):
+    with pytest.raises(pets.PetError, match="out of food"):
         pets.feed(db, kid, pet.id, today=DAY)
     pets.buy_food(db, kid, 1)
     pets.feed(db, kid, pet.id, today=DAY)
     pets.feed(db, kid, pet.id, today=DAY)
-    with pytest.raises(pets.PetError, match="уже сыт"):
+    with pytest.raises(pets.PetError, match="already had enough food"):
         pets.feed(db, kid, pet.id, today=DAY)
     assert pets.food(db, kid.id) == 8
     pets.clean(db, kid, pet.id, today=DAY)
-    with pytest.raises(pets.PetError, match="уже убрано"):
+    with pytest.raises(pets.PetError, match="already cleaned up"):
         pets.clean(db, kid, pet.id, today=DAY)
     status = pets.statuses(db, kid.id, today=DAY)[0]
     assert status.done and status.feedings == 2
     other = make_user(db, login="other")
-    with pytest.raises(pets.PetError, match="не найден"):
+    with pytest.raises(pets.PetError, match="not found"):
         pets.feed(db, other, pet.id, today=DAY)
 
 
@@ -101,7 +101,7 @@ def test_runs_away_after_three_days_without_care(db):
     db.refresh(pet)
     assert pet.ran_away_on == DAY + timedelta(days=5)
     assert pets.statuses(db, kid.id, today=DAY + timedelta(days=5)) == []
-    with pytest.raises(pets.PetError, match="убежал"):
+    with pytest.raises(pets.PetError, match="ran away"):
         pets.feed(db, kid, pet.id, today=DAY + timedelta(days=5))
     # можно завести снова
     assert pets.buy_pet(db, kid, cat.id, "Мурка 2", today=DAY + timedelta(days=5)).ran_away_on is None
@@ -125,7 +125,7 @@ def test_several_pets_share_food(db):
     pets.feed(db, kid, a.id, today=DAY)
     pets.feed(db, kid, b.id, today=DAY)
     pets.feed(db, kid, b.id, today=DAY)
-    with pytest.raises(pets.PetError, match="Корм закончился"):
+    with pytest.raises(pets.PetError, match="out of food"):
         pets.feed(db, kid, a.id, today=DAY)
     assert [s.feedings for s in pets.statuses(db, kid.id, today=DAY)] == [1, 2]
 
@@ -139,23 +139,23 @@ def test_shop_buy_pet_and_food_then_care(client, db):
     kid, common, cat, dog = _setup(db, balance=20)
     login_as(client, "kid")
     page = client.get("/shop").text
-    assert "Кошечка" in page and "Корм для питомцев" in page
+    assert "Cat" in page and "Pet food" in page
     r = client.post(f"/shop/pets/{cat.id}/buy", data={"name": "Мурка"}, follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/pets?ok=new"
-    assert "Уже у тебя" in client.get("/shop").text
+    assert "Already adopted" in client.get("/shop").text
     r = client.post(f"/shop/pets/{dog.id}/buy", data={"name": "Шарик"})
-    assert r.status_code == 400 and "Не хватает штампиков" in r.text
+    assert r.status_code == 400 and "You need" in r.text
     assert client.post("/shop/food", data={"packs": "2"}, follow_redirects=False).status_code == 303
     pet = db.query(Pet).one()
     home = client.get("/").text
-    assert "Питомцы ждут заботы" in home and "Мурка: покормить (0 из 2), убрать" in home
+    assert "Your pets need care" in home and "Мурка: feed (0 out of 2), clean up" in home
     client.post(f"/pets/{pet.id}/feed")
     client.post(f"/pets/{pet.id}/feed")
-    assert "уже сыт" in client.post(f"/pets/{pet.id}/feed").text
+    assert "already had enough food" in client.post(f"/pets/{pet.id}/feed").text
     client.post(f"/pets/{pet.id}/clean")
     page = client.get("/pets").text
-    assert "Сегодня всё сделано!" in page and "Корм: <strong>18</strong>" in page
-    assert "Питомцы ждут заботы" not in client.get("/").text
+    assert "Care complete for today!" in page and "Food: <strong>18</strong>" in page
+    assert "Your pets need care" not in client.get("/").text
 
 
 def test_pet_pages_student_only_and_foreign_pet(client, db):
@@ -163,7 +163,7 @@ def test_pet_pages_student_only_and_foreign_pet(client, db):
     pet = pets.buy_pet(db, kid, cat.id, "Мурка")
     make_user(db, login="other")
     login_as(client, "other")
-    assert "Питомец не найден" in client.post(f"/pets/{pet.id}/feed").text
+    assert "Pet not found" in client.post(f"/pets/{pet.id}/feed").text
     client.post("/logout")
     login_as(client, "teach")
     assert client.get("/pets", follow_redirects=False).status_code == 403
@@ -174,17 +174,17 @@ def test_runaway_shown_on_home(client, db):
     kid, common, cat, dog = _setup(db)
     pet = pets.buy_pet(db, kid, cat.id, "Мурка", today=moscow_today() - timedelta(days=5))
     login_as(client, "kid")
-    assert "Мурка убежал(а)!" in client.get("/").text
+    assert "Мурка ran away!" in client.get("/").text
     db.refresh(pet)
     assert pet.ran_away_on == moscow_today()
-    assert "убежал(а)" in client.get("/pets").text
+    assert "ran away" in client.get("/pets").text
 
 
 def test_admin_pet_settings(client, db):
     kid, common, cat, dog = _setup(db)
     make_user(db, role="admin", login="adm")
     login_as(client, "adm")
-    assert "Кошечка" in client.get("/school/pets").text
+    assert "Cat" in client.get("/school/pets").text
     data = {"price_type_id": common.id, "food_pack_price": "2", "food_pack_size": "5", "food_max": "40", "runaway_days": "4",
             f"price_{cat.id}": "20", f"active_{cat.id}": "1", f"price_{dog.id}": "25"}
     assert client.post("/school/pets", data=data, follow_redirects=False).status_code == 303
@@ -194,5 +194,5 @@ def test_admin_pet_settings(client, db):
     db.refresh(dog)
     assert (cfg.food_pack_price, cfg.food_pack_size, cfg.food_max, cfg.runaway_days) == (2, 5, 40, 4)
     assert (cat.price, cat.is_active, dog.price, dog.is_active) == (20, True, 25, False)
-    assert "вмещать" in client.post("/school/pets", data={**data, "food_max": "3"}).text
-    assert "Проверьте числа" in client.post("/school/pets", data={**data, "runaway_days": "0"}).text
+    assert "must fit" in client.post("/school/pets", data={**data, "food_max": "3"}).text
+    assert "Use these ranges" in client.post("/school/pets", data={**data, "runaway_days": "0"}).text

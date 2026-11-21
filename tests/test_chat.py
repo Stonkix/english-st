@@ -116,7 +116,7 @@ def test_post_rate_limited(db):
     t, g, s1, _ = _school(db)
     room = chat.group_room(db, g.id)
     chat.post_text(db, s1, room, "раз")
-    with pytest.raises(ChatError, match="Слишком много"):
+    with pytest.raises(ChatError, match="Too many messages"):
         chat.post_text(db, s1, room, "два")
     assert db.query(ChatMessage).count() == 1
 
@@ -129,10 +129,15 @@ def test_delete_rules(db):
     assert chat.delete_message(db, s1, m, moderator=False)
     assert not chat.delete_message(db, s1, m, moderator=False)  # уже удалено
     data = chat.serialize(m, moderator=True)
+    assert data["deleted"] and data["text"] == "моё"
+    data = chat.serialize(m, moderator=False)
     assert data["deleted"] and "text" not in data and "original" not in data
     chat.limiter.reset()
     m2 = chat.post_text(db, s2, room, "чужое")
     assert chat.delete_message(db, t, m2, moderator=True) and m2.deleted_by == t.id
+    staff_message = chat.post_text(db, t, room, "от учителя")
+    assert chat.delete_message(db, t, staff_message, moderator=True)
+    assert "text" not in chat.serialize(staff_message, moderator=True)
 
 
 def test_history_pages(db):
@@ -168,7 +173,7 @@ def test_unread_and_mark_read(db):
 def test_preview(db):
     t, g, s1, _ = _school(db)
     room = chat.group_room(db, g.id)
-    assert chat.preview(None, s1) == "Сообщений пока нет"
+    assert chat.preview(None, s1) == "No messages yet"
     m = chat.post_sticker(db, s1, room, "cat")
-    assert chat.preview(m, s1) == "Вы: Стикер" and chat.preview(m, t) == "Стикер"
+    assert chat.preview(m, s1) == "You: Sticker" and chat.preview(m, t) == "Sticker"
     assert chat.last_messages(db, [room.id])[room.id].id == m.id

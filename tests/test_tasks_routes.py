@@ -57,7 +57,7 @@ def test_create_pool_requires_level_from_list(client, db):
     good = {"title": "Еда", "description": "Слова про еду", "level": "A1+"}
     for bad in ("", "Z9", "a1"):
         r = client.post("/tasks/pools", data={**good, "level": bad}, follow_redirects=False)
-        assert r.status_code == 200 and "Выберите уровень из списка" in r.text
+        assert r.status_code == 200 and "Select a level from the list" in r.text
     assert db.query(Pool).count() == 0
     r = client.post("/tasks/pools", data=good, follow_redirects=False)
     pool = db.query(Pool).one()
@@ -87,7 +87,7 @@ def test_tasks_page_lists_own_pools_and_edit(client, db):
     db.refresh(pool)
     assert (pool.title, pool.level) == ("Новое", "B2")
     r = client.post(f"/tasks/pools/{pool.id}/edit", data={"title": "x", "description": "d", "level": "bad"})
-    assert "Выберите уровень из списка" in r.text
+    assert "Select a level from the list" in r.text
 
 
 def test_pool_foreign_404(client, db):
@@ -121,7 +121,7 @@ def test_delete_nonempty_pool_refused(client, db):
     db.add(Question(owner_id=t.id, pool_id=pool_id, type="text_input", prompt="Q", payload={"accepted": ["a"]}))
     db.commit()
     r = client.post(f"/tasks/pools/{pool_id}/delete", follow_redirects=False)
-    assert r.status_code == 200 and "Сначала удалите вопросы" in r.text
+    assert r.status_code == 200 and "Remove the questions before deleting this pool" in r.text
     assert db.get(Pool, pool_id) is not None
     q = db.query(Question).one()
     client.post(f"/tasks/questions/{q.id}/delete")
@@ -209,11 +209,11 @@ def test_payload_error_keeps_input(client, db):
     t = teacher(client, db)
     pool = make_pool(db, t)
     r = post_q(client, pool, "choice_text", {"prompt": "Мой вопрос", "options": ["cat", "dog"]})
-    assert r.status_code == 200 and "Отметьте правильный вариант" in r.text
+    assert r.status_code == 200 and "Select the correct answer" in r.text
     assert "Мой вопрос" in r.text and 'value="cat"' in r.text and 'value="dog"' in r.text
     assert db.query(Question).count() == 0
     r = post_q(client, pool, "match_pairs", {"prompt": "P", "left": ["a", "b"], "right": ["x", ""]})
-    assert "Правая часть пары" in r.text and 'value="x"' in r.text
+    assert "Right side of the pair" in r.text and 'value="x"' in r.text
     assert post_q(client, pool, "text_input", {"prompt": " ", "accepted": "a"}).status_code == 200
     assert db.query(Question).count() == 0
 
@@ -226,13 +226,13 @@ def test_payload_error_deletes_just_saved_pictures(client, db):
         {"prompt": "Q", "captions": ["a", "b"]},  # правильный не отмечен
         files={"option_file_0": ("a.png", png(), "image/png"), "option_file_1": ("b.png", png(), "image/png")},
     )
-    assert r.status_code == 200 and "Отметьте правильный вариант" in r.text
+    assert r.status_code == 200 and "Select the correct answer" in r.text
     assert pics(t) == [] and db.query(Question).count() == 0
     r = post_q(
         client, pool, "choice_image", {"prompt": "Q", "captions": ["a", "b"], "correct": "0"},
         files={"option_file_0": ("a.png", png(), "image/png"), "option_file_1": ("b.txt", b"not an image", "text/plain")},
     )
-    assert r.status_code == 200 and "Не получилось открыть картинку" in r.text
+    assert r.status_code == 200 and "We couldn’t open the image" in r.text
     assert pics(t) == []
 
 
@@ -243,7 +243,7 @@ def test_choice_image_row_without_picture_refused(client, db):
         client, pool, "choice_image", {"prompt": "Q", "captions": ["a", "b"], "correct": "0"},
         files={"option_file_0": ("a.png", png(), "image/png")},
     )
-    assert "Загрузите картинку для каждого варианта" in r.text
+    assert "Upload an image for every answer choice" in r.text
     assert pics(t) == []
 
 
@@ -273,10 +273,10 @@ def test_foreign_or_missing_picture_path_rejected(client, db, path):
         client, pool, "choice_image",
         {"prompt": "Q", "captions": ["a", "b"], "correct": "0", "option_images": [own, path]},
     )
-    assert r.status_code == 200 and "Картинка не найдена, загрузите заново" in r.text
+    assert r.status_code == 200 and "Image not found. Upload it again." in r.text
     assert db.query(Question).count() == 0
     r = post_q(client, pool, "text_input", {"prompt": "Q", "accepted": "a", "image_keep": path})
-    assert "Картинка не найдена, загрузите заново" in r.text
+    assert "Image not found. Upload it again." in r.text
 
 
 def test_foreign_picture_path_real_file_of_other_owner_rejected(client, db):
@@ -287,7 +287,7 @@ def test_foreign_picture_path_real_file_of_other_owner_rejected(client, db):
     pool = make_pool(db, t)
     foreign = save_picture(other.id, png())
     r = post_q(client, pool, "text_input", {"prompt": "Q", "accepted": "a", "image_keep": foreign})
-    assert "Картинка не найдена, загрузите заново" in r.text
+    assert "Image not found. Upload it again." in r.text
     assert db.query(Question).count() == 0
 
 
@@ -483,7 +483,7 @@ def test_question_post_sets_no_unbounded_upload(client, db):
     t = teacher(client, db)
     pool = make_pool(db, t)
     r = post_q(client, pool, "text_input", {"prompt": "Q", "accepted": "a"}, files={"image": ("big.png", b"0" * (MAX_UPLOAD_BYTES + 1), "image/png")})
-    assert r.status_code == 200 and "Не получилось открыть картинку" in r.text and pics(t) == []
+    assert r.status_code == 200 and "We couldn’t open the image" in r.text and pics(t) == []
 
 
 # ---------- тесты ----------
@@ -544,7 +544,7 @@ def test_add_existing_question_only_from_own_pools_once(client, db):
     assert client.post(url, data={"question_id": mine.id}, follow_redirects=False).status_code == 303
     assert order_of(db, test) == [mine.id]
     r = client.post(url, data={"question_id": mine.id})
-    assert r.status_code == 200 and "уже в тесте" in r.text and order_of(db, test) == [mine.id]
+    assert r.status_code == 200 and "is already in the test" in r.text and order_of(db, test) == [mine.id]
     assert client.post(url, data={"question_id": foreign.id}).status_code == 404
     assert client.post(url, data={"question_id": loose.id}).status_code == 404
     assert order_of(db, test) == [mine.id]
@@ -681,12 +681,12 @@ def test_settings_validation(client, db):
     group = make_group(db, t)
     url = f"/tasks/groups/{group.id}/settings"
     for count, attempts, message in (
-        ("0", "3", "Число вопросов — от 1 до 30"),
-        ("31", "3", "Число вопросов — от 1 до 30"),
-        ("abc", "3", "Число вопросов — от 1 до 30"),
-        ("5", "0", "Попыток — от 1 до 10"),
-        ("5", "11", "Попыток — от 1 до 10"),
-        ("5", "", "Попыток — от 1 до 10"),
+        ("0", "3", "Enter between 1 and 30 questions per day"),
+        ("31", "3", "Enter between 1 and 30 questions per day"),
+        ("abc", "3", "Enter between 1 and 30 questions per day"),
+        ("5", "0", "Enter between 1 and 10 attempts per day"),
+        ("5", "11", "Enter between 1 and 10 attempts per day"),
+        ("5", "", "Enter between 1 and 10 attempts per day"),
     ):
         r = client.post(url, data={"question_count": count, "max_attempts": attempts})
         assert r.status_code == 200 and message in r.text, (count, attempts)
@@ -709,7 +709,7 @@ def test_assignment_rules(client, db):
     today = moscow_today().isoformat()
 
     r = client.post(url, data={"test_id": test.id, "date": (moscow_today() - timedelta(days=1)).isoformat(), "target": "group"})
-    assert r.status_code == 200 and "Дата уже прошла" in r.text
+    assert r.status_code == 200 and "Choose today or a future date" in r.text
     for data in (
         {"test_id": foreign_test.id, "date": today, "target": "group"},
         {"test_id": test.id, "date": "не дата", "target": "group"},
@@ -726,7 +726,7 @@ def test_assignment_rules(client, db):
     kid_a = db.query(Assignment).filter(Assignment.student_id == kid.id).one()
     assert (group_a.date, kid_a.date) == (moscow_today(), moscow_today() + timedelta(days=1))
     page = client.get(f"/tasks/groups/{group.id}").text
-    assert kid.last_name in page and "Тест" in page
+    assert kid.last_name in page and "Test" in page
 
     client.post(f"{url}/{kid_a.id}/delete")
     assert db.query(Assignment).filter(Assignment.student_id == kid.id).count() == 0
@@ -743,7 +743,7 @@ def test_assignment_conflict_friendly(client, db):
         data = {"test_id": test.id, "date": future(2), "target": target}
         assert client.post(url, data=data, follow_redirects=False).status_code == 303
         r = client.post(url, data=data)
-        assert r.status_code == 200 and "На эту дату уже назначен тест" in r.text
+        assert r.status_code == 200 and "A test is already assigned for this date" in r.text
     assert db.query(Assignment).count() == 2
 
 

@@ -11,7 +11,7 @@ function initPasswordToggles() {
     button.addEventListener("click", () => {
       const show = input.type === "password";
       input.type = show ? "text" : "password";
-      button.textContent = show ? "скрыть" : "показать";
+      button.textContent = show ? "Hide" : "Show";
       button.setAttribute("aria-pressed", String(show));
     });
   });
@@ -24,7 +24,7 @@ const PASSWORD_CHECKS = {
   lower: (p) => /[a-z]/.test(p),
   upper: (p) => /[A-Z]/.test(p),
   digit: (p) => /[0-9]/.test(p),
-  charset: (p) => /^[\x21-\x7E]*$/.test(p),
+  charset: (p) => /^[!-~]*$/.test(p),
 };
 
 function initPasswordRules() {

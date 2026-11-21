@@ -19,7 +19,7 @@ router = APIRouter()
 student_only = require_role("student")
 teacher_only = require_role("teacher")
 
-BAD_IMAGE = "Картинка не подошла: это не изображение или файл больше 10 МБ"
+BAD_IMAGE = "Upload a valid image of up to 10 MB"
 
 
 # ---------- счётчик в меню ----------
@@ -66,9 +66,9 @@ def student_shop_page(request: Request, db: DbSession, user: User, error: str | 
 
 
 OK_MESSAGES = {
-    "ordered": "Заявка отправлена учителю! Штампики списаны.",
-    "cancelled": "Заявка отменена, штампики вернулись.",
-    "food": "Корм куплен!",
+    "ordered": "Request sent to your teacher. Stamps were deducted.",
+    "cancelled": "Request canceled. Your stamps were returned.",
+    "food": "Food purchased!",
 }
 
 
@@ -230,7 +230,7 @@ def delete_item(item_id: Id, request: Request, user: User = Depends(teacher_only
     """Удалить можно только позицию без заявок (иначе пропала бы история) — такую можно скрыть."""
     item = _own_item(db, user, item_id)
     if shop.has_orders(db, item.id):
-        return _edit_page(request, db, user, item, errors=["На эту позицию уже были заявки — её можно только скрыть"])
+        return _edit_page(request, db, user, item, errors=["Hide items with existing requests to remove them from the shop"])
     group_id, image = item.group_id, item.image
     db.delete(item)
     db.commit()

@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Тесты — English ST{% endblock %}
+{% block title %}Tests — English ST{% endblock %}
 
 {% block content %}
 <section class="page teacher-page">
-  <a class="back-link" href="/tasks">← Задания</a>
-  <h1>Тесты</h1>
+  <a class="back-link" href="/tasks">← Assignments</a>
+  <h1>Tests</h1>
 
   {% if tests %}
   <ul class="list">
@@ -12,29 +12,29 @@
     <li><a class="list-item" href="/tasks/tests/{{ t.id }}">
       <span class="list-item-main">
         <strong>{{ t.title }}</strong>
-        <small>{{ t.questions|selectattr("is_active")|list|length }} вопр.{% if user.role == "admin" and owners.get(t.owner_id) %} · {{ owners[t.owner_id].full_name }}{% endif %}</small>
+        <small>{% set question_count = t.questions|selectattr("is_active")|list|length %}{{ question_count }} {{ "question" if question_count == 1 else "questions" }}{% if user.role == "admin" and owners.get(t.owner_id) %} · {{ owners[t.owner_id].full_name }}{% endif %}</small>
       </span>
     </a></li>
     {% endfor %}
   </ul>
   {% else %}
-  <div class="card"><p class="lead">Тестов пока нет. Создайте первый и соберите его из вопросов.</p></div>
+  <div class="card"><p class="lead">No tests yet. Create a test and add questions to it.</p></div>
   {% endif %}
 
   <form class="card" method="post" action="/tasks/tests" data-once>
-    <h2>Новый тест</h2>
+    <h2>New test</h2>
     {% if error %}
     <div class="alert-error" role="alert"><p>{{ error }}</p></div>
     {% endif %}
     <div class="field">
-      <label for="test-title">Название</label>
+      <label for="test-title">Title</label>
       <input id="test-title" name="title" value="{{ values.title }}" maxlength="80" autocomplete="off" required>
     </div>
     <div class="field">
-      <label for="test-description">Описание <small class="muted">(по желанию)</small></label>
+      <label for="test-description">Description <small class="muted">(optional)</small></label>
       <textarea id="test-description" name="description" rows="3" maxlength="500">{{ values.description }}</textarea>
     </div>
-    <button class="btn btn-primary btn-block" type="submit">Создать тест</button>
+    <button class="btn btn-primary btn-block" type="submit">Create test</button>
   </form>
 </section>
 {% endblock %}

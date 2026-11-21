@@ -22,4 +22,4 @@ def test_manifest_and_icons():
 
 def test_pages_link_manifest(client):
     html = client.get("/login").text
-    assert 'rel="manifest" href="/static/manifest.webmanifest"' in html and "apple-touch-icon" in html
+    assert 'rel="manifest" href="/static/manifest.webmanifest?v=' in html and "apple-touch-icon" in html

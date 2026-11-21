@@ -1,22 +1,22 @@
 {% extends "base.html" %}
 {% from "student/macros.html" import days %}
 {% from "partials/stamps.html" import chip %}
-{% block title %}Главная — English ST{% endblock %}
+{% block title %}Home — English ST{% endblock %}
 
 {% block content %}
 <section class="page">
-  <h1>Привет, {{ user.first_name }}!</h1>
+  <h1>Hi, {{ user.first_name }}!</h1>
 
   <div class="streak-card{% if status.streak %} is-on{% endif %}">
     <span class="streak-flame" aria-hidden="true"></span>
     <div>
-      <strong>{{ days(status.streak) }} подряд</strong>
-      <small>{% if status.streak %}Так держать! Не пропускай ни дня.{% else %}Пройди задание сегодня — и начнётся серия.{% endif %}</small>
+      <strong>{{ days(status.streak) }} in a row</strong>
+      <small>{% if status.streak %}Keep it up! Practice every day.{% else %}Complete today’s assignment to start a streak.{% endif %}</small>
     </div>
   </div>
 
   {% if balances %}
-  <a class="card stamp-balances" href="/stamps" aria-label="Мои штампики">
+  <a class="card stamp-balances" href="/stamps" aria-label="My stamps">
     {% for b in balances %}{{ chip(b.stamp_type, b.amount, big=true) }}{% endfor %}
   </a>
   {% endif %}
@@ -24,15 +24,15 @@
   {% for pet in pets_gone %}
   <a class="card pet-gone" href="/pets">
     <img src="{{ pet.species|pet_image }}" alt="" width="48" height="48">
-    <div><strong>{{ pet.name }} убежал(а)!</strong><small>За питомцем долго не ухаживали.</small></div>
+    <div><strong>{{ pet.name }} ran away!</strong><small>Your pet missed too many days of care.</small></div>
   </a>
   {% endfor %}
   {% if pet_todo %}
   <a class="card pet-home" href="/pets">
     <img src="{{ pet_todo[0].pet.species|pet_image }}" alt="" width="56" height="56">
     <div>
-      <strong>Питомцы ждут заботы</strong>
-      {% for s in pet_todo %}<small>{{ s.pet.name }}: {% if s.hungry %}покормить ({{ s.feedings }} из 2){% endif %}{% if s.hungry and not s.cleaned %}, {% endif %}{% if not s.cleaned %}убрать{% endif %}{% if s.neglected %} — без ухода {{ s.neglected }} дн.!{% endif %}</small>{% endfor %}
+      <strong>Your pets need care</strong>
+      {% for s in pet_todo %}<small>{{ s.pet.name }}: {% if s.hungry %}feed ({{ s.feedings }} out of 2){% endif %}{% if s.hungry and not s.cleaned %}, {% endif %}{% if not s.cleaned %}clean up{% endif %}{% if s.neglected %} · Days without care: {{ s.neglected }}{% endif %}</small>{% endfor %}
     </div>
   </a>
   {% endif %}
@@ -40,40 +40,40 @@
   {% for tx in penalties %}
   <div class="card penalty-card" role="status">
     <span class="penalty-amount">{{ chip(tx.stamp_type, tx.amount) }}</span>
-    <div><strong>Учитель забрал штампики</strong><small>{{ tx.comment }} · {{ tx.created_at|msk }}</small></div>
+    <div><strong>Your teacher removed stamps</strong><small>{{ tx.comment }} · {{ tx.created_at|msk }}</small></div>
   </div>
   {% endfor %}
 
   {% if notice %}<p class="alert-error" role="alert">{{ notice }}</p>{% endif %}
 
   <div class="card today-card">
-    <h2>Задание на сегодня</h2>
+    <h2>Today’s assignment</h2>
     {% if rewards %}
-    <div class="reward-tiers" aria-label="Награды за задание">
-      {% for r in rewards %}<span class="reward-tier">{% if r.min_score_percent %}от {{ r.min_score_percent }}%{% else %}за прохождение{% endif %} {{ chip(r.stamp_type, "+" ~ r.amount) }}</span>{% endfor %}
+    <div class="reward-tiers" aria-label="Assignment rewards">
+      {% for r in rewards %}<span class="reward-tier">{% if r.min_score_percent %}{{ r.min_score_percent }}% or higher{% else %}For completing the assignment{% endif %} {{ chip(r.stamp_type, "+" ~ r.amount) }}</span>{% endfor %}
     </div>
     {% endif %}
     {% if status.state == "none" %}
-      <p class="lead">Сегодня заданий нет. Отдыхай!</p>
+      <p class="lead">No assignment today. Enjoy your break!</p>
     {% elif status.state == "ready" %}
-      <p class="lead">Новое задание уже ждёт тебя.</p>
+      <p class="lead">Your new assignment is ready.</p>
       <form method="post" action="/daily/start" data-once>
-        <button class="btn btn-primary btn-block btn-big" type="submit">Начать</button>
+        <button class="btn btn-primary btn-block btn-big" type="submit">Start</button>
       </form>
     {% elif status.state == "in_progress" %}
-      <p class="lead">Задание уже начато — продолжим с того же места?</p>
+      <p class="lead">Pick up where you left off.</p>
       <form method="post" action="/daily/start" data-once>
-        <button class="btn btn-primary btn-block btn-big" type="submit">Продолжить</button>
+        <button class="btn btn-primary btn-block btn-big" type="submit">Continue</button>
       </form>
     {% else %}
-      {% if status.best %}<p class="lead">Пройдено {{ status.best[0] }} из {{ status.best[1] }}</p>{% endif %}
+      {% if status.best %}<p class="lead">Best score: {{ status.best[0] }} out of {{ status.best[1] }}</p>{% endif %}
       {% if left > 0 %}
-        <p class="muted">Осталось попыток: {{ left }}</p>
+        <p class="muted">Attempts left: {{ left }}</p>
         <form method="post" action="/daily/start" data-once>
-          <button class="btn btn-secondary btn-block btn-big" type="submit">Ещё раз</button>
+          <button class="btn btn-secondary btn-block btn-big" type="submit">Try again</button>
         </form>
       {% else %}
-        <p class="muted">Попытки на сегодня закончились. Новое задание — завтра!</p>
+        <p class="muted">You’re out of attempts for today. Come back tomorrow!</p>
       {% endif %}
     {% endif %}
   </div>

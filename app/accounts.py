@@ -9,11 +9,11 @@ from app.profanity import contains_profanity, load_filter
 from app.templating import templates
 
 NAME_MAX = 50
-NAME_REQUIRED = "Введите имя и фамилию"
-NAME_TOO_LONG = f"Имя и фамилия — не длиннее {NAME_MAX} символов"
-LOGIN_INVALID = "Логин: латинские буквы, цифры, точка, дефис, подчёркивание; от 3 до 32 символов"
-LOGIN_TAKEN = "Логин уже занят"
-NAME_BAD_WORD = "В имени или фамилии недопустимое слово"
+NAME_REQUIRED = "Enter a first and last name"
+NAME_TOO_LONG = f"First and last names must each be at most {NAME_MAX} characters"
+LOGIN_INVALID = "Use 3–32 characters in the username: English letters, numbers, periods, hyphens, or underscores"
+LOGIN_TAKEN = "That username is already taken"
+NAME_BAD_WORD = "Choose a name without flagged words"
 
 
 def login_taken(db: DbSession, login: str) -> bool:

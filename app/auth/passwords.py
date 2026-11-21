@@ -15,11 +15,11 @@ MIN_LENGTH = 10
 MAX_LENGTH = 256  # длиннее не принимаем ни при смене пароля, ни при входе (защита от огромных запросов)
 
 RULE_TEXT = {
-    "length": "Не короче 10 символов",
-    "lower": "Есть строчная латинская буква (a–z)",
-    "upper": "Есть заглавная латинская буква (A–Z)",
-    "digit": "Есть цифра",
-    "charset": "Только латиница, цифры и знаки — без русских букв и пробелов",
+    "length": "At least 10 characters",
+    "lower": "At least one lowercase English letter (a–z)",
+    "upper": "At least one uppercase English letter (A–Z)",
+    "digit": "At least one digit",
+    "charset": "English letters, numbers, and symbols only (no spaces)",
 }
 
 # Без похожих символов (0 O 1 l I), чтобы временный пароль легко читался
@@ -78,7 +78,7 @@ def validate_password(password: str) -> list[str]:
         "lower": re.search(r"[a-z]", password) is not None,
         "upper": re.search(r"[A-Z]", password) is not None,
         "digit": re.search(r"[0-9]", password) is not None,
-        "charset": re.fullmatch(r"[\x21-\x7E]*", password) is not None,
+        "charset": re.fullmatch(r"[!-~]*", password) is not None,
     }
     return [code for code, ok in checks.items() if not ok]
 
@@ -87,9 +87,9 @@ def new_password_errors(new: str, repeat: str) -> list[str]:
     """Тексты ошибок для формы «новый пароль + повтор»; пустой список — можно сохранять."""
     errors = [RULE_TEXT[code] for code in validate_password(new)]
     if len(new) > MAX_LENGTH:
-        errors.append(f"Не длиннее {MAX_LENGTH} символов")
+        errors.append(f"At most {MAX_LENGTH} characters")
     if new != repeat:
-        errors.append("Пароли не совпадают")
+        errors.append("Passwords do not match")
     return errors
 
 

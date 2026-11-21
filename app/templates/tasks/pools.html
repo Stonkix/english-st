@@ -1,70 +1,70 @@
 {% extends "base.html" %}
-{% block title %}Задания — English ST{% endblock %}
+{% block title %}Assignments — English ST{% endblock %}
 
 {% block content %}
 <section class="page teacher-page">
-  <h1>Задания</h1>
+  <h1>Assignments</h1>
 
-  <h2>Пулы вопросов</h2>
+  <h2>Question pools</h2>
   {% if pools %}
   <ul class="list">
     {% for p in pools %}
     <li><a class="list-item" href="/tasks/pools/{{ p.id }}">
       <span class="list-item-main">
         <strong>{{ p.title }}</strong>
-        <small>{{ p.questions|length }} вопр.{% if p.topic %} · {{ p.topic.name }}{% endif %}{% if user.role == "admin" and owners.get(p.owner_id) %} · {{ owners[p.owner_id].full_name }}{% endif %}</small>
+        <small>{% set question_count = p.questions|length %}{{ question_count }} {{ "question" if question_count == 1 else "questions" }}{% if p.topic %} · {{ p.topic.name }}{% endif %}{% if user.role == "admin" and owners.get(p.owner_id) %} · {{ owners[p.owner_id].full_name }}{% endif %}</small>
       </span>
       <span class="badge badge-blue">{{ p.level }}</span>
     </a></li>
     {% endfor %}
   </ul>
   {% else %}
-  <div class="card"><p class="lead">Пулов пока нет. Создайте первый и добавьте в него вопросы.</p></div>
+  <div class="card"><p class="lead">No question pools yet. Create a pool to start adding questions.</p></div>
   {% endif %}
 
   <form class="card" method="post" action="/tasks/pools" data-once>
-    <h2>Новый пул</h2>
+    <h2>New pool</h2>
     {% if error %}
     <div class="alert-error" role="alert"><p>{{ error }}</p></div>
     {% endif %}
     <div class="field">
-      <label for="pool-title">Название</label>
+      <label for="pool-title">Title</label>
       <input id="pool-title" name="title" value="{{ values.title }}" maxlength="80" autocomplete="off" required>
     </div>
     <div class="field">
-      <label for="pool-description">Описание</label>
+      <label for="pool-description">Description</label>
       <textarea id="pool-description" name="description" rows="3" maxlength="500" required>{{ values.description }}</textarea>
     </div>
     <div class="field">
-      <label for="pool-level">Уровень</label>
+      <label for="pool-level">Level</label>
       <select id="pool-level" name="level" required>
-        <option value="">Выберите уровень</option>
+        <option value="">Select a level</option>
         {% for l in levels %}<option value="{{ l }}"{% if values.level == l %} selected{% endif %}>{{ l }}</option>{% endfor %}
       </select>
     </div>
     <div class="field">
-      <label for="pool-topic">Тема</label>
+      <label for="pool-topic">Topic</label>
       <select id="pool-topic" name="topic_id">
-        <option value="">Без темы</option>
+        <option value="">No topic</option>
         {% for t in topics %}<option value="{{ t.id }}"{% if values.topic_id|string == t.id|string %} selected{% endif %}>{{ t.name }}</option>{% endfor %}
       </select>
     </div>
-    <button class="btn btn-primary btn-block" type="submit">Создать пул</button>
+    <button class="btn btn-primary btn-block" type="submit">Create pool</button>
   </form>
 
-  <h2>Тесты</h2>
+  <h2>Tests</h2>
   {% if tests %}
   <ul class="list">
     {% for t in tests %}
     <li><a class="list-item" href="/tasks/tests/{{ t.id }}"><span class="list-item-main">
       <strong>{{ t.title }}</strong>
-      <small>{{ t.questions|selectattr("is_active")|list|length }} вопр.{% if user.role == "admin" and owners.get(t.owner_id) %} · {{ owners[t.owner_id].full_name }}{% endif %}</small>
+      <small>{% set question_count = t.questions|selectattr("is_active")|list|length %}{{ question_count }} {{ "question" if question_count == 1 else "questions" }}{% if user.role == "admin" and owners.get(t.owner_id) %} · {{ owners[t.owner_id].full_name }}{% endif %}</small>
     </span></a></li>
     {% endfor %}
   </ul>
   {% else %}
-  <div class="card"><p class="muted">Тестов пока нет.</p></div>
+  <div class="card"><p class="muted">No tests yet.</p></div>
   {% endif %}
-  <a class="btn btn-secondary btn-block" href="/tasks/tests">Новый тест</a>
+  <a class="btn btn-secondary btn-block" href="/tasks/tests">New test</a>
 </section>
 {% endblock %}

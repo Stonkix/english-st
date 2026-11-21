@@ -10,7 +10,7 @@ import logging
 import re
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 from starlette.concurrency import run_in_threadpool
@@ -29,7 +29,7 @@ from app.templating import avatar_url, templates
 
 router = APIRouter()
 
-BAD_IMAGE = "Это не картинка или она повреждена"
+BAD_IMAGE = "This file is not a valid image"
 _JSON_PATH = re.compile(r"/chat/(\d+/(messages|image)|messages/\d+/delete)")
 
 
@@ -138,12 +138,14 @@ def room_page(room_id: Id, request: Request, user: User = Depends(require_user),
         "person_avatar": avatar_url(person),
         "data": data,
     }
-    return templates.TemplateResponse(request, "chat/room.html", context)
+    headers = {"Cache-Control": "private, no-store"} if moderator else None
+    return templates.TemplateResponse(request, "chat/room.html", context, headers=headers)
 
 
 @router.get("/chat/{room_id}/messages")
 def messages(
     room_id: Id,
+    response: Response,
     before: int | None = Query(None, ge=1, le=MAX_ID),
     after: int | None = Query(None, ge=0, le=MAX_ID),
     user: User = Depends(require_user),
@@ -151,6 +153,8 @@ def messages(
 ):
     room = _room_or_404(db, user, room_id)
     moderator = chat.can_moderate(db, user, room)
+    if moderator:
+        response.headers["Cache-Control"] = "private, no-store"
     rows = chat.history(db, room, before=before, after=after)
     return {"messages": [chat.serialize(m, moderator) for m in rows], "has_more": len(rows) == chat.PAGE_SIZE}
 
@@ -183,7 +187,7 @@ def delete(message_id: Id, user: User = Depends(require_user), db: DbSession = D
     if room is None or not chat.can_access(db, user, room):
         raise HTTPException(404)
     if not chat.delete_message(db, user, message, chat.can_moderate(db, user, room)):
-        return _error(403, "Это сообщение удалить нельзя")
+        return _error(403, "You can’t delete this message")
     _broadcast(db, room, lambda _: {"type": "deleted", "room_id": room.id, "id": message.id})
     return {"ok": True}
 

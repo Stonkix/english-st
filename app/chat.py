@@ -24,16 +24,16 @@ TEXT_MAX = 1000
 PAGE_SIZE = 50
 # Fluent Emoji (Flat), MIT: app/static/stickers. Имя — файл без .svg, подпись — для экранного диктора
 STICKERS = {
-    "thumbs_up": "Класс", "heart": "Сердце", "smile": "Улыбка", "laugh": "Смешно", "star": "Восторг",
-    "party": "Ура", "clap": "Аплодисменты", "fire": "Огонь", "hundred": "Сто баллов", "trophy": "Кубок",
-    "ok": "Готово", "books": "Учёба", "rocket": "Ракета", "thinking": "Хм", "wave": "Привет", "cat": "Котик",
-    "sun": "Солнце", "sad": "Грустно",
+    "thumbs_up": "Nice", "heart": "Heart", "smile": "Smile", "laugh": "Laughing", "star": "Excited",
+    "party": "Hooray", "clap": "Applause", "fire": "Fire", "hundred": "Top score", "trophy": "Trophy",
+    "ok": "Done", "books": "Studying", "rocket": "Rocket", "thinking": "Thinking", "wave": "Hello", "cat": "Cat",
+    "sun": "Sun", "sad": "Sad",
 }
 
-EMPTY_TEXT = "Напиши сообщение"
-TOO_LONG = f"Сообщение длиннее {TEXT_MAX} символов"
-TOO_FAST = "Слишком много сообщений. Подожди немного."
-NO_ACCESS = "Нет доступа к этому чату"
+EMPTY_TEXT = "Type a message"
+TOO_LONG = f"Messages must be at most {TEXT_MAX} characters"
+TOO_FAST = "Too many messages. Wait a moment and try again."
+NO_ACCESS = "You don’t have access to this chat"
 
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 _MANY_NEWLINES = re.compile(r"\n{3,}")
@@ -173,7 +173,7 @@ def room_title(db: DbSession, room: ChatRoom, viewer: User) -> str:
     if viewer.role == "student":
         teacher_id = room_teacher_id(db, room)
         teacher = db.get(User, teacher_id) if teacher_id else None
-        return teacher.full_name if teacher else "Учитель"
+        return teacher.full_name if teacher else "Teacher"
     return db.get(User, room.student_id).full_name
 
 
@@ -211,7 +211,7 @@ def post_text(db: DbSession, user: User, room: ChatRoom, text: str) -> ChatMessa
 
 def post_sticker(db: DbSession, user: User, room: ChatRoom, sticker: str) -> ChatMessage:
     if sticker not in STICKERS:
-        raise ChatError("Такого стикера нет")
+        raise ChatError("Sticker not found")
     check_rate(user)
     return _save(db, ChatMessage(room_id=room.id, author_id=user.id, kind="sticker", sticker=sticker))
 
@@ -233,14 +233,21 @@ def can_delete(user: User, message: ChatMessage, moderator: bool) -> bool:
     return message.deleted_at is None and (moderator or message.author_id == user.id)
 
 
+def can_view_deleted_content(message: ChatMessage, moderator: bool) -> bool:
+    return moderator and message.author.role == "student"
+
+
 def delete_message(db: DbSession, user: User, message: ChatMessage, moderator: bool) -> bool:
-    """Удаляет у всех; файл картинки стирается с диска, исходный текст остаётся в БД для модерации."""
+    """Скрывает сообщение. Вложения учеников сохраняются для модерации."""
     if not can_delete(user, message, moderator):
         return False
     message.deleted_at, message.deleted_by = utcnow(), user.id
-    image, message.image = message.image, None
+    image = None
+    if message.image and not can_view_deleted_content(message, moderator=True):
+        image, message.image = message.image, None
     db.commit()
-    delete_media(image)
+    if image:
+        delete_media(image)
     return True
 
 
@@ -279,7 +286,7 @@ def serialize(message: ChatMessage, moderator: bool) -> dict:
         "day": local.date().isoformat(),
         "deleted": message.deleted_at is not None,
     }
-    if data["deleted"]:
+    if data["deleted"] and not can_view_deleted_content(message, moderator):
         return data
     if message.kind == "text":
         data["text"] = message.text_shown
@@ -287,7 +294,7 @@ def serialize(message: ChatMessage, moderator: bool) -> dict:
             data["original"] = message.text_original
     elif message.kind == "sticker":
         data["sticker"] = f"/static/stickers/{message.sticker}.svg"
-        data["label"] = STICKERS.get(message.sticker, "Стикер")
+        data["label"] = STICKERS.get(message.sticker, "Sticker")
     elif message.kind == "image" and message.image:
         data["image"] = message_url(message.image)
     return data
@@ -296,16 +303,16 @@ def serialize(message: ChatMessage, moderator: bool) -> dict:
 def preview(message: ChatMessage | None, viewer: User) -> str:
     """Строка под названием комнаты в списке."""
     if message is None:
-        return "Сообщений пока нет"
+        return "No messages yet"
     if message.deleted_at is not None:
-        body = "Сообщение удалено"
+        body = "Message deleted"
     elif message.kind == "sticker":
-        body = "Стикер"
+        body = "Sticker"
     elif message.kind == "image":
-        body = "Фото"
+        body = "Photo"
     else:
         body = message.text_shown or ""
-    return ("Вы: " if message.author_id == viewer.id else "") + body
+    return ("You: " if message.author_id == viewer.id else "") + body
 
 
 def last_messages(db: DbSession, room_ids: list[int]) -> dict[int, ChatMessage]:

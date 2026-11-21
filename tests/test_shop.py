@@ -36,7 +36,7 @@ def test_order_takes_price_snapshot(db):
 
 def test_not_enough_stamps(db):
     t, g, kid, item, star = _setup(db, balance=3)
-    with pytest.raises(shop.ShopError, match="нужно 4, у тебя 3"):
+    with pytest.raises(shop.ShopError, match="need 4 stamps and have 3"):
         shop.place_order(db, kid, item.id)
     assert db.query(Order).count() == 0
 
@@ -49,7 +49,7 @@ def test_foreign_or_hidden_item(db):
     item.is_active = False
     db.commit()
     for item_id in (alien.id, item.id, 999999):
-        with pytest.raises(shop.ShopError, match="нет в магазине"):
+        with pytest.raises(shop.ShopError, match="not available in the shop"):
             shop.place_order(db, kid, item_id)
 
 
@@ -59,9 +59,9 @@ def test_order_rate_limit_counts_cancelled(db):
     for i in range(3):
         order = shop.place_order(db, kid, item.id, now=now + timedelta(seconds=i))
     shop.cancel_order(db, kid, order.id)
-    with pytest.raises(shop.ShopError, match="через 5 мин"):
+    with pytest.raises(shop.ShopError, match="in 5 min"):
         shop.place_order(db, kid, item.id, now=now + timedelta(seconds=10))
-    with pytest.raises(shop.ShopError, match="через 1 мин"):
+    with pytest.raises(shop.ShopError, match="in 1 min"):
         shop.place_order(db, kid, item.id, now=now + timedelta(minutes=4, seconds=30))
     shop.place_order(db, kid, item.id, now=now + timedelta(minutes=5, seconds=1))
 
@@ -75,7 +75,7 @@ def test_cancel_refunds_once(db):
         shop.cancel_order(db, kid, order.id)
     other = make_user(db, login="other", group=g)
     order2 = shop.place_order(db, kid, item.id, now=utcnow() + timedelta(seconds=1))
-    with pytest.raises(shop.ShopError, match="не найдена"):
+    with pytest.raises(shop.ShopError, match="not found"):
         shop.cancel_order(db, other, order2.id)
 
 
@@ -88,7 +88,7 @@ def test_teacher_issue_and_reject(db):
     shop.decide(db, t, b, issue=False, comment="  нет в наличии ")
     assert (a.status, b.status, b.teacher_comment) == ("issued", "rejected", "нет в наличии")
     assert stamps.balance_of(db, kid.id, star.id) == 16  # 20 - 4 (выдано); отклонённое вернулось
-    with pytest.raises(shop.ShopError, match="уже обработана"):
+    with pytest.raises(shop.ShopError, match="already been processed"):
         shop.decide(db, t, b, issue=False)
     with pytest.raises(shop.ShopError):
         shop.cancel_order(db, kid, a.id)  # выданное не отменить

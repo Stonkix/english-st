@@ -1,14 +1,13 @@
 {% extends "base.html" %}
-{% block title %}Группы — English ST{% endblock %}
+{% block title %}Groups — English ST{% endblock %}
 
-{# «1 ученик», «2 ученика», «5 учеников», «11 учеников», «21 ученик» #}
 {% macro students_word(n) -%}
-{{ n }} {{ "ученик" if n % 10 == 1 and n % 100 != 11 else ("ученика" if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14) else "учеников") }}
+{{ n }} {{ "student" if n == 1 else "students" }}
 {%- endmacro %}
 
 {% block content %}
 <section class="page teacher-page">
-  <h1>{% if user.role == "admin" %}Все группы{% else %}Мои группы{% endif %}</h1>
+  <h1>{% if user.role == "admin" %}All groups{% else %}My groups{% endif %}</h1>
 
   {% if groups %}
   <ul class="list">
@@ -22,19 +21,19 @@
     {% endfor %}
   </ul>
   {% else %}
-  <div class="card"><p class="lead">Групп пока нет. Создайте первую — и добавляйте в неё учеников.</p></div>
+  <div class="card"><p class="lead">No groups yet. Create a group to start adding students.</p></div>
   {% endif %}
 
   <form class="card" method="post" action="/teacher/groups" data-once>
-    <h2>Новая группа</h2>
+    <h2>New group</h2>
     {% if error %}
     <div class="alert-error" role="alert"><p>{{ error }}</p></div>
     {% endif %}
     <div class="field">
-      <label for="group-name">Название группы</label>
+      <label for="group-name">Group name</label>
       <input id="group-name" name="name" value="{{ name }}" maxlength="50" autocomplete="off" required>
     </div>
-    <button class="btn btn-primary btn-block" type="submit">Создать группу</button>
+    <button class="btn btn-primary btn-block" type="submit">Create group</button>
   </form>
 </section>
 {% endblock %}

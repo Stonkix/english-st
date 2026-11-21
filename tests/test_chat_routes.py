@@ -55,7 +55,7 @@ def test_rooms_page_and_nav_badge(client, db):
     chat.post_text(db, s2, room, "привет")
     login_as(client, "stud1")
     html = client.get("/chat").text
-    assert "Группа «5А»" in html and t.full_name in html and "привет" in html
+    assert "Group “5А”" in html and t.full_name in html and "привет" in html
     assert 'class="chat-unread"' in html and "tabbar-badge" in html
     client.get(f"/chat/{room.id}")  # открыл — прочитал
     assert "tabbar-badge" not in client.get("/chat").text
@@ -64,7 +64,7 @@ def test_rooms_page_and_nav_badge(client, db):
 def test_student_without_group(client, db):
     make_user(db, login="lonely")
     login_as(client, "lonely")
-    assert "Чат появится" in client.get("/chat").text
+    assert "Chat will be available" in client.get("/chat").text
 
 
 def test_room_page_data_and_access(client, db):
@@ -78,7 +78,7 @@ def test_room_page_data_and_access(client, db):
     assert [m["kind"] for m in data["messages"]] == ["sticker"] and len(data["stickers"]) == len(chat.STICKERS)
     assert 'class="tabbar"' not in r.text  # на весь экран
     assert client.get(f"/chat/{direct2.id}").status_code == 404  # чужой личный чат
-    assert client.get(f"/chat/{direct2.id}/messages").json() == {"error": "Ошибка"}
+    assert client.get(f"/chat/{direct2.id}/messages").json() == {"error": "Something went wrong"}
     assert client.get("/chat/999999").status_code == 404
 
 
@@ -108,11 +108,13 @@ def test_image_upload_and_access(client, db):
     r = client.post(f"/chat/{room.id}/image", files={"image": ("a.png", _png(), "image/png")})
     url = r.json()["message"]["image"]
     assert r.status_code == 200 and url.startswith(f"/media/chat/{room.id}/")
-    assert client.get(url).headers["content-type"] == "image/webp"
+    image = client.get(url)
+    assert image.headers["content-type"] == "image/webp"
+    assert image.headers["cache-control"] == "private, no-cache"
     # не картинка
     chat.limiter.reset()
     r = client.post(f"/chat/{room.id}/image", files={"image": ("a.png", b"nope", "image/png")})
-    assert r.status_code == 400 and "не картинка" in r.json()["error"]
+    assert r.status_code == 400 and "not a valid image" in r.json()["error"]
     # чужая комната
     other = make_user(db, role="teacher", login="other")
     g2 = make_group(db, other, name="6Б")
@@ -120,11 +122,19 @@ def test_image_upload_and_access(client, db):
     c3 = _client("stud3")
     assert c3.get(url).status_code == 404
     assert c3.post(f"/chat/{direct1.id}/image", files={"image": ("a.png", _png(), "image/png")}).status_code == 404
-    # после удаления картинка недоступна и файл стёрт
+    # После удаления файл доступен только модератору своей комнаты.
     message_id = db.query(ChatMessage).filter_by(kind="image").one().id
     assert client.post(f"/chat/messages/{message_id}/delete").json() == {"ok": True}
     assert client.get(url).status_code == 404
-    assert not list((settings.media_dir / "chat" / str(room.id)).glob("*.webp"))
+    assert (settings.media_dir / url.removeprefix("/media/")).is_file()
+    login_as(client, "stud2")
+    assert client.get(url).status_code == 404
+    login_as(client, "other")
+    assert client.get(url).status_code == 404
+    login_as(client, "teach")
+    retained = client.get(url)
+    assert retained.content == image.content
+    assert retained.headers["cache-control"] == "private, no-store"
 
 
 def test_image_rate_limited(client, db):
@@ -133,7 +143,7 @@ def test_image_rate_limited(client, db):
     login_as(client, "stud1")
     assert client.post(f"/chat/{room.id}/image", files={"image": ("a.png", _png(), "image/png")}).status_code == 200
     r = client.post(f"/chat/{room.id}/image", files={"image": ("a.png", _png(), "image/png")})
-    assert r.status_code == 429 and "Слишком много" in r.json()["error"]
+    assert r.status_code == 429 and "Too many messages" in r.json()["error"]
 
 
 # ---------- удаление ----------
@@ -149,6 +159,36 @@ def test_delete_permissions(client, db):
     login_as(client, "teach")
     assert client.post(f"/chat/messages/{m1.id}/delete").json() == {"ok": True}
     assert client.post("/chat/messages/999999/delete").status_code == 404
+
+
+def test_deleted_student_content_in_room_and_history_is_moderator_only(client, db):
+    seed_filter(db)
+    teacher, group, student, peer = _school(db)
+    room = chat.group_room(db, group.id)
+    message = chat.post_text(db, student, room, "ну ты сука")
+    sticker = chat.post_sticker(db, peer, room, "cat")
+
+    login_as(client, student.login)
+    assert client.post(f"/chat/messages/{message.id}/delete").json() == {"ok": True}
+    login_as(client, teacher.login)
+    assert client.post(f"/chat/messages/{sticker.id}/delete").json() == {"ok": True}
+
+    page = client.get(f"/chat/{room.id}")
+    assert page.headers["cache-control"] == "private, no-store"
+    deleted_text, deleted_sticker = _data(page.text)["messages"]
+    assert deleted_text["deleted"] and deleted_text["original"] == "ну ты сука"
+    assert deleted_text["text"] == message.text_shown
+    assert deleted_sticker["deleted"] and deleted_sticker["sticker"] == "/static/stickers/cat.svg"
+    history = client.get(f"/chat/{room.id}/messages", params={"before": sticker.id + 1})
+    assert history.headers["cache-control"] == "private, no-store"
+    assert history.json()["messages"] == [deleted_text, deleted_sticker]
+
+    login_as(client, peer.login)
+    student_page = _data(client.get(f"/chat/{room.id}").text)["messages"]
+    student_history = client.get(f"/chat/{room.id}/messages").json()["messages"]
+    assert student_page == student_history
+    for item in student_history:
+        assert item["deleted"] and not {"text", "original", "sticker", "image"} & item.keys()
 
 
 def test_delete_needs_same_origin(db):
@@ -268,7 +308,7 @@ def test_filter_page_admin_only(client, db):
     login_as(client, "adm")
     html = client.get("/school/filter").text
     assert "^сука" in html and "ромашка" in html
-    assert "Будет показано" in client.get("/school/filter", params={"check": "ну ты сука"}).text
+    assert "Shown in chat" in client.get("/school/filter", params={"check": "ну ты сука"}).text
 
 
 def test_filter_save(client, db):
@@ -279,7 +319,7 @@ def test_filter_save(client, db):
     assert r.status_code == 303
     assert sorted(db.scalars(BadWord.__table__.select().with_only_columns(BadWord.pattern))) == ["^пёс", "кот"]
     r = client.post("/school/filter", data={"bad_words": "кот", "exceptions": "", "replacements": "котик"})
-    assert "Слова-замены сами попадают под фильтр: котик" in r.text
+    assert "These replacement words are flagged by the filter: котик" in r.text
     r = client.post("/school/filter", data={"bad_words": "кот", "exceptions": "", "replacements": " "})
-    assert "Нужно хотя бы одно слово-замена" in r.text
+    assert "Enter at least one replacement word" in r.text
     assert [w.word for w in db.query(ReplacementWord)] == ["мяч"]

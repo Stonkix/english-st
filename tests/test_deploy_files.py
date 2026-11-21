@@ -40,7 +40,7 @@ def test_nginx_limits_and_headers():
 def test_429_page_is_neutral():
     """429 отдаётся на любой адрес (не только на вход): текст не про вход, ссылка на главную."""
     p = _read("app/static/429.html")
-    assert "Слишком много запросов. Подождите минуту и попробуйте снова." in p
+    assert "Wait a minute and try again." in p
     assert 'href="/"' in p and "/login" not in p and "входа" not in p
     assert "/static/css/app.css?v=" in p
 

@@ -1,39 +1,39 @@
 {% extends "base.html" %}
-{% block title %}Школа — English ST{% endblock %}
+{% block title %}School — English ST{% endblock %}
 
 {% block content %}
 <section class="page teacher-page">
-  <h1>Школа</h1>
+  <h1>School</h1>
   <ul class="list">
     <li><a class="list-item" href="/school/teachers">
-      <span class="list-item-main"><strong>Учителя</strong><small>Добавить учителя, сбросить пароль, отключить</small></span>
+      <span class="list-item-main"><strong>Teachers</strong><small>Add teachers, reset passwords, and manage access</small></span>
     </a></li>
     <li><a class="list-item" href="/school/stamps">
-      <span class="list-item-main"><strong>Штампики</strong><small>Виды штампиков: название, картинка, цвет</small></span>
+      <span class="list-item-main"><strong>Stamps</strong><small>Manage stamp types, artwork, and colors</small></span>
     </a></li>
     <li><a class="list-item" href="/school/pets">
-      <span class="list-item-main"><strong>Питомцы</strong><small>Цены питомцев и корма, сколько дней без ухода терпит питомец</small></span>
+      <span class="list-item-main"><strong>Pets</strong><small>Set pet and food prices and care limits</small></span>
     </a></li>
     <li><a class="list-item" href="/school/topics">
-      <span class="list-item-main"><strong>Темы вопросов</strong><small>Грамматика, лексика… — тема задаётся пулу</small></span>
+      <span class="list-item-main"><strong>Question topics</strong><small>Manage topics for question pools</small></span>
     </a></li>
     <li><a class="list-item" href="/school/filter">
-      <span class="list-item-main"><strong>Фильтр мата</strong><small>Бранные слова, исключения и слова-замены для чата</small></span>
+      <span class="list-item-main"><strong>Language filter</strong><small>Manage flagged words, exceptions, and replacements</small></span>
     </a></li>
     <li><a class="list-item" href="/admin/">
-      <span class="list-item-main"><strong>База данных</strong><small>Пользователи и группы; журналы штампиков, заявок и чата (только просмотр)</small></span>
+      <span class="list-item-main"><strong>Database</strong><small>Manage users and groups and view activity logs</small></span>
     </a></li>
   </ul>
 
   <div class="card">
-    <h2>Блокировки входа</h2>
+    <h2>Sign-in lockouts</h2>
     {% if unlocked %}
-    <div class="alert-success" role="status"><p>Блокировки входа сняты</p></div>
+    <div class="alert-success" role="status"><p>Sign-in lockouts cleared</p></div>
     {% endif %}
-    <p class="muted">Если из-за ошибок при входе не может войти целый класс, снимите все блокировки.</p>
+    <p class="muted">If a whole class is locked out after failed sign-in attempts, clear all lockouts.</p>
     <form method="post" action="/school/login-blocks/reset"
-          data-confirm="Снять все блокировки входа? Счётчики неудачных попыток обнулятся." data-once>
-      <button class="btn btn-secondary btn-block" type="submit">Снять все блокировки входа</button>
+          data-confirm="Clear all sign-in lockouts? This will reset the failed attempt counters." data-once>
+      <button class="btn btn-secondary btn-block" type="submit">Clear all sign-in lockouts</button>
     </form>
   </div>
 </section>

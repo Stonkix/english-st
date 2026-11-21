@@ -14,7 +14,7 @@ from app.models import AvatarHistory, User
 from app.timeutil import utcnow
 from tests.factories import login_as, make_group, make_user
 
-BAD_IMAGE = "Не получилось открыть картинку"
+BAD_IMAGE = "We couldn’t open the image"
 
 
 def jpeg(color="red", w=600, h=600):
@@ -136,7 +136,7 @@ def test_teacher_uploads_for_student_and_deletes_history_item(client, db):
     assert s.avatar != first and (settings.media_dir / s.avatar).exists()
     items = history(db, s)
     assert [i.path for i in items] == [first]  # прежнее текущее ушло в историю, как при замене учеником
-    assert "Предыдущие фото" in client.get(f"/teacher/students/{s.id}").text
+    assert "Previous photos" in client.get(f"/teacher/students/{s.id}").text
     client.post(f"/teacher/students/{s.id}/avatar/history/{items[0].id}/delete")
     assert history(db, s) == [] and not (settings.media_dir / first).exists()
 
@@ -189,9 +189,9 @@ def test_lock_blocks_student(client, db):
     assert upload(client).status_code == 403
     assert client.post("/profile/avatar/delete").status_code == 403
     for r in (upload(client), client.post("/profile/avatar/delete")):  # устаревшая страница: объясняем, а не «Сюда нельзя»
-        assert "Учитель запретил менять фото до" in r.text and "Сюда нельзя" not in r.text
+        assert "Photo changes are disabled until" in r.text and "Your account doesn’t have access" not in r.text
     page = client.get("/profile").text
-    assert "Учитель запретил менять фото до" in page and 'action="/profile/avatar"' not in page
+    assert "Photo changes are disabled until" in page and 'action="/profile/avatar"' not in page
     as_user(client, "teach")
     client.post(f"/teacher/students/{s.id}/avatar/lock", data={"period": "off"})
     as_user(client, "kid")
@@ -214,7 +214,7 @@ def test_lock_dropdown_keeps_timed_lock_by_default(client, db):
         client.post(f"{url}/avatar/lock", data={"period": period})
         page = client.get(url).text
         assert selected_lock_option(page) == ""
-        assert "Оставить как есть" in page.split('id="lock-period"')[1].split("<option", 2)[1]  # первый вариант
+        assert "Keep current restriction" in page.split('id="lock-period"')[1].split("<option", 2)[1]  # первый вариант
 
 
 def test_lock_empty_period_changes_nothing(client, db):
@@ -236,7 +236,7 @@ def test_lock_forever_message_and_teacher_upload_ignores_lock(client, db):
     files = {"photo": ("a.jpg", jpeg(), "image/jpeg")}
     assert client.post(f"/teacher/students/{s.id}/avatar", files=files, follow_redirects=False).status_code == 303
     as_user(client, "kid")
-    assert "Учитель запретил менять фото навсегда" in client.get("/profile").text
+    assert "Photo changes are disabled indefinitely" in client.get("/profile").text
 
 
 def test_lock_only_restricts_students(client, db):
@@ -264,7 +264,7 @@ def test_lock_forever_and_expiry(db):
 def test_lock_message_uses_moscow_time(db):
     u = make_user(db)
     u.avatar_locked_until = datetime(2030, 1, 1, 21, 30)  # 21:30 UTC = 00:30 по Москве следующего дня
-    assert lock_message(u, now=datetime(2029, 12, 1)) == "Учитель запретил менять фото до 02.01.2030 00:30"
+    assert lock_message(u, now=datetime(2029, 12, 1)) == "Photo changes are disabled until 02.01.2030 00:30"
 
 
 def test_foreign_teacher_cannot_moderate(client, db):

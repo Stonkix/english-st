@@ -15,7 +15,7 @@ from app.auth.access import can_view_avatar, can_view_previous_avatar, can_view_
 from app.auth.deps import require_user
 from app.config import settings
 from app.db import get_db
-from app.chat import can_access
+from app.chat import can_access, can_moderate, can_view_deleted_content
 from app.models import AvatarHistory, ChatMessage, ChatRoom, Group, Question, ShopItem, StampVariant, User
 from app.questions import picture_paths
 
@@ -26,15 +26,16 @@ _NAME = re.compile(r"[0-9a-f]{12}\.webp")
 _HEADERS = {"Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff"}
 
 
-def _file_response(rel: str):
+def _file_response(rel: str, *, cache_control: str = _HEADERS["Cache-Control"]):
+    headers = {**_HEADERS, "Cache-Control": cache_control}
     if settings.debug:
         path = settings.media_dir / rel
         if not path.is_file():
             raise HTTPException(404)
-        return FileResponse(path, media_type="image/webp", headers=_HEADERS)
+        return FileResponse(path, media_type="image/webp", headers=headers)
     return Response(
         b"", media_type="image/webp",
-        headers={**_HEADERS, "X-Accel-Redirect": f"/_protected/{rel}"},
+        headers={**headers, "X-Accel-Redirect": f"/_protected/{rel}"},
     )
 
 
@@ -76,16 +77,21 @@ def question_image(owner_id: str, name: str, viewer: User = Depends(require_user
 
 @router.get("/media/chat/{room_id}/{name}")
 def chat_image(room_id: str, name: str, viewer: User = Depends(require_user), db: DbSession = Depends(get_db)):
-    """Картинка чата — только участникам комнаты и только пока сообщение не удалено (при удалении путь стирается)."""
+    """Картинка чата — участникам комнаты, удалённое фото ученика — только модераторам."""
     if not _USER_ID.fullmatch(room_id) or not _NAME.fullmatch(name):
         raise HTTPException(404)
     room = db.get(ChatRoom, int(room_id))
     rel = f"chat/{room_id}/{name}"
     if room is None or not can_access(db, viewer, room):
         raise HTTPException(404)
-    if db.scalar(select(ChatMessage.id).where(ChatMessage.room_id == room.id, ChatMessage.image == rel)) is None:
+    message = db.scalar(select(ChatMessage).where(ChatMessage.room_id == room.id, ChatMessage.image == rel))
+    if message is None:
         raise HTTPException(404)
-    return _file_response(rel)
+    if message.deleted_at is not None:
+        if not can_view_deleted_content(message, can_moderate(db, viewer, room)):
+            raise HTTPException(404)
+        return _file_response(rel, cache_control="private, no-store")
+    return _file_response(rel, cache_control="private, no-cache")
 
 
 @router.get("/media/shop/{group_id}/{name}")

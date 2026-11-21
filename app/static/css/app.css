@@ -1,3 +1,4 @@
+@charset "UTF-8";
 /* English ST — стили в духе Duolingo: крупно, ярко, объёмные кнопки. Мобильный первым. */
 
 /* ---------- Шрифт Nunito (свои файлы, лицензия OFL — fonts/OFL.txt) ---------- */
@@ -823,7 +824,8 @@ details > summary { font-weight: 800; cursor: pointer; padding: 6px 0; }
 .msg-name { color: var(--blue-dark); font-size: 14px; font-weight: 800; }
 .msg-teacher { padding: 0 6px; border-radius: 999px; background: var(--green-light); color: var(--green-dark); font-size: 12px; }
 .msg-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 17px; line-height: 1.4; }
-.msg.is-deleted .msg-text { color: var(--faint); font-style: italic; }
+.msg.is-deleted:not(.shows-deleted-content) .msg-text { color: var(--faint); font-style: italic; }
+.msg-deleted-label { margin-bottom: 4px; color: var(--red-dark); font-size: 13px; font-weight: 800; }
 .msg-original { margin-top: 4px; padding: 4px 8px; border-radius: 8px; background: var(--red-light); color: var(--red-dark); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg-sticker { width: 112px; height: 112px; }
 .msg-image { max-width: min(280px, 100%); max-height: 320px; border-radius: 12px; object-fit: cover; }

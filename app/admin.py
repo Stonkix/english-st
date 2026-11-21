@@ -38,12 +38,12 @@ class SchoolAuth(AuthenticationBackend):
         return RedirectResponse("/login", status_code=302)
 
 
-LOGIN_HELP = "Логин: 3–32 символа — латинские буквы, цифры, точка, дефис, подчёркивание"
+LOGIN_HELP = "Use 3–32 characters in the username: English letters, numbers, periods, hyphens, or underscores"
 
 
 class UserAdmin(ModelView, model=User):
-    name = "Пользователь"
-    name_plural = "Пользователи"
+    name = "User"
+    name_plural = "Users"
     icon = "fa-solid fa-user"
     can_create = False  # учителей создаёт раздел «Школа», учеников — учитель: там выдаётся временный пароль
     can_delete = False  # у удалённого остались бы файлы фото, а учителя с группами не даёт удалить БД: отключают, не удаляют
@@ -58,14 +58,14 @@ class UserAdmin(ModelView, model=User):
     column_sortable_list = [User.id, User.login, User.role, User.last_name]
     form_excluded_columns = [User.password_hash, User.avatar_history, User.created_at, User.avatar]
     column_labels = {
-        User.login: "Логин",
-        User.role: "Роль",
-        User.first_name: "Имя",
-        User.last_name: "Фамилия",
-        User.group: "Группа",
-        User.is_active: "Активен",
-        User.must_change_password: "Нужно сменить пароль",
-        User.created_at: "Создан",
+        User.login: "Username",
+        User.role: "Role",
+        User.first_name: "First name",
+        User.last_name: "Last name",
+        User.group: "Group",
+        User.is_active: "Active",
+        User.must_change_password: "Must change password",
+        User.created_at: "Created at",
     }
 
     async def on_model_change(self, data: dict, model: User, is_created: bool, request: Request) -> None:
@@ -85,14 +85,14 @@ class UserAdmin(ModelView, model=User):
 
 
 class GroupAdmin(ModelView, model=Group):
-    name = "Группа"
-    name_plural = "Группы"
+    name = "Group"
+    name_plural = "Groups"
     icon = "fa-solid fa-users"
     can_delete = False  # у группы есть ученики
     page_size = 50
 
     column_list = [Group.id, Group.name, Group.teacher]
-    column_labels = {Group.name: "Название", Group.teacher: "Учитель", Group.students: "Ученики", Group.created_at: "Создана"}
+    column_labels = {Group.name: "Name", Group.teacher: "Teacher", Group.students: "Students", Group.created_at: "Created at"}
     # ученики переводятся в группу из карточки ученика, здесь список «все ученики» только мешает
     form_excluded_columns = [Group.created_at, Group.students]
 
@@ -119,8 +119,8 @@ class _ReadOnly(ModelView):
 
 
 class StampTransactionAdmin(_ReadOnly, model=StampTransaction):
-    name = "Операция со штампиками"
-    name_plural = "Штампики: журнал"
+    name = "Stamp transaction"
+    name_plural = "Stamp transactions"
     icon = "fa-solid fa-star"
     column_list = [
         StampTransaction.id, StampTransaction.created_at, StampTransaction.student_id, StampTransaction.stamp_type,
@@ -130,16 +130,16 @@ class StampTransactionAdmin(_ReadOnly, model=StampTransaction):
 
 
 class OrderAdmin(_ReadOnly, model=Order):
-    name = "Заявка"
-    name_plural = "Магазин: заявки"
+    name = "Shop request"
+    name_plural = "Shop requests"
     icon = "fa-solid fa-gift"
     column_list = [Order.id, Order.created_at, Order.student, Order.item_id, Order.price_amount, Order.status]
     column_default_sort = [(Order.id, True)]
 
 
 class ChatMessageAdmin(_ReadOnly, model=ChatMessage):
-    name = "Сообщение"
-    name_plural = "Чат: сообщения"
+    name = "Message"
+    name_plural = "Chat messages"
     icon = "fa-solid fa-comments"
     column_list = [
         ChatMessage.id, ChatMessage.created_at, ChatMessage.room_id, ChatMessage.author, ChatMessage.kind,
@@ -154,7 +154,7 @@ def setup_admin(app) -> Admin:
     admin = Admin(
         app,
         engine,
-        title="Школа — база данных",
+        title="School database",
         templates_dir=str(BASE_DIR / "app" / "templates"),  # переопределения в templates/sqladmin/
         authentication_backend=auth,
     )

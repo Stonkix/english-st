@@ -1,32 +1,32 @@
 {% extends "base.html" %}
-{% block title %}Новый ученик — English ST{% endblock %}
+{% block title %}New student — English ST{% endblock %}
 
 {% block content %}
 <section class="page teacher-page">
   <a class="back-link" href="/teacher/groups/{{ group.id }}">← {{ group.name }}</a>
   <form class="card" method="post" action="/teacher/groups/{{ group.id }}/students" data-once hx-sync="this:replace">
-    <h1>Новый ученик</h1>
+    <h1>New student</h1>
     {% if errors %}
     <div class="alert-error" role="alert">
       {% for e in errors %}<p>{{ e }}</p>{% endfor %}
     </div>
     {% endif %}
     <div class="field">
-      <label for="first-name">Имя</label>
+      <label for="first-name">First name</label>
       <input id="first-name" name="first_name" value="{{ values.first_name }}" maxlength="50" autocomplete="off" required
              hx-get="/teacher/login-suggest" hx-trigger="change" hx-include="#first-name, #last-name" hx-swap="none" data-login-suggest>
     </div>
     <div class="field">
-      <label for="last-name">Фамилия</label>
+      <label for="last-name">Last name</label>
       <input id="last-name" name="last_name" value="{{ values.last_name }}" maxlength="50" autocomplete="off" required
              hx-get="/teacher/login-suggest" hx-trigger="change" hx-include="#first-name, #last-name" hx-swap="none" data-login-suggest>
     </div>
     <div class="field">
-      <label for="login">Логин для входа</label>
+      <label for="login">Username</label>
       <input id="login" name="login" value="{{ values.login }}" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="32" required>
-      <small class="muted">Латиницей. Подставляется сам по имени и фамилии — можно исправить.</small>
+      <small class="muted">Use English letters. The username is suggested from the student’s name and can be edited.</small>
     </div>
-    <button class="btn btn-primary btn-block" type="submit">Создать ученика</button>
+    <button class="btn btn-primary btn-block" type="submit">Create student</button>
   </form>
 </section>
 {% endblock %}

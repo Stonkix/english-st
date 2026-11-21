@@ -1,45 +1,45 @@
 {% extends "base.html" %}
-{% block title %}Фильтр мата — English ST{% endblock %}
+{% block title %}Language filter — English ST{% endblock %}
 
 {% block content %}
 <section class="page teacher-page filter-page">
-  <a class="back-link" href="/school">&larr; Школа</a>
-  <h1>Фильтр мата</h1>
-  <p class="muted">Работает в чате и при создании учеников и учителей (имя и фамилия). Бранное слово в сообщении целиком заменяется случайным словом-заменой; исходный текст видят учитель группы и админ.</p>
+  <a class="back-link" href="/school">&larr; School</a>
+  <h1>Language filter</h1>
+  <p class="muted">The filter checks chat messages and account names. It replaces an entire flagged word with a randomly selected replacement. Group teachers and administrators can see the original message.</p>
 
   <form class="card" method="get" action="/school/filter">
-    <h2>Проверить текст</h2>
+    <h2>Check text</h2>
     <div class="field">
-      <label for="check">Текст</label>
+      <label for="check">Typography</label>
       <input id="check" name="check" value="{{ check }}" maxlength="1000" autocomplete="off">
     </div>
     {% if checked is not none %}
-    <p class="lead">{% if checked == check %}Ничего не найдено{% else %}Будет показано: <strong>{{ checked }}</strong>{% endif %}</p>
+    <p class="lead">{% if checked == check %}No matches{% else %}Shown in chat: <strong>{{ checked }}</strong>{% endif %}</p>
     {% endif %}
-    <button class="btn btn-secondary btn-block" type="submit">Проверить</button>
+    <button class="btn btn-secondary btn-block" type="submit">Check</button>
   </form>
 
   <form class="card" method="post" action="/school/filter" data-once>
-    <h2>Словарь</h2>
-    {% if saved %}<div class="alert-success" role="status"><p>Словарь сохранён</p></div>{% endif %}
+    <h2>Dictionary</h2>
+    {% if saved %}<div class="alert-success" role="status"><p>Dictionary saved</p></div>{% endif %}
     {% if errors %}
     <div class="alert-error" role="alert">{% for e in errors %}<p>{{ e }}</p>{% endfor %}</div>
     {% endif %}
     <div class="field">
-      <label for="bad_words">Бранные корни — по одному в строке</label>
-      <small>Корень ищется внутри слова: «пизд» найдёт и «пиздец». «^» в начале — только в начале слова: «^сука» не тронет «сукно». Обходы вроде «xyй», «х.у.й», «бляяя» ловятся сами.</small>
+      <label for="bad_words">Flagged word roots, one per line</label>
+      <small>A root can match anywhere in a word. Begin a root with ^ to match only at the start. The filter also detects common spelling variations.</small>
       <textarea id="bad_words" name="bad_words" spellcheck="false">{{ values.bad_words }}</textarea>
     </div>
     <div class="field">
-      <label for="exceptions">Исключения — обычные слова, внутри которых есть корень</label>
-      <small>Например, «страху» спасает «застрахую», «хлеб» — «хлебать».</small>
+      <label for="exceptions">Exceptions for words that contain a flagged root</label>
+      <small>Enter each exception on its own line.</small>
       <textarea id="exceptions" name="exceptions" spellcheck="false">{{ values.exceptions }}</textarea>
     </div>
     <div class="field">
-      <label for="replacements">Слова-замены</label>
+      <label for="replacements">Replacement words</label>
       <textarea id="replacements" name="replacements" spellcheck="false">{{ values.replacements }}</textarea>
     </div>
-    <button class="btn btn-primary btn-block" type="submit">Сохранить словарь</button>
+    <button class="btn btn-primary btn-block" type="submit">Save dictionary</button>
   </form>
 </section>
 {% endblock %}

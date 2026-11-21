@@ -22,78 +22,78 @@ class GradeResult:
 
 def _clean_str(value, limit: int, what: str, allow_empty: bool = False) -> str:
     if not isinstance(value, str):
-        raise PayloadError(f"{what}: нужен текст")
+        raise PayloadError(f"{what} must be text")
     value = value.strip()
     if not value and not allow_empty:
-        raise PayloadError(f"{what}: не может быть пустым")
+        raise PayloadError(f"{what} cannot be empty")
     if len(value) > limit:
-        raise PayloadError(f"{what}: не длиннее {limit} символов")
+        raise PayloadError(f"{what} must be at most {limit} characters")
     return value
 
 
 def _list(value, lo: int, hi: int, what: str) -> list:
     if not isinstance(value, list):
-        raise PayloadError(f"{what}: нужен список")
+        raise PayloadError(f"{what} must be a list")
     if not lo <= len(value) <= hi:
-        raise PayloadError(f"{what}: от {lo} до {hi}")
+        raise PayloadError(f"{what}: enter between {lo} and {hi}")
     return value
 
 
 def _correct_index(data: dict, count: int) -> int:
     correct = data.get("correct")
     if isinstance(correct, bool) or not isinstance(correct, int) or not 0 <= correct < count:
-        raise PayloadError("Отметьте правильный вариант")
+        raise PayloadError("Select the correct answer")
     return correct
 
 
 def validate_payload(qtype: str, data: dict) -> dict:
     """Проверяет и нормализует payload вопроса; иначе PayloadError."""
     if qtype not in QUESTION_TYPES:
-        raise PayloadError("Неизвестный тип вопроса")
+        raise PayloadError("Unknown question type")
     if not isinstance(data, dict):
-        raise PayloadError("Некорректные данные вопроса")
+        raise PayloadError("Invalid question data")
 
     if qtype == "choice_text":
-        options = [_clean_str(o, 100, "Вариант") for o in _list(data.get("options"), 2, 6, "Вариантов ответа")]
+        options = [_clean_str(o, 100, "Answer choice") for o in _list(data.get("options"), 2, 6, "Answer choices")]
         return {"options": options, "correct": _correct_index(data, len(options))}
 
     if qtype == "choice_image":
         options = []
-        for o in _list(data.get("options"), 2, 4, "Картинок-вариантов"):
+        for o in _list(data.get("options"), 2, 4, "Image choices"):
             if not isinstance(o, dict):
-                raise PayloadError("Некорректный вариант")
+                raise PayloadError("Invalid answer choice")
             options.append({
-                "image": _clean_str(o.get("image"), 500, "Картинка варианта"),
-                "caption": _clean_str(o.get("caption", ""), 50, "Подпись", allow_empty=True),
+                "image": _clean_str(o.get("image"), 500, "Answer choice image"),
+                "caption": _clean_str(o.get("caption", ""), 50, "Caption", allow_empty=True),
             })
         return {"options": options, "correct": _correct_index(data, len(options))}
 
     if qtype == "text_input":
-        accepted = [_clean_str(a, 200, "Ответ") for a in _list(data.get("accepted"), 1, 10, "Допустимых ответов")]
+        accepted = [_clean_str(a, 200, "Answer") for a in _list(data.get("accepted"), 1, 10, "Accepted answers")]
         return {"accepted": accepted}
 
     if qtype == "word_bank":
-        answer = " ".join(_clean_str(data.get("answer"), 200, "Фраза").split())
+        answer = " ".join(_clean_str(data.get("answer"), 200, "Phrase").split())
         if not 2 <= len(answer.split()) <= 12:
-            raise PayloadError("Фраза: от 2 до 12 слов")
+            raise PayloadError("Enter a phrase of 2–12 words")
         raw = data.get("distractors", [])
         if not isinstance(raw, list):
-            raise PayloadError("Лишние слова: нужен список")
-        distractors = [_clean_str(d, 50, "Лишнее слово") for d in raw if not (isinstance(d, str) and not d.strip())]
+            raise PayloadError("Extra words must be a list")
+        distractors = [_clean_str(d, 50, "Extra word") for d in raw if not (isinstance(d, str) and not d.strip())]
         if len(distractors) > 6 or any(len(d.split()) != 1 for d in distractors):
-            raise PayloadError("Лишние слова: до 6 слов, по одному слову")
+            raise PayloadError("Enter up to 6 extra words, one per field")
         return {"answer": answer, "distractors": distractors}
 
     # match_pairs
     pairs = []
-    for p in _list(data.get("pairs"), 2, 6, "Пар"):
+    for p in _list(data.get("pairs"), 2, 6, "Pairs"):
         if not isinstance(p, (list, tuple)) or len(p) != 2:
-            raise PayloadError("Пара: левая и правая части")
-        pairs.append([_clean_str(p[0], 60, "Левая часть пары"), _clean_str(p[1], 60, "Правая часть пары")])
+            raise PayloadError("Each pair needs a left and a right entry")
+        pairs.append([_clean_str(p[0], 60, "Left side of the pair"), _clean_str(p[1], 60, "Right side of the pair")])
     if len({p[0] for p in pairs}) != len(pairs):
-        raise PayloadError("Левые части пар не должны повторяться")
+        raise PayloadError("Use a unique entry on the left of each pair")
     if len({p[1] for p in pairs}) != len(pairs):
-        raise PayloadError("Правые части пар не должны повторяться")
+        raise PayloadError("Use a unique entry on the right of each pair")
     return {"pairs": pairs}
 
 
@@ -189,7 +189,7 @@ def _correct_answer(question: Question) -> str:
         return p["options"][p["correct"]]
     if question.type == "choice_image":
         option = p["options"][p["correct"]]
-        return option["caption"] or f"вариант {p['correct'] + 1}"
+        return option["caption"] or f"Option {p['correct'] + 1}"
     if question.type == "text_input":
         return p["accepted"][0]
     if question.type == "word_bank":

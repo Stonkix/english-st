@@ -42,22 +42,22 @@
   {%- endif %}
 </svg>
 {%- endmacro %}
-{% set items = [("Главная", "/", "home")] if user.role == "student" else [("Группы", "/teacher", "groups"), ("Задания", "/tasks", "tasks")] %}
-{% set items = items + [("Чат", "/chat", "chat")] %}
-{% set items = items + ([("Магазин", "/shop", "shop"), ("Питомцы", "/pets", "pets")] if user.role == "student" else [("Заявки", "/orders", "orders")]) %}
+{% set items = [("Home", "/", "home")] if user.role == "student" else [("Groups", "/teacher", "groups"), ("Assignments", "/tasks", "tasks")] %}
+{% set items = items + [("Chat", "/chat", "chat")] %}
+{% set items = items + ([("Shop", "/shop", "shop"), ("Pets", "/pets", "pets")] if user.role == "student" else [("Requests", "/orders", "orders")]) %}
 {% set unread = chat_unread(user) %}
 {% set pending = orders_pending(user) %}
-{% if user.role == "admin" %}{% set items = items + [("Школа", "/school", "school")] %}{% endif %}
-{% set items = items + [("Профиль", "/profile", "profile")] %}
+{% if user.role == "admin" %}{% set items = items + [("School", "/school", "school")] %}{% endif %}
+{% set items = items + [("Profile", "/profile", "profile")] %}
 {% set path = request.url.path %}
-<nav class="tabbar" aria-label="Главное меню">
+<nav class="tabbar" aria-label="Main navigation">
   <a class="tabbar-brand" href="/">English&nbsp;ST</a>
   {% for label, href, name in items %}
   {% set active = path == href or (href != "/" and path.startswith(href ~ "/")) %}
   <a class="tabbar-item{% if active %} is-active{% endif %}" href="{{ href }}"{% if active %} aria-current="page"{% endif %}>
     {{ icon(name) }}<span>{{ label }}</span>
-    {%- if name == "chat" and unread %}<span class="tabbar-badge" data-chat-unread aria-label="непрочитанных: {{ unread }}">{{ unread if unread < 100 else "99+" }}</span>{% endif %}
-    {%- if name == "orders" and pending %}<span class="tabbar-badge" aria-label="новых заявок: {{ pending }}">{{ pending if pending < 100 else "99+" }}</span>{% endif %}
+    {%- if name == "chat" and unread %}<span class="tabbar-badge" data-chat-unread aria-label="Unread: {{ unread }}">{{ unread if unread < 100 else "99+" }}</span>{% endif %}
+    {%- if name == "orders" and pending %}<span class="tabbar-badge" aria-label="New requests: {{ pending }}">{{ pending if pending < 100 else "99+" }}</span>{% endif %}
   </a>
   {% endfor %}
 </nav>

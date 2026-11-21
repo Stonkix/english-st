@@ -7,6 +7,14 @@ from app.db import Base
 from app.models.stamps import StampType
 from app.timeutil import utcnow
 
+BUILT_IN_NAMES = {
+    "Кошечка": "Cat",
+    "Собачка": "Dog",
+    "Попугайчик": "Parrot",
+    "Жабка": "Toad",
+    "Черепашка": "Turtle",
+}
+
 
 class PetSpecies(Base):
     """Вид питомца в магазине (кошечка, собачка…). Картинка — app/static/pets/<code>.svg."""
@@ -19,6 +27,10 @@ class PetSpecies(Base):
     price: Mapped[int]  # в штампиках вида PetConfig.price_type_id
     sort_order: Mapped[int] = mapped_column(default=0)
     is_active: Mapped[bool] = mapped_column(default=True)
+
+    @property
+    def display_name(self) -> str:
+        return BUILT_IN_NAMES.get(self.name, self.name)
 
 
 class PetConfig(Base):

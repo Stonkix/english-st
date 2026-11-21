@@ -27,24 +27,24 @@ def test_pool_gets_topic(client, db):
     db.refresh(pool)
     assert pool.topic_id is None
     r = client.post("/tasks/pools", data={**data, "topic_id": "999999"})
-    assert "Выберите тему из списка" in r.text
+    assert "Select a topic from the list" in r.text
 
 
 def test_group_topic_quotas(client, db):
     group, grammar, vocab, ids = _topic_setup(db, 6)
     login_as(client, "teach")
     page = client.get(f"/tasks/groups/{group.id}").text
-    assert "Вопросы по темам" in page and "в пулах группы 6" in page
+    assert "Questions by topic" in page and "In the group’s pools: 6" in page
     r = client.post(f"/tasks/groups/{group.id}/topics", data={f"topic_{grammar.id}": "3", f"topic_{vocab.id}": "1"},
                     follow_redirects=False)
     assert r.status_code == 303
     assert {(q.topic_id, q.count) for q in db.query(GroupTopicQuota)} == {(grammar.id, 3), (vocab.id, 1)}
-    assert "Сейчас в задании 4 вопросов" in client.get(f"/tasks/groups/{group.id}").text
+    assert "Current assignment size: 4" in client.get(f"/tasks/groups/{group.id}").text
     kid = make_user(db, login="kid", group=group)
     picked = set(todays_source(db, kid, date(2026, 10, 26)).question_ids)
     assert len(picked & ids["grammar"]) == 3 and len(picked & ids["vocab"]) == 1
-    assert "от 0 до 30" in client.post(f"/tasks/groups/{group.id}/topics", data={f"topic_{grammar.id}": "-1"}).text
-    assert "не больше 30" in client.post(f"/tasks/groups/{group.id}/topics",
+    assert "0–30" in client.post(f"/tasks/groups/{group.id}/topics", data={f"topic_{grammar.id}": "-1"}).text
+    assert "at most 30" in client.post(f"/tasks/groups/{group.id}/topics",
                                           data={f"topic_{grammar.id}": "20", f"topic_{vocab.id}": "20"}).text
     client.post(f"/tasks/groups/{group.id}/topics", data={f"topic_{grammar.id}": "0", f"topic_{vocab.id}": "0"})
     assert db.query(GroupTopicQuota).count() == 0
@@ -63,10 +63,10 @@ def test_admin_topics(client, db):
     client.post("/logout")
     make_user(db, role="admin", login="adm")
     login_as(client, "adm")
-    assert "пулов: 1" in client.get("/school/topics").text
+    assert "Pools: 1" in client.get("/school/topics").text
     client.post("/school/topics", data={"name": "  Чтение "})
     assert db.query(Topic).filter_by(name="Чтение").count() == 1
-    assert "Такая тема уже есть" in client.post("/school/topics", data={"name": "лексика"}).text
+    assert "This topic already exists" in client.post("/school/topics", data={"name": "лексика"}).text
     client.post(f"/school/topics/{vocab.id}", data={"name": "Слова", "sort_order": "5"})
     db.refresh(vocab)
     assert (vocab.name, vocab.sort_order) == ("Слова", 5)

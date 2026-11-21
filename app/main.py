@@ -116,7 +116,7 @@ def _error_page_user(request: Request):
 @app.exception_handler(StarletteHTTPException)
 async def http_error(request: Request, exc: StarletteHTTPException):
     if request.url.path in JSON_PATHS or is_chat_json_path(request.url.path):  # плеер и чат ждут JSON
-        return JSONResponse({"error": "Ошибка"}, status_code=exc.status_code, headers=exc.headers)
+        return JSONResponse({"error": "Something went wrong"}, status_code=exc.status_code, headers=exc.headers)
     user = await run_in_threadpool(_error_page_user, request)  # обращение к БД не блокирует цикл событий
     if exc.status_code == 404:
         return templates.TemplateResponse(request, "404.html", {"user": user}, status_code=404)
@@ -130,7 +130,7 @@ async def http_error(request: Request, exc: StarletteHTTPException):
 async def validation_error(request: Request, exc: RequestValidationError):
     """Ошибка в адресе (не число, ноль, огромный id) — такой страницы нет; ошибка в форме — 400. Без сырого JSON."""
     if request.url.path in JSON_PATHS or is_chat_json_path(request.url.path):  # короткий JSON без подробностей
-        return JSONResponse({"error": "Некорректный запрос"}, status_code=422)
+        return JSONResponse({"error": "Invalid request"}, status_code=422)
     user = await run_in_threadpool(_error_page_user, request)
     if any(err.get("loc") and err["loc"][0] == "path" for err in exc.errors()):
         return templates.TemplateResponse(request, "404.html", {"user": user}, status_code=404)
@@ -178,7 +178,7 @@ def ui_kit(request: Request):
     if not settings.debug:
         raise StarletteHTTPException(404)
     demo = {
-        role: SimpleNamespace(role=role, first_name="Петя", last_name="Котов", avatar=None)
+        role: SimpleNamespace(role=role, first_name="Petya", last_name="Kotov", avatar=None)
         for role in ("student", "teacher", "admin")
     }
     return templates.TemplateResponse(

@@ -102,7 +102,7 @@ def test_lone_surrogate_in_multipart_login_is_not_500(safe_client, world):
     r = safe_client.post(
         "/login", content=UTF7_LOGIN, headers={"Content-Type": "multipart/form-data; boundary=b; charset=utf-7"}
     )
-    assert r.status_code == 200 and "Неверный логин или пароль" in r.text
+    assert r.status_code == 200 and "Incorrect username or password" in r.text
 
 
 def test_lone_surrogate_in_multipart_password_is_not_500(safe_client, world):
@@ -110,7 +110,7 @@ def test_lone_surrogate_in_multipart_password_is_not_500(safe_client, world):
         b'name="password"\r\n\r\nx', b'name="password"\r\n\r\n+2D8-'
     )
     r = safe_client.post("/login", content=body, headers={"Content-Type": "multipart/form-data; boundary=b; charset=utf-7"})
-    assert r.status_code == 200 and "Неверный логин или пароль" in r.text
+    assert r.status_code == 200 and "Incorrect username or password" in r.text
 
 
 def test_unexpected_exception_renders_500_page(safe_client, world, monkeypatch):

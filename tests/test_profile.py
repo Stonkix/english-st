@@ -7,7 +7,7 @@ from app.config import settings
 from app.images import MAX_UPLOAD_BYTES, InvalidImage, read_limited
 from tests.factories import login_as, make_user
 
-BAD_IMAGE = "Не получилось открыть картинку. Попробуйте другое фото."
+BAD_IMAGE = "We couldn’t open the image. Try a different photo."
 
 
 def jpeg(w=3000, h=2000, **save_kwargs):
@@ -33,7 +33,7 @@ def test_profile_shows_name_read_only(client, db):
     assert "Маша Лисицына" in r.text and "kid" in r.text
     assert 'name="first_name"' not in r.text and 'name="last_name"' not in r.text
     assert ">МЛ<" in r.text.replace(" ", "").replace("\n", "")  # без фото — кружок с инициалами
-    assert "Выйти" in r.text
+    assert "Sign out" in r.text
 
 
 def test_avatar_upload_square_webp(client, db):
@@ -204,7 +204,7 @@ def test_change_password_revokes_other_sessions(client, db):
     login_as(other, "kid")
     login_as(client, "kid")
     r = change(client)
-    assert "Пароль изменён" in r.text
+    assert "Password changed" in r.text
     assert other.get("/profile", follow_redirects=False).headers["location"] == "/login"
     assert client.get("/profile").status_code == 200
 
@@ -221,12 +221,12 @@ def test_change_password_new_works_old_does_not(client, db):
 @pytest.mark.parametrize(
     "kwargs, message",
     [
-        ({"current": "Wrong0Password"}, "Текущий пароль указан неверно"),
-        ({"new": "short1A", "repeat": "short1A"}, "Не короче 10 символов"),
-        ({"new": "Привет12345"}, "Только латиница"),
-        ({"repeat": "Other0Password"}, "Пароли не совпадают"),
-        ({"new": "Passw0rd12"}, "Новый пароль совпадает с текущим"),
-        ({"new": "Aa1" + "x" * 254}, "Не длиннее 256 символов"),
+        ({"current": "Wrong0Password"}, "Incorrect current password"),
+        ({"new": "short1A", "repeat": "short1A"}, "At least 10 characters"),
+        ({"new": "Привет12345"}, "English letters, numbers, and symbols only"),
+        ({"repeat": "Other0Password"}, "Passwords do not match"),
+        ({"new": "Passw0rd12"}, "Choose a password different from your current one"),
+        ({"new": "Aa1" + "x" * 254}, "At most 256 characters"),
     ],
 )
 def test_change_password_errors(client, db, kwargs, message):
@@ -235,7 +235,7 @@ def test_change_password_errors(client, db, kwargs, message):
     old_hash = u.password_hash
     r = change(client, **kwargs)
     assert r.status_code == 200 and message in r.text
-    assert "Пароль изменён" not in r.text
+    assert "Password changed" not in r.text
     db.refresh(u)
     assert u.password_hash == old_hash
 
@@ -244,7 +244,7 @@ def test_change_password_too_long_current_is_wrong_not_500(client, db):
     make_user(db, login="kid")
     login_as(client, "kid")
     r = change(client, current="A1a" * 200)
-    assert r.status_code == 200 and "Текущий пароль указан неверно" in r.text
+    assert r.status_code == 200 and "Incorrect current password" in r.text
 
 
 def test_change_password_keeps_other_users_sessions(client, db):

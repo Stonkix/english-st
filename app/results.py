@@ -10,7 +10,7 @@ from app.streak import effective_streak
 
 HISTORY_DAYS = 14
 MAX_BACK_DAYS = 3650  # глубже не листаем: защита от дат вроде 0001-01-01
-DELETED_QUESTION = "Вопрос удалён"
+DELETED_QUESTION = "Question deleted"
 
 
 def parse_day(raw: str | None, today: date) -> date:
@@ -106,8 +106,8 @@ def history(db: DbSession, student: User, today: date) -> list[dict]:
                 "right": snap.get("correct", ""),
             })
         if a.source == "test":
-            source = f"Тест «{titles[a.test_id]}»" if a.test_id in titles else "Тест"
+            source = f"Test “{titles[a.test_id]}”" if a.test_id in titles else "Test"
         else:
-            source = "Пул вопросов"
+            source = "Question pool"
         result.append({"attempt": a, "source": source, "answers": items, "finished": a.finished_at is not None})
     return result

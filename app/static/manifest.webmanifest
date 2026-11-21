@@ -1,7 +1,7 @@
 {
-  "name": "English ST — английский для детей",
+  "name": "English ST — English for Kids",
   "short_name": "English ST",
-  "lang": "ru",
+  "lang": "en",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
