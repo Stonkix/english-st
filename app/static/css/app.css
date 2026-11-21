@@ -267,6 +267,7 @@ a.list-item:active { background: var(--blue-light); }
 .list-item-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .list-item-main strong { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list-item-main small { color: var(--muted); font-size: 15px; }
+.ranking-self { background: var(--blue-light); }
 
 /* ---------- Главное меню: снизу на телефоне ---------- */
 .tabbar {
@@ -970,8 +971,12 @@ a.stamp-balances:active { background: var(--bg-soft); }
 .order-reject[open] { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 12px; }
 .order-reject[open] summary { display: none; }
 .order-reject form { display: flex; flex-direction: column; gap: 12px; }
-/* шесть пунктов меню у админа (седьмая ссылка — с логотипом) — помельче, чтобы влезли на телефон */
+/* Шесть и более пунктов меню — меньшие подписи для мобильного экрана. */
 .tabbar:has(> .tabbar-item:nth-of-type(7)) .tabbar-item { font-size: 10px; letter-spacing: 0; }
+@media (max-width: 400px) {
+  .tabbar:has(> .tabbar-item:nth-of-type(8)) { padding-inline: 2px; }
+  .tabbar:has(> .tabbar-item:nth-of-type(8)) .tabbar-item { font-size: 9px; }
+}
 @media (min-width: 900px) {
   .tabbar:has(> .tabbar-item:nth-of-type(7)) .tabbar-item { font-size: 16px; letter-spacing: .03em; }
 }

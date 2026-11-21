@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import CheckConstraint, ForeignKey, UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKey, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -23,6 +23,7 @@ class StampType(Base):
     is_active: Mapped[bool] = mapped_column(default=True)
     # можно ли получить обменом (легендарный — нельзя: его только выдают)
     craftable: Mapped[bool] = mapped_column(default=True, server_default="1")
+    ranking_points: Mapped[int] = mapped_column(default=0, server_default=text("0"))
 
     variants: Mapped[list["StampVariant"]] = relationship(
         order_by="(StampVariant.sort_order, StampVariant.id)", cascade="all, delete-orphan", passive_deletes=True,

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import PlainTextResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session as DbSession
+from sqlalchemy.orm import Session as DbSession, joinedload
 
 from app.accounts import (
     LOGIN_INVALID,
@@ -69,9 +69,11 @@ def own_student(db: DbSession, user: User, student_id: int) -> User:
     return student
 
 
-def _groups_of(db: DbSession, user: User) -> list[Group]:
+def groups_for_staff(db: DbSession, user: User) -> list[Group]:
     stmt = select(Group).order_by(Group.name, Group.id)
-    if user.role != "admin":
+    if user.role == "admin":
+        stmt = stmt.options(joinedload(Group.teacher))
+    else:
         stmt = stmt.where(Group.teacher_id == user.id)
     return list(db.scalars(stmt))
 
@@ -103,7 +105,7 @@ def _group_id_or_404(raw: str) -> int:
 def _groups_page(request: Request, db: DbSession, user: User, name: str = "", error: str | None = None):
     counted = select(User.group_id, func.count()).where(User.role == "student").group_by(User.group_id)
     counts = dict(db.execute(counted).all())
-    context = {"user": user, "groups": _groups_of(db, user), "counts": counts, "name": name, "error": error}
+    context = {"user": user, "groups": groups_for_staff(db, user), "counts": counts, "name": name, "error": error}
     return templates.TemplateResponse(request, "teacher/groups.html", context)
 
 
@@ -126,7 +128,7 @@ def _student_page(request: Request, db: DbSession, user: User, student: User, **
     context.update(
         user=user,
         student=student,
-        groups=_groups_of(db, user),
+        groups=groups_for_staff(db, user),
         locked=is_locked(db, student.login),
         photo_history=history(db, student),
         photo_lock=lock_message(student),

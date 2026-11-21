@@ -23,6 +23,7 @@ from app.routes.daily import router as daily_router
 from app.routes.media import router as media_router
 from app.routes.pets import router as pets_router
 from app.routes.profile import router as profile_router
+from app.routes.ranking import router as ranking_router
 from app.routes.school import router as school_router
 from app.routes.shop import router as shop_router
 from app.routes.tasks import router as tasks_router
@@ -148,6 +149,7 @@ app.include_router(auth_router)
 app.include_router(daily_router)
 app.include_router(chat_router)
 app.include_router(profile_router)
+app.include_router(ranking_router)
 app.include_router(media_router)
 app.include_router(teacher_router)
 app.include_router(tasks_router)

@@ -18,6 +18,10 @@
   <rect x="11" y="2" width="10" height="6" rx="2" fill="#58A700"/>
   <path d="M10.5 15.5l2.5 2.5 4.5-5" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M10.5 24h11" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+  {%- elif name == "ranking" %}
+  <path d="M10 7H5v3a6 6 0 0 0 6 6m11-9h5v3a6 6 0 0 1-6 6" fill="none" stroke="#CD7900" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M9 5h14v7a7 7 0 0 1-14 0Z" fill="#FFC800"/>
+  <path d="M16 18v6m-5 3h10" stroke="#CD7900" stroke-width="3" stroke-linecap="round"/>
   {%- elif name == "chat" %}
   <path d="M6 5h20a4 4 0 0 1 4 4v11a4 4 0 0 1-4 4H14l-6 5v-5H6a4 4 0 0 1-4-4V9a4 4 0 0 1 4-4z" fill="#1CB0F6"/>
   <circle cx="10" cy="14.5" r="2" fill="#fff"/><circle cx="16" cy="14.5" r="2" fill="#fff"/><circle cx="22" cy="14.5" r="2" fill="#fff"/>
@@ -43,6 +47,7 @@
 </svg>
 {%- endmacro %}
 {% set items = [("Home", "/", "home")] if user.role == "student" else [("Groups", "/teacher", "groups"), ("Assignments", "/tasks", "tasks")] %}
+{% set items = items + [("Ranking", "/ranking", "ranking")] %}
 {% set items = items + [("Chat", "/chat", "chat")] %}
 {% set items = items + ([("Shop", "/shop", "shop"), ("Pets", "/pets", "pets")] if user.role == "student" else [("Requests", "/orders", "orders")]) %}
 {% set unread = chat_unread(user) %}

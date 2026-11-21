@@ -12,6 +12,7 @@
 
   <a class="btn btn-primary btn-block" href="/teacher/groups/{{ group.id }}/students/new">Add student</a>
   <a class="btn btn-secondary btn-block" href="/tasks/groups/{{ group.id }}">Group assignments</a>
+  <a class="btn btn-secondary btn-block" href="/ranking?group_id={{ group.id }}">Group ranking</a>
   <a class="btn btn-secondary btn-block" href="/shop/groups/{{ group.id }}">Group shop</a>
   <a class="card" href="/tasks/groups/{{ group.id }}/results"><strong>Completed today: {{ done }} of {{ students|length }}</strong><span class="muted">Daily results</span></a>
 

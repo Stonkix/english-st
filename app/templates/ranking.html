@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Ranking — English ST{% endblock %}
+
+{% block content %}
+<section class="page">
+  <div>
+    <h1>Ranking</h1>
+    {% if group %}<p class="muted">{{ group.name }}</p>{% endif %}
+  </div>
+
+  {% if groups %}
+  <form class="card" method="get" action="/ranking">
+    <div class="field">
+      <label for="ranking-group">Group</label>
+      <select id="ranking-group" name="group_id">
+        {% for option in groups %}
+        <option value="{{ option.id }}"{% if option.id == group.id %} selected{% endif %}>{{ option.name }}{% if user.role == "admin" %} ({{ option.teacher.full_name }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn btn-secondary btn-block" type="submit">View ranking</button>
+  </form>
+  {% endif %}
+
+  {% if group %}
+  <p class="muted">Points per stamp earned · Legendary 25 · Rare 10 · Common 1</p>
+  {% if rows %}
+  <ol class="list" role="list" aria-label="Group ranking">
+    {% for row in rows %}
+    <li value="{{ row.rank }}" class="list-item{% if row.student_id == user.id %} ranking-self{% endif %}">
+      <strong>#{{ row.rank }}</strong>
+      <span class="list-item-main">
+        <strong>{{ row.name }}</strong>
+        {% if row.student_id == user.id %}<small>You</small>{% endif %}
+      </span>
+      <strong>{{ row.points }} point{% if row.points != 1 %}s{% endif %}</strong>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <div class="card"><p class="lead">There are no active students in this group yet.</p></div>
+  {% endif %}
+  {% elif user.role == "student" %}
+  <div class="card"><p class="lead">Your group ranking will appear when your teacher adds you to a group.</p></div>
+  {% else %}
+  <div class="card"><p class="lead">Create a group to see its ranking.</p><a class="btn btn-primary btn-block" href="/teacher">Go to groups</a></div>
+  {% endif %}
+</section>
+{% endblock %}
