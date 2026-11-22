@@ -5,37 +5,34 @@
 <section class="page profile-page">
   <div class="card profile-head">
     {% set photo = user|avatar_url %}
-    <span class="avatar avatar-lg">
-      {%- if photo %}<img src="{{ photo }}" alt="" width="112" height="112">{% else %}{{ (user.first_name[:1] ~ user.last_name[:1])|upper }}{% endif -%}
-    </span>
+    {% set portrait -%}
+      {% if photo %}<img src="{{ photo }}" alt="" width="112" height="112">{% else %}{{ (user.first_name[:1] ~ user.last_name[:1])|upper }}{% endif %}
+    {%- endset %}
+    {% if avatar_lock %}
+    <span class="avatar avatar-lg">{{ portrait }}</span>
+    {% else %}
+    <form method="post" action="/profile/avatar" enctype="multipart/form-data">
+      <label class="avatar avatar-lg profile-avatar-picker">
+        <span class="profile-avatar-art" aria-hidden="true">{{ portrait }}</span>
+        <input class="visually-hidden" type="file" name="photo" accept="image/*,.heic,.heif" data-avatar-upload required>
+        <span class="profile-avatar-caption">{{ "Change photo" if photo else "Add photo" }}</span>
+      </label>
+      <noscript><button class="btn btn-secondary" type="submit">Upload photo</button></noscript>
+    </form>
+    {% endif %}
     <h1>{{ user.first_name }} {{ user.last_name }}</h1>
     <p class="muted">Username: <strong>{{ user.login }}</strong></p>
-    <p class="muted profile-note">Ask your teacher to update your name.</p>
-  </div>
-
-  {% if avatar_lock %}
-  <div class="card">
-    <h2>My photo</h2>
+    {% if avatar_lock %}
     <div class="alert-error" role="status"><p>{{ avatar_lock }}</p></div>
-  </div>
-  {% else %}
-  <form class="card" method="post" action="/profile/avatar" enctype="multipart/form-data" data-once>
-    <h2>My photo</h2>
-    {% if avatar_error %}
+    {% elif avatar_error %}
     <div class="alert-error" role="alert"><p>{{ avatar_error }}</p></div>
     {% endif %}
-    <div class="field">
-      <label for="photo">Choose a photo</label>
-      <input id="photo" name="photo" type="file" accept="image/*,.heic,.heif" required>
-    </div>
-    <button class="btn btn-primary btn-block" type="submit">Upload photo</button>
-  </form>
-  {% if user.avatar %}
-  <form method="post" action="/profile/avatar/delete" data-confirm="Remove your profile photo?">
-    <button class="btn btn-secondary btn-block" type="submit">Remove photo</button>
-  </form>
-  {% endif %}
-  {% endif %}
+    {% if photo and not avatar_lock %}
+    <form method="post" action="/profile/avatar/delete" data-confirm="Remove your profile photo?">
+      <button class="profile-avatar-remove" type="submit">Remove photo</button>
+    </form>
+    {% endif %}
+  </div>
 
   {% if user.role == "student" %}<a class="btn btn-secondary btn-block" href="/stamps">My stamps and activity</a>{% endif %}
 

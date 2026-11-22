@@ -7,6 +7,7 @@
   const input = document.getElementById("chat-input");
   const sendBtn = document.getElementById("chat-send");
   const errorBox = document.getElementById("chat-error");
+  const noticeBox = document.getElementById("chat-notice");
   const statusBox = document.getElementById("chat-status");
   const stickerBtn = document.getElementById("chat-sticker-btn");
   const stickerPanel = document.getElementById("chat-stickers");
@@ -17,17 +18,18 @@
   const emptyReaction = { counts: {}, mine: null };
   const reactionEvents = new Map();
   const pendingReactions = new Set();
+  const pendingDeletes = new Set();
   let reactionVersion = 0;
-  let reactionTarget = null;
+  let menuTarget = null;
   let press = null;
   let heldMessage = null;
-  const reactionMenu = document.createElement("div");
-  reactionMenu.id = "chat-reaction-menu";
-  reactionMenu.className = "chat-reaction-menu";
-  reactionMenu.hidden = true;
-  reactionMenu.setAttribute("role", "group");
-  reactionMenu.setAttribute("aria-label", "Choose a reaction");
-  document.body.append(reactionMenu);
+  const messageMenu = document.createElement("div");
+  messageMenu.id = "chat-message-menu";
+  messageMenu.className = "chat-message-menu";
+  messageMenu.hidden = true;
+  messageMenu.setAttribute("role", "group");
+  messageMenu.setAttribute("aria-label", "Message actions");
+  document.body.append(messageMenu);
   let firstId = null; // самое старое показанное
   let lastId = 0; // самое новое полученное: от него догружаем после обрыва
   let hasMore = data.has_more;
@@ -35,10 +37,12 @@
   let socket = null;
   let retry = 0;
   let pending = new Map(); // client_id -> текст (вернуть в поле, если сервер отказал)
+  let noticeTimer;
 
   // ---------- вывод ----------
 
   const DAY_FMT = new Intl.DateTimeFormat("en", { day: "numeric", month: "long" });
+  const GROUP_GAP_MINUTES = 5;
 
   function dayLabel(day) {
     const today = new Date();
@@ -79,14 +83,15 @@
   function paintReaction(button, { counts, mine }) {
     button.dataset.mine = mine ?? "";
     const visible = data.reactions.filter(({ id }) => counts[id]);
+    button.classList.toggle("has-reactions", visible.length > 0);
     button.replaceChildren(...visible.map(({ id, emoji }) => {
       const badge = el("span", "msg-reaction-badge", `${emoji} ${counts[id]}`);
       badge.classList.toggle("is-mine", id === mine);
       return badge;
     }));
-    if (!visible.length) button.textContent = "☺";
+    if (!visible.length) button.textContent = "⋯";
     const summary = visible.map(({ id, label }) => `${label} ${counts[id]}`).join(", ");
-    button.setAttribute("aria-label", summary ? `Reactions, ${summary}` : "Choose a reaction");
+    button.setAttribute("aria-label", summary ? `Message actions. Reactions: ${summary}` : "Message actions");
   }
 
   function setReaction(id, state) {
@@ -113,7 +118,11 @@
     node.dataset.id = m.id;
     node.dataset.day = m.day;
     node.dataset.author = m.author.id;
+    const [hours, minutes] = m.time.split(":").map(Number);
+    node.dataset.minute = hours * 60 + minutes;
     node.dataset.studentAuthor = String(!m.author.teacher);
+    node.dataset.kind = m.kind;
+    node.dataset.canDelete = String(mine || data.moderator);
     if (!mine && data.kind === "group") node.append(avatar(m.author));
     const media = !m.deleted || showDeleted ? { sticker: " is-sticker", image: " is-media" }[m.kind] || "" : "";
     const body = el("div", "msg-body" + media);
@@ -160,32 +169,30 @@
     if (!m.deleted) {
       const reaction = el("button", "msg-reaction");
       reaction.type = "button";
-      reaction.title = "Choose a reaction";
-      reaction.setAttribute("aria-controls", reactionMenu.id);
+      reaction.title = "Message actions";
+      reaction.setAttribute("aria-controls", messageMenu.id);
       reaction.setAttribute("aria-expanded", "false");
       paintReaction(reaction, newerReaction(m.id, since) ?? m.reaction ?? emptyReaction);
       meta.append(reaction);
     }
-    meta.append(el("time", "", m.time));
-    if (!m.deleted && (mine || data.moderator)) {
-      const del = el("button", "msg-delete", "Delete");
-      del.type = "button";
-      del.dataset.delete = m.id;
-      meta.append(del);
-    }
+    const details = el("div", "msg-meta-details");
+    const time = el("time", "", m.time);
+    time.dateTime = m.time;
+    details.append(time);
+    meta.append(details);
     body.append(meta);
     node.append(body);
     return node;
   }
 
-  // Подряд идущие сообщения одного автора за день: имя и фото — только у первого
-  function regroup() {
-    let prev = null;
-    for (const node of list.children) {
-      const msg = node.classList.contains("msg");
-      node.classList.toggle("is-cont", msg && !!prev && prev.dataset.author === node.dataset.author);
-      prev = msg ? node : null;
-    }
+  function updateGrouping(node) {
+    if (!node?.classList.contains("msg")) return;
+    const previous = node.previousElementSibling;
+    const gap = Number(node.dataset.minute) - Number(previous?.dataset.minute);
+    const continuation = previous?.dataset.author === node.dataset.author &&
+      previous.dataset.day === node.dataset.day && gap >= 0 && gap <= GROUP_GAP_MINUTES &&
+      !previous.classList.contains("is-deleted") && !node.classList.contains("is-deleted");
+    node.classList.toggle("is-cont", continuation);
   }
 
   function separator(day) {
@@ -207,12 +214,15 @@
     const old = byId.get(m.id);
     if (old) {
       const fresh = render(m, since);
+      if (menuTarget && old.contains(menuTarget)) closeMessageMenu();
       old.replaceWith(fresh);
       byId.set(m.id, fresh);
+      updateGrouping(fresh);
+      updateGrouping(fresh.nextElementSibling);
       return;
     }
     if (m.id < lastId) return; // старее последнего показанного — придёт с историей
-    const lastMsg = list.querySelector(".msg:last-of-type");
+    const lastMsg = byId.get(lastId);
     if (!lastMsg || lastMsg.dataset.day !== m.day) list.append(separator(m.day));
     const node = render(m, since);
     list.append(node);
@@ -220,7 +230,7 @@
     lastId = Math.max(lastId, m.id);
     if (firstId === null) firstId = m.id;
     hideEmpty();
-    regroup();
+    updateGrouping(node);
   }
 
   // Порция истории сверху; прокрутка остаётся на том же сообщении
@@ -243,7 +253,7 @@
     }
     list.prepend(frag);
     firstId = messages[0].id;
-    regroup();
+    for (const node of list.children) updateGrouping(node);
     list.scrollTop += list.scrollHeight - before;
   }
 
@@ -262,21 +272,27 @@
     const node = byId.get(id);
     if (!node || node.classList.contains("is-deleted")) return;
     node.classList.add("is-deleted");
+    updateGrouping(node);
+    updateGrouping(node.nextElementSibling);
     const body = node.querySelector(".msg-body");
-    if (reactionTarget && node.contains(reactionTarget)) closeReactionMenu();
-    body.querySelector(".msg-reaction")?.remove();
+    if (menuTarget && node.contains(menuTarget)) closeMessageMenu();
+    const trigger = body.querySelector(".msg-reaction");
+    if (trigger === document.activeElement) input.focus({ preventScroll: true });
+    trigger?.remove();
     if (data.moderator && node.dataset.studentAuthor === "true") {
       node.classList.add("shows-deleted-content");
-      body.querySelectorAll(".msg-take, .msg-delete").forEach((n) => n.remove());
+      body.querySelector(".msg-take")?.remove();
       addDeletedLabel(body, body.querySelector(".msg-text, .msg-sticker, .msg-image-link, .msg-meta"));
       return;
     }
     body.classList.remove("is-media", "is-sticker");
-    body.querySelectorAll(".msg-text, .msg-sticker, .msg-image-link, .msg-original, .msg-take, .msg-delete").forEach((n) => n.remove());
+    body.querySelectorAll(".msg-text, .msg-sticker, .msg-image-link, .msg-original, .msg-take").forEach((n) => n.remove());
     body.insertBefore(el("p", "msg-text", "Message deleted"), body.querySelector(".msg-meta"));
   }
 
   function showError(text) {
+    clearTimeout(noticeTimer);
+    noticeBox.hidden = true;
     errorBox.textContent = text;
     errorBox.hidden = !text;
   }
@@ -377,19 +393,23 @@
 
   // ---------- действия ----------
 
-  function closeReactionMenu(restoreFocus = false) {
-    if (!reactionTarget) return;
-    reactionTarget.setAttribute("aria-expanded", "false");
-    if (restoreFocus) reactionTarget.focus({ preventScroll: true });
-    reactionTarget = null;
-    reactionMenu.hidden = true;
+  function closeMessageMenu(restoreFocus = false) {
+    if (!menuTarget) return;
+    menuTarget.setAttribute("aria-expanded", "false");
+    if (restoreFocus) menuTarget.focus({ preventScroll: true });
+    menuTarget = null;
+    messageMenu.hidden = true;
   }
 
-  function openReactionMenu(button, x, y, focus = false) {
-    closeReactionMenu();
-    reactionTarget = button;
+  function openMessageMenu(button, x, y, focus = false) {
+    closeMessageMenu();
+    menuTarget = button;
     button.setAttribute("aria-expanded", "true");
-    reactionMenu.replaceChildren(...data.reactions.map(({ id, emoji, label }) => {
+    const row = button.closest(".msg");
+    const reactions = el("div", "chat-message-reactions");
+    reactions.setAttribute("role", "group");
+    reactions.setAttribute("aria-label", "Reactions");
+    reactions.append(...data.reactions.map(({ id, emoji, label }) => {
       const option = el("button", "chat-reaction-option", emoji);
       option.type = "button";
       option.title = label;
@@ -398,13 +418,29 @@
       option.dataset.kind = id;
       return option;
     }));
-    reactionMenu.style.left = "0px";
-    reactionMenu.style.top = "0px";
-    reactionMenu.hidden = false;
-    const { width, height } = reactionMenu.getBoundingClientRect();
-    reactionMenu.style.left = `${Math.max(8, Math.min(x, innerWidth - width - 8))}px`;
-    reactionMenu.style.top = `${Math.max(8, Math.min(y - height - 8, innerHeight - height - 8))}px`;
-    if (focus) reactionMenu.firstElementChild.focus({ preventScroll: true });
+    messageMenu.replaceChildren(reactions);
+    const actions = el("div", "chat-message-actions");
+    if (row.dataset.kind === "text" && row.querySelector(".msg-text")?.textContent) {
+      const copy = el("button", "chat-message-action", "Copy text");
+      copy.type = "button";
+      copy.dataset.action = "copy";
+      actions.append(copy);
+    }
+    if (row.dataset.canDelete === "true") {
+      const remove = el("button", "chat-message-action is-danger", "Delete");
+      remove.type = "button";
+      remove.dataset.action = "delete";
+      actions.append(remove);
+    }
+    if (actions.childElementCount) messageMenu.append(actions);
+    messageMenu.style.left = "0px";
+    messageMenu.style.top = "0px";
+    messageMenu.hidden = false;
+    const { width, height } = messageMenu.getBoundingClientRect();
+    messageMenu.style.left = `${Math.max(8, Math.min(x, innerWidth - width - 8))}px`;
+    const top = y - height - 8;
+    messageMenu.style.top = `${Math.max(8, Math.min(top >= 8 ? top : y + 8, innerHeight - height - 8))}px`;
+    if (focus) messageMenu.querySelector("button")?.focus({ preventScroll: true });
   }
 
   function cancelPress() {
@@ -431,6 +467,38 @@
       showError(err.message);
     } finally {
       pendingReactions.delete(id);
+    }
+  }
+
+  async function copyMessage(row) {
+    showError("");
+    try {
+      await navigator.clipboard.writeText(row.querySelector(".msg-text").textContent);
+      showError("");
+      noticeBox.hidden = false;
+      noticeTimer = setTimeout(() => { noticeBox.hidden = true; }, 2500);
+    } catch {
+      showError("Couldn’t copy the message.");
+    }
+  }
+
+  async function deleteMessage(id) {
+    if (pendingDeletes.has(id)) return;
+    pendingDeletes.add(id);
+    try {
+      const confirmed = await confirmAction("This message will be deleted for everyone.", {
+        title: "Delete message?",
+        label: "Delete",
+        danger: true,
+      });
+      if (!confirmed || byId.get(id)?.classList.contains("is-deleted")) return;
+      showError("");
+      await fetchJSON(`/chat/messages/${id}/delete`, { method: "POST" });
+      markDeleted(id);
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      pendingDeletes.delete(id);
     }
   }
 
@@ -522,7 +590,7 @@
     }
   });
 
-  list.addEventListener("click", async (event) => {
+  list.addEventListener("click", (event) => {
     if (event.detail > 0 && heldMessage?.node.contains(event.target) && performance.now() < heldMessage.until) {
       event.preventDefault();
       heldMessage = null;
@@ -531,24 +599,7 @@
     const reaction = event.target.closest(".msg-reaction");
     if (reaction) {
       const { left, top } = reaction.getBoundingClientRect();
-      openReactionMenu(reaction, left, top, event.detail === 0);
-      return;
-    }
-    const button = event.target.closest("[data-delete]");
-    if (!button || button.disabled) return;
-    const confirmed = await confirmAction("This message will be deleted for everyone.", {
-      title: "Delete message?",
-      label: "Delete",
-      danger: true,
-    });
-    if (!confirmed || !button.isConnected) return;
-    button.disabled = true;
-    try {
-      await fetchJSON(`/chat/messages/${button.dataset.delete}/delete`, { method: "POST" });
-      markDeleted(Number(button.dataset.delete));
-    } catch (err) {
-      button.disabled = false;
-      showError(err.message);
+      openMessageMenu(reaction, left, top, event.detail === 0);
     }
   });
 
@@ -562,7 +613,7 @@
       return;
     }
     if (event.pointerType === "touch" || heldMessage?.node === bubble) return;
-    openReactionMenu(reaction, event.clientX, event.clientY);
+    openMessageMenu(reaction, event.clientX, event.clientY);
   });
 
   list.addEventListener("pointerdown", (event) => {
@@ -576,7 +627,7 @@
       cancelPress();
       if (!reaction.isConnected) return;
       heldMessage = { node: bubble, until: Infinity };
-      openReactionMenu(reaction, x, y);
+      openMessageMenu(reaction, x, y);
     };
     press = { pointerId, x, y, open, timer: setTimeout(open, 500) };
   });
@@ -592,26 +643,29 @@
     });
   }
 
-  reactionMenu.addEventListener("click", (event) => {
-    const option = event.target.closest("[data-kind]");
-    if (!option || !reactionTarget) return;
-    const button = reactionTarget;
-    closeReactionMenu(event.detail === 0);
-    chooseReaction(button, option.dataset.kind);
+  messageMenu.addEventListener("click", (event) => {
+    const option = event.target.closest("button");
+    if (!option || !menuTarget) return;
+    const button = menuTarget;
+    const row = button.closest(".msg");
+    closeMessageMenu(true);
+    if (option.dataset.kind) chooseReaction(button, option.dataset.kind);
+    else if (option.dataset.action === "copy") copyMessage(row);
+    else if (option.dataset.action === "delete") deleteMessage(Number(row.dataset.id));
   });
   document.addEventListener("pointerdown", (event) => {
-    if (reactionTarget && !reactionMenu.contains(event.target) && !reactionTarget.contains(event.target)) {
-      closeReactionMenu();
+    if (menuTarget && !messageMenu.contains(event.target) && !menuTarget.contains(event.target)) {
+      closeMessageMenu();
     }
   });
   document.addEventListener("keydown", (event) => {
-    if (reactionTarget && event.key === "Escape") closeReactionMenu(true);
+    if (menuTarget && event.key === "Escape") closeMessageMenu(true);
   });
-  window.addEventListener("resize", () => closeReactionMenu());
+  window.addEventListener("resize", () => closeMessageMenu());
 
   list.addEventListener("scroll", async () => {
     cancelPress();
-    closeReactionMenu();
+    closeMessageMenu();
     if (list.scrollTop > 200 || !hasMore || loadingOlder || firstId === null) return;
     loadingOlder = true;
     try {

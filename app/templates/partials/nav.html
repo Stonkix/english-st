@@ -55,14 +55,21 @@
 {% if user.role == "admin" %}{% set items = items + [("School", "/school", "school")] %}{% endif %}
 {% set items = items + [("Profile", "/profile", "profile")] %}
 {% set path = request.url.path %}
-<nav class="tabbar" aria-label="Main navigation">
-  <a class="tabbar-brand" href="/">English&nbsp;ST</a>
+{% set can_switch_tabs = request.method == "GET" and path in (items | map(attribute=1) | list) %}
+<nav class="tabbar" aria-label="Main navigation"{% if can_switch_tabs %}
+     data-tab-navigation hx-boost="true" hx-target="#main" hx-select="#main"
+     hx-select-oob="#chat-nav-count,#orders-nav-count" hx-swap="outerHTML show:window:top"
+     hx-sync="closest nav:replace" hx-request='{"timeout":12000}'{% endif %}>
+  <a class="tabbar-brand" href="/" hx-boost="false">English&nbsp;ST</a>
   {% for label, href, name in items %}
   {% set active = path == href or (href != "/" and path.startswith(href ~ "/")) %}
   <a class="tabbar-item{% if active %} is-active{% endif %}" href="{{ href }}"{% if active %} aria-current="page"{% endif %}>
     {{ icon(name) }}<span>{{ label }}</span>
-    {%- if name == "chat" and unread %}<span class="tabbar-badge" data-chat-unread aria-label="Unread: {{ unread }}">{{ unread if unread < 100 else "99+" }}</span>{% endif %}
-    {%- if name == "orders" and pending %}<span class="tabbar-badge" aria-label="New requests: {{ pending }}">{{ pending if pending < 100 else "99+" }}</span>{% endif %}
+    {%- if name == "chat" %}
+    <span id="chat-nav-count" class="tabbar-count">{% if unread %}<span class="tabbar-badge" data-chat-unread aria-label="Unread: {{ unread }}">{{ unread if unread < 100 else "99+" }}</span>{% endif %}</span>
+    {%- elif name == "orders" %}
+    <span id="orders-nav-count" class="tabbar-count">{% if pending %}<span class="tabbar-badge" aria-label="New requests: {{ pending }}">{{ pending if pending < 100 else "99+" }}</span>{% endif %}</span>
+    {%- endif %}
   </a>
   {% endfor %}
 </nav>

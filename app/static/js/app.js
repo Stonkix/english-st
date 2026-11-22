@@ -3,8 +3,8 @@
 
 // ---------- Пароль: кнопка «показать» ----------
 // Кнопки в разметке скрыты (hidden): без JS они были бы бесполезны.
-function initPasswordToggles() {
-  document.querySelectorAll("[data-toggle-password]").forEach((button) => {
+function initPasswordToggles(root) {
+  root.querySelectorAll("[data-toggle-password]").forEach((button) => {
     const input = document.getElementById(button.dataset.togglePassword);
     if (!input) return;
     button.hidden = false;
@@ -27,8 +27,8 @@ const PASSWORD_CHECKS = {
   charset: (p) => /^[!-~]*$/.test(p),
 };
 
-function initPasswordRules() {
-  document.querySelectorAll("[data-rules-for]").forEach((list) => {
+function initPasswordRules(root) {
+  root.querySelectorAll("[data-rules-for]").forEach((list) => {
     const input = document.getElementById(list.dataset.rulesFor);
     if (!input) return;
     const update = () => {
@@ -41,6 +41,65 @@ function initPasswordRules() {
     };
     input.addEventListener("input", update);
     update();
+  });
+}
+
+// Главное меню остаётся на странице, а HTMX обновляет содержимое и счётчики.
+const tabNavigation = document.querySelector("[data-tab-navigation]");
+if (tabNavigation) {
+  const status = document.getElementById("tab-navigation-status");
+  const scrollRestoreKey = "englishst:tab-scroll-restore";
+  document.addEventListener("htmx:beforeHistoryUpdate", (event) => {
+    if (event.detail.boosted && event.detail.history.type === "push") {
+      history.replaceState({ ...history.state, tabScrollY: scrollY }, "");
+    }
+  });
+  // При возврате HTMX перезагружает страницу и заменяет history.state.
+  // Передаём новой странице только позицию прокрутки, без копии HTML.
+  window.addEventListener("popstate", (event) => {
+    if (!Number.isFinite(event.state?.tabScrollY)) return;
+    try {
+      sessionStorage.setItem(scrollRestoreKey, JSON.stringify({ url: location.href, top: event.state.tabScrollY }));
+    } catch {
+      // Если браузер отключил хранилище, остаётся штатная прокрутка.
+    }
+  }, true);
+  window.addEventListener("pageshow", (event) => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(scrollRestoreKey));
+      sessionStorage.removeItem(scrollRestoreKey);
+      if (!event.persisted && saved?.url === location.href) {
+        history.replaceState({ ...history.state, tabScrollY: saved.top }, "");
+        requestAnimationFrame(() => window.scrollTo(0, saved.top));
+      }
+    } catch {
+      // Переход работает и без сохранённой позиции.
+    }
+  });
+  tabNavigation.addEventListener("htmx:beforeRequest", (event) => {
+    if (event.target.href === location.href) {
+      event.preventDefault();
+      return;
+    }
+    status.textContent = "";
+  });
+  for (const failure of ["htmx:responseError", "htmx:sendError", "htmx:timeout"]) {
+    tabNavigation.addEventListener(failure, () => {
+      status.textContent = "Couldn’t open this tab. Try again.";
+    });
+  }
+  document.addEventListener("htmx:afterSettle", (event) => {
+    const main = event.target;
+    if (main.id !== "main" || !event.detail.boosted) return;
+    for (const link of tabNavigation.querySelectorAll(".tabbar-item")) {
+      const active = link.pathname === location.pathname;
+      link.classList.toggle("is-active", active);
+      if (active) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    }
+    initPasswordToggles(main);
+    initPasswordRules(main);
+    main.focus({ preventScroll: true });
   });
 }
 
@@ -95,6 +154,13 @@ document.addEventListener("submit", async (event) => {
   }
 }, true);
 
+document.addEventListener("change", (event) => {
+  const input = event.target;
+  if (input instanceof HTMLInputElement && input.hasAttribute("data-avatar-upload") && input.files?.length) {
+    input.form?.requestSubmit();
+  }
+});
+
 // ---------- Защита от двойного нажатия ----------
 // <form data-once>: после отправки кнопка блокируется, чтобы второй тап не создал дубль.
 // Если страница вернулась из кэша «назад», кнопку возвращаем к жизни.
@@ -142,6 +208,6 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-initPasswordToggles();
-initPasswordRules();
+initPasswordToggles(document);
+initPasswordRules(document);
 initLoginSuggest();

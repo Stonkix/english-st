@@ -33,6 +33,8 @@ def test_profile_shows_name_read_only(client, db):
     assert "Маша Лисицына" in r.text and "kid" in r.text
     assert 'name="first_name"' not in r.text and 'name="last_name"' not in r.text
     assert ">МЛ<" in r.text.replace(" ", "").replace("\n", "")  # без фото — кружок с инициалами
+    assert 'class="avatar avatar-lg profile-avatar-picker"' in r.text and "data-avatar-upload" in r.text
+    assert "Add photo" in r.text and "Ask your teacher to update your name." not in r.text
     assert "Sign out" in r.text
 
 
@@ -45,7 +47,8 @@ def test_avatar_upload_square_webp(client, db):
     img = Image.open(settings.media_dir / u.avatar)
     assert img.format == "WEBP" and img.size == (512, 512) and not img.getexif()
     assert u.avatar.startswith(f"avatars/{u.id}/")
-    assert f'src="/media/{u.avatar}"' in client.get("/profile").text
+    page = client.get("/profile").text
+    assert f'src="/media/{u.avatar}"' in page and "Change photo" in page and "Remove photo" in page
 
 
 def test_avatar_strips_exif_gps(client, db):
