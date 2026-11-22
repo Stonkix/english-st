@@ -23,6 +23,7 @@
   let menuTarget = null;
   let press = null;
   let heldMessage = null;
+  let lastPointerType = "";
   const messageMenu = document.createElement("div");
   messageMenu.id = "chat-message-menu";
   messageMenu.className = "chat-message-menu";
@@ -80,23 +81,23 @@
     body.insertBefore(el("p", "msg-deleted-label", "Deleted"), before);
   }
 
-  function paintReaction(button, { counts, mine }) {
-    button.dataset.mine = mine ?? "";
+  function paintReaction(bubble, { counts, mine }) {
+    bubble.dataset.mine = mine ?? "";
+    const reactions = bubble.querySelector(".msg-reactions");
     const visible = data.reactions.filter(({ id }) => counts[id]);
-    button.classList.toggle("has-reactions", visible.length > 0);
-    button.replaceChildren(...visible.map(({ id, emoji }) => {
+    reactions.hidden = !visible.length;
+    reactions.replaceChildren(...visible.map(({ id, emoji }) => {
       const badge = el("span", "msg-reaction-badge", `${emoji} ${counts[id]}`);
       badge.classList.toggle("is-mine", id === mine);
       return badge;
     }));
-    if (!visible.length) button.textContent = "⋯";
     const summary = visible.map(({ id, label }) => `${label} ${counts[id]}`).join(", ");
-    button.setAttribute("aria-label", summary ? `Message actions. Reactions: ${summary}` : "Message actions");
+    reactions.setAttribute("aria-label", `Reactions: ${summary}`);
   }
 
   function setReaction(id, state) {
-    const button = byId.get(id)?.querySelector(".msg-reaction");
-    if (button) paintReaction(button, state);
+    const bubble = byId.get(id)?.querySelector(".msg-body[aria-controls]");
+    if (bubble) paintReaction(bubble, state);
   }
 
   function recordReaction(id, state) {
@@ -167,13 +168,14 @@
     }
     const meta = el("div", "msg-meta");
     if (!m.deleted) {
-      const reaction = el("button", "msg-reaction");
-      reaction.type = "button";
-      reaction.title = "Message actions";
-      reaction.setAttribute("aria-controls", messageMenu.id);
-      reaction.setAttribute("aria-expanded", "false");
-      paintReaction(reaction, newerReaction(m.id, since) ?? m.reaction ?? emptyReaction);
-      meta.append(reaction);
+      body.tabIndex = 0;
+      body.setAttribute("role", "group");
+      body.setAttribute("aria-label", "Message, press Enter for actions");
+      body.setAttribute("aria-controls", messageMenu.id);
+      body.setAttribute("aria-expanded", "false");
+      const reactions = el("div", "msg-reactions");
+      reactions.setAttribute("role", "group");
+      meta.append(reactions);
     }
     const details = el("div", "msg-meta-details");
     const time = el("time", "", m.time);
@@ -181,6 +183,7 @@
     details.append(time);
     meta.append(details);
     body.append(meta);
+    if (!m.deleted) paintReaction(body, newerReaction(m.id, since) ?? m.reaction ?? emptyReaction);
     node.append(body);
     return node;
   }
@@ -276,9 +279,11 @@
     updateGrouping(node.nextElementSibling);
     const body = node.querySelector(".msg-body");
     if (menuTarget && node.contains(menuTarget)) closeMessageMenu();
-    const trigger = body.querySelector(".msg-reaction");
-    if (trigger === document.activeElement) input.focus({ preventScroll: true });
-    trigger?.remove();
+    if (body === document.activeElement) input.focus({ preventScroll: true });
+    for (const attr of ["tabindex", "role", "aria-label", "aria-controls", "aria-expanded"]) {
+      body.removeAttribute(attr);
+    }
+    body.querySelector(".msg-reactions")?.remove();
     if (data.moderator && node.dataset.studentAuthor === "true") {
       node.classList.add("shows-deleted-content");
       body.querySelector(".msg-take")?.remove();
@@ -401,11 +406,11 @@
     messageMenu.hidden = true;
   }
 
-  function openMessageMenu(button, x, y, focus = false) {
+  function openMessageMenu(bubble, x, y, focus = false) {
     closeMessageMenu();
-    menuTarget = button;
-    button.setAttribute("aria-expanded", "true");
-    const row = button.closest(".msg");
+    menuTarget = bubble;
+    bubble.setAttribute("aria-expanded", "true");
+    const row = bubble.closest(".msg");
     const reactions = el("div", "chat-message-reactions");
     reactions.setAttribute("role", "group");
     reactions.setAttribute("aria-label", "Reactions");
@@ -414,7 +419,7 @@
       option.type = "button";
       option.title = label;
       option.setAttribute("aria-label", label);
-      option.setAttribute("aria-pressed", String(button.dataset.mine === id));
+      option.setAttribute("aria-pressed", String(bubble.dataset.mine === id));
       option.dataset.kind = id;
       return option;
     }));
@@ -449,10 +454,10 @@
     press = null;
   }
 
-  async function chooseReaction(button, kind) {
-    const id = Number(button.closest(".msg").dataset.id);
+  async function chooseReaction(bubble, kind) {
+    const id = Number(bubble.closest(".msg").dataset.id);
     if (pendingReactions.has(id)) return;
-    const selected = button.dataset.mine === kind ? null : kind;
+    const selected = bubble.dataset.mine === kind ? null : kind;
     const since = reactionVersion;
     pendingReactions.add(id);
     showError("");
@@ -596,40 +601,35 @@
       heldMessage = null;
       return;
     }
-    const reaction = event.target.closest(".msg-reaction");
-    if (reaction) {
-      const { left, top } = reaction.getBoundingClientRect();
-      openMessageMenu(reaction, left, top, event.detail === 0);
-    }
+    if (event.button !== 0 || (event.pointerType || lastPointerType) === "touch" ||
+        event.target.closest("a, button")) return;
+    const bubble = event.target.closest(".msg-body[aria-controls]");
+    if (!bubble || window.getSelection()?.isCollapsed === false) return;
+    if (bubble === menuTarget) closeMessageMenu();
+    else openMessageMenu(bubble, event.clientX, event.clientY);
   });
 
   list.addEventListener("contextmenu", (event) => {
-    const bubble = event.target.closest(".msg-body");
-    const reaction = bubble?.querySelector(".msg-reaction");
-    if (!reaction) return;
+    const bubble = event.target.closest(".msg-body[aria-controls]");
+    if (!bubble || ((event.pointerType || lastPointerType) !== "touch" && !press && heldMessage?.node !== bubble)) return;
     event.preventDefault();
-    if (press) {
-      press.open();
-      return;
-    }
-    if (event.pointerType === "touch" || heldMessage?.node === bubble) return;
-    openMessageMenu(reaction, event.clientX, event.clientY);
+    if (press?.node === bubble) press.open();
   });
 
   list.addEventListener("pointerdown", (event) => {
+    lastPointerType = event.pointerType;
     heldMessage = null;
     if (event.pointerType !== "touch" || !event.isPrimary || event.target.closest("button")) return;
-    const bubble = event.target.closest(".msg-body");
-    const reaction = bubble?.querySelector(".msg-reaction");
-    if (!reaction) return;
+    const bubble = event.target.closest(".msg-body[aria-controls]");
+    if (!bubble) return;
     const { pointerId, clientX: x, clientY: y } = event;
     const open = () => {
       cancelPress();
-      if (!reaction.isConnected) return;
+      if (!bubble.isConnected || !bubble.hasAttribute("aria-controls")) return;
       heldMessage = { node: bubble, until: Infinity };
-      openMessageMenu(reaction, x, y);
+      openMessageMenu(bubble, x, y);
     };
-    press = { pointerId, x, y, open, timer: setTimeout(open, 500) };
+    press = { node: bubble, pointerId, x, y, open, timer: setTimeout(open, 500) };
   });
   list.addEventListener("pointermove", (event) => {
     if (press?.pointerId === event.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > 12) {
@@ -646,10 +646,10 @@
   messageMenu.addEventListener("click", (event) => {
     const option = event.target.closest("button");
     if (!option || !menuTarget) return;
-    const button = menuTarget;
-    const row = button.closest(".msg");
+    const bubble = menuTarget;
+    const row = bubble.closest(".msg");
     closeMessageMenu(true);
-    if (option.dataset.kind) chooseReaction(button, option.dataset.kind);
+    if (option.dataset.kind) chooseReaction(bubble, option.dataset.kind);
     else if (option.dataset.action === "copy") copyMessage(row);
     else if (option.dataset.action === "delete") deleteMessage(Number(row.dataset.id));
   });
@@ -660,6 +660,13 @@
   });
   document.addEventListener("keydown", (event) => {
     if (menuTarget && event.key === "Escape") closeMessageMenu(true);
+  });
+  list.addEventListener("keydown", (event) => {
+    const bubble = event.target;
+    if (!bubble.matches(".msg-body[aria-controls]") || !["Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    const { left, top } = bubble.getBoundingClientRect();
+    openMessageMenu(bubble, left, top, true);
   });
   window.addEventListener("resize", () => closeMessageMenu());
 
