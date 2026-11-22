@@ -45,11 +45,55 @@ function initPasswordRules() {
 }
 
 // ---------- Подтверждение опасных действий ----------
-// <form data-confirm="Текст вопроса"> — без согласия форма не отправляется (inline-обработчиков нет: CSP).
-document.addEventListener("submit", (event) => {
-  const message = event.target instanceof HTMLFormElement ? event.target.dataset.confirm : undefined;
-  if (message && !window.confirm(message)) event.preventDefault();
-});
+let confirmationPending = false;
+function confirmAction(message, { title = "Confirm action", label = "Continue", danger = false } = {}) {
+  const dialog = document.getElementById("action-confirm");
+  if (!dialog || confirmationPending || typeof dialog.showModal !== "function") return Promise.resolve(false);
+  const trigger = document.activeElement;
+  dialog.querySelector("#action-confirm-title").textContent = title;
+  dialog.querySelector("#action-confirm-message").textContent = message;
+  const button = dialog.querySelector("[data-confirm-button]");
+  button.textContent = label;
+  button.classList.toggle("btn-danger", danger);
+  button.classList.toggle("btn-primary", !danger);
+  dialog.showModal();
+  confirmationPending = true;
+  return new Promise((resolve) => {
+    const listeners = new AbortController();
+    const finish = (confirmed) => {
+      listeners.abort();
+      dialog.close();
+      confirmationPending = false;
+      if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus({ preventScroll: true });
+      resolve(confirmed);
+    };
+    dialog.querySelector("form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      finish(event.submitter?.value === "confirm");
+    }, { signal: listeners.signal });
+    dialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      finish(false);
+    }, { signal: listeners.signal });
+  });
+}
+
+// Повторяем отправку с исходной кнопкой после согласия, сохраняя обычное поведение формы.
+const confirmedForms = new WeakSet();
+document.addEventListener("submit", async (event) => {
+  const form = event.target;
+  if (!(form instanceof HTMLFormElement) || !form.dataset.confirm || confirmedForms.has(form)) return;
+  event.preventDefault();
+  const submitter = event.submitter;
+  if (!(await confirmAction(form.dataset.confirm)) || !form.isConnected) return;
+  if (submitter && submitter.form !== form) return;
+  confirmedForms.add(form);
+  try {
+    form.requestSubmit(submitter ?? undefined);
+  } finally {
+    confirmedForms.delete(form);
+  }
+}, true);
 
 // ---------- Защита от двойного нажатия ----------
 // <form data-once>: после отправки кнопка блокируется, чтобы второй тап не создал дубль.

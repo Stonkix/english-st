@@ -205,6 +205,7 @@ def test_change_password_revokes_other_sessions(client, db):
     login_as(client, "kid")
     r = change(client)
     assert "Password changed" in r.text
+    assert '<details class="profile-password">' in r.text
     assert other.get("/profile", follow_redirects=False).headers["location"] == "/login"
     assert client.get("/profile").status_code == 200
 
@@ -235,6 +236,7 @@ def test_change_password_errors(client, db, kwargs, message):
     old_hash = u.password_hash
     r = change(client, **kwargs)
     assert r.status_code == 200 and message in r.text
+    assert '<details class="profile-password" open>' in r.text
     assert "Password changed" not in r.text
     db.refresh(u)
     assert u.password_hash == old_hash

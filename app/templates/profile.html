@@ -31,7 +31,7 @@
     <button class="btn btn-primary btn-block" type="submit">Upload photo</button>
   </form>
   {% if user.avatar %}
-  <form method="post" action="/profile/avatar/delete">
+  <form method="post" action="/profile/avatar/delete" data-confirm="Remove your profile photo?">
     <button class="btn btn-secondary btn-block" type="submit">Remove photo</button>
   </form>
   {% endif %}
@@ -39,40 +39,42 @@
 
   {% if user.role == "student" %}<a class="btn btn-secondary btn-block" href="/stamps">My stamps and activity</a>{% endif %}
 
-  <form class="card" method="post" action="/profile/password">
-    <h2>Change password</h2>
-    {% if password_ok %}
-    <div class="alert-success" role="status"><p>Password changed</p></div>
-    {% endif %}
-    {% if password_errors %}
-    <div class="alert-error" role="alert">
-      {% for e in password_errors %}<p>{{ e }}</p>{% endfor %}
-    </div>
-    {% endif %}
-    <div class="field">
-      <label for="current-password">Current password</label>
-      <div class="input-wrap">
-        <input id="current-password" name="current" type="password" autocomplete="current-password" required>
-        <button class="input-toggle" type="button" data-toggle-password="current-password" aria-controls="current-password" aria-pressed="false" hidden>Show</button>
+  {% if password_ok %}
+  <div class="alert-success" role="status"><p>Password changed</p></div>
+  {% endif %}
+  <details class="profile-password"{% if password_errors %} open{% endif %}>
+    <summary class="btn btn-secondary btn-block profile-password-toggle">Change password</summary>
+    <form class="card" method="post" action="/profile/password">
+      {% if password_errors %}
+      <div class="alert-error" role="alert">
+        {% for e in password_errors %}<p>{{ e }}</p>{% endfor %}
       </div>
-    </div>
-    <div class="field">
-      <label for="new-password">New password</label>
-      <div class="input-wrap">
-        <input id="new-password" name="new" type="password" autocomplete="new-password" required>
-        <button class="input-toggle" type="button" data-toggle-password="new-password" aria-controls="new-password" aria-pressed="false" hidden>Show</button>
+      {% endif %}
+      <div class="field">
+        <label for="current-password">Current password</label>
+        <div class="input-wrap">
+          <input id="current-password" name="current" type="password" autocomplete="current-password" required>
+          <button class="input-toggle" type="button" data-toggle-password="current-password" aria-controls="current-password" aria-pressed="false" hidden>Show</button>
+        </div>
       </div>
-    </div>
-    {% with for_id="new-password" %}{% include "partials/password_rules.html" %}{% endwith %}
-    <div class="field">
-      <label for="repeat-password">Confirm new password</label>
-      <div class="input-wrap">
-        <input id="repeat-password" name="repeat" type="password" autocomplete="new-password" required>
-        <button class="input-toggle" type="button" data-toggle-password="repeat-password" aria-controls="repeat-password" aria-pressed="false" hidden>Show</button>
+      <div class="field">
+        <label for="new-password">New password</label>
+        <div class="input-wrap">
+          <input id="new-password" name="new" type="password" autocomplete="new-password" required>
+          <button class="input-toggle" type="button" data-toggle-password="new-password" aria-controls="new-password" aria-pressed="false" hidden>Show</button>
+        </div>
       </div>
-    </div>
-    <button class="btn btn-primary btn-block" type="submit">Save password</button>
-  </form>
+      {% with for_id="new-password" %}{% include "partials/password_rules.html" %}{% endwith %}
+      <div class="field">
+        <label for="repeat-password">Confirm new password</label>
+        <div class="input-wrap">
+          <input id="repeat-password" name="repeat" type="password" autocomplete="new-password" required>
+          <button class="input-toggle" type="button" data-toggle-password="repeat-password" aria-controls="repeat-password" aria-pressed="false" hidden>Show</button>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-block" type="submit">Save password</button>
+    </form>
+  </details>
 
   <form method="post" action="/logout">
     <button class="btn btn-secondary btn-block" type="submit">Sign out</button>

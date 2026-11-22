@@ -78,6 +78,7 @@ def test_room_page_data_and_access(client, db):
     assert [m["kind"] for m in data["messages"]] == ["sticker"] and len(data["stickers"]) == len(chat.STICKERS)
     assert '<body class="has-nav chat-room-page">' in r.text
     assert 'class="tabbar"' in r.text and 'href="/chat" aria-current="page"' in r.text
+    assert '<dialog class="confirm-dialog" id="action-confirm"' in r.text
     assert client.get(f"/chat/{direct2.id}").status_code == 404  # чужой личный чат
     assert client.get(f"/chat/{direct2.id}/messages").json() == {"error": "Something went wrong"}
     assert client.get("/chat/999999").status_code == 404

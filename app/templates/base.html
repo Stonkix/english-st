@@ -21,6 +21,16 @@
   <main id="main">
     {% block content %}{% endblock %}
   </main>
+  <dialog class="confirm-dialog" id="action-confirm" aria-labelledby="action-confirm-title" aria-describedby="action-confirm-message">
+    <form method="dialog">
+      <h2 id="action-confirm-title">Confirm action</h2>
+      <p id="action-confirm-message"></p>
+      <div class="confirm-dialog-actions">
+        <button class="btn btn-secondary" value="cancel" autofocus>Cancel</button>
+        <button class="btn btn-primary" value="confirm" data-confirm-button>Continue</button>
+      </div>
+    </form>
+  </dialog>
   {% block scripts %}{% endblock %}
 </body>
 </html>

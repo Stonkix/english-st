@@ -535,7 +535,13 @@
       return;
     }
     const button = event.target.closest("[data-delete]");
-    if (!button || !window.confirm("Delete this message for everyone?")) return;
+    if (!button || button.disabled) return;
+    const confirmed = await confirmAction("This message will be deleted for everyone.", {
+      title: "Delete message?",
+      label: "Delete",
+      danger: true,
+    });
+    if (!confirmed || !button.isConnected) return;
     button.disabled = true;
     try {
       await fetchJSON(`/chat/messages/${button.dataset.delete}/delete`, { method: "POST" });
