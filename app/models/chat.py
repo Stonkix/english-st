@@ -61,6 +61,15 @@ class ChatReadMark(Base):
     last_read_message_id: Mapped[int] = mapped_column(default=0)
 
 
+class ChatReaction(Base):
+    """Одна реакция-сердечко на сообщение от каждого пользователя."""
+
+    __tablename__ = "chat_reactions"
+
+    message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+
+
 class BadWord(Base):
     """Корень бранного слова. «^» в начале — только в начале слова (иначе — в любом месте)."""
 

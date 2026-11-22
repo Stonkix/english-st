@@ -7,15 +7,16 @@
 import re
 import threading
 import time
-from collections import deque
+from collections import defaultdict, deque
+from collections.abc import Collection
 from datetime import timezone
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
 from app.images import delete_media
-from app.models import ChatMessage, ChatReadMark, ChatRoom, Group, User
+from app.models import ChatMessage, ChatReaction, ChatReadMark, ChatRoom, Group, User
 from app.profanity import clean_text, load_filter
 from app.templating import avatar_url
 from app.timeutil import MOSCOW, utcnow
@@ -245,10 +246,43 @@ def delete_message(db: DbSession, user: User, message: ChatMessage, moderator: b
     image = None
     if message.image and not can_view_deleted_content(message, moderator=True):
         image, message.image = message.image, None
+    db.execute(delete(ChatReaction).where(ChatReaction.message_id == message.id))
     db.commit()
     if image:
         delete_media(image)
     return True
+
+
+def set_reaction(db: DbSession, message_id: int, user_id: int, active: bool) -> bool:
+    reaction = db.get(ChatReaction, (message_id, user_id))
+    if active and reaction is None:
+        db.add(ChatReaction(message_id=message_id, user_id=user_id))
+    elif not active and reaction is not None:
+        db.delete(reaction)
+    else:
+        return False
+    db.commit()
+    return True
+
+
+def reaction_users(db: DbSession, room_id: int, first_id: int, last_id: int) -> dict[int, set[int]]:
+    stmt = (
+        select(ChatReaction.message_id, ChatReaction.user_id)
+        .join(ChatMessage, ChatMessage.id == ChatReaction.message_id)
+        .where(
+            ChatMessage.room_id == room_id,
+            ChatMessage.deleted_at.is_(None),
+            ChatReaction.message_id.between(first_id, last_id),
+        )
+    )
+    users = defaultdict(set)
+    for message_id, user_id in db.execute(stmt):
+        users[message_id].add(user_id)
+    return users
+
+
+def reaction_state(users: Collection[int], viewer_id: int) -> dict:
+    return {"count": len(users), "mine": viewer_id in users}
 
 
 def history(db: DbSession, room: ChatRoom, before: int | None = None, after: int | None = None) -> list[ChatMessage]:

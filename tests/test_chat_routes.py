@@ -9,7 +9,7 @@ from starlette.websockets import WebSocketDisconnect
 from app import chat
 from app.config import settings
 from app.main import app
-from app.models import BadWord, ChatMessage, ChatReadMark, ReplacementWord
+from app.models import BadWord, ChatMessage, ChatReaction, ChatReadMark, ReplacementWord
 from tests.factories import login_as, make_group, make_user, seed_filter
 
 
@@ -96,6 +96,61 @@ def test_history_json(client, db):
     newer = client.get(f"/chat/{room.id}/messages", params={"after": data["messages"][-2]["id"]}).json()
     assert [m["text"] for m in newer["messages"]] == ["54"]
     assert client.get(f"/chat/{room.id}/messages", params={"before": "x"}).status_code == 422
+
+
+def test_heart_reactions_persist_and_broadcast_personalized_counts(client, db):
+    teacher, group, student, peer = _school(db)
+    room = chat.group_room(db, group.id)
+    message = chat.post_text(db, teacher, room, "Welcome")
+    url = f"/chat/messages/{message.id}/reaction"
+    reaction_list = f"/chat/{room.id}/reactions?first={message.id}&last={message.id}"
+    login_as(client, student.login)
+
+    with TestClient(app, headers={"Origin": "http://testserver"}) as other:
+        login_as(other, peer.login)
+        with client.websocket_connect("/ws/chat") as own_ws, other.websocket_connect("/ws/chat") as peer_ws:
+            def check_events(count, mine, theirs):
+                event = {"type": "reaction", "room_id": room.id, "id": message.id}
+                assert own_ws.receive_json() == {**event, "state": {"count": count, "mine": mine}}
+                assert peer_ws.receive_json() == {**event, "state": {"count": count, "mine": theirs}}
+
+            assert client.put(url, json={"active": True}).json() == {"count": 1, "mine": True}
+            check_events(1, True, False)
+            assert client.put(url, json={"active": True}).json() == {"count": 1, "mine": True}
+            assert other.put(url, json={"active": True}).json() == {"count": 2, "mine": True}
+            check_events(2, True, True)
+
+            page = _data(client.get(f"/chat/{room.id}").text)
+            assert page["messages"][0]["reaction"] == {"count": 2, "mine": True}
+            history = other.get(f"/chat/{room.id}/messages").json()["messages"]
+            assert history[0]["reaction"] == {"count": 2, "mine": True}
+
+            assert client.put(url, json={"active": False}).json() == {"count": 1, "mine": False}
+            check_events(1, False, True)
+            assert client.get(reaction_list).json() == {str(message.id): {"count": 1, "mine": False}}
+            assert other.put(url, json={"active": False}).json() == {"count": 0, "mine": False}
+            check_events(0, False, False)
+            assert client.get(reaction_list).json() == {}
+
+
+def test_reactions_require_room_access_and_disappear_on_delete(client, db):
+    _, _, student, peer = _school(db)
+    room = chat.direct_room(db, peer.id)
+    message = chat.post_sticker(db, peer, room, "cat")
+    url = f"/chat/messages/{message.id}/reaction"
+    reaction_list = f"/chat/{room.id}/reactions?first={message.id}&last={message.id}"
+    login_as(client, student.login)
+    assert client.put(url, json={"active": True}).status_code == 404
+    assert client.get(reaction_list).status_code == 404
+
+    login_as(client, peer.login)
+    assert client.put(url, json={"active": True}, headers={"Origin": "http://evil.test"}).status_code == 403
+    assert client.put(url, json={"active": "true"}).status_code == 422
+    assert client.put(url, json={"active": True}).status_code == 200
+    assert client.post(f"/chat/messages/{message.id}/delete").status_code == 200
+    assert client.get(reaction_list).json() == {}
+    assert client.put(url, json={"active": True}).status_code == 404
+    assert db.get(ChatReaction, (message.id, peer.id)) is None
 
 
 # ---------- картинки ----------

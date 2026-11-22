@@ -1,4 +1,4 @@
-"""Чат: список комнат, переписка, история (JSON), картинки, удаление и WebSocket /ws/chat (§8.6).
+"""Чат: список комнат, переписка, история (JSON), картинки, реакции, удаление и WebSocket /ws/chat (§8.6).
 
 Текст и стикеры идут через WebSocket, картинки — POST-загрузкой; после сохранения сервер рассылает событие
 всем участникам комнаты, в том числе отправителю (так у него на всех устройствах одинаково).
@@ -8,9 +8,12 @@ import asyncio
 import json
 import logging
 import re
+from threading import Lock
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, StrictBool
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 from starlette.concurrency import run_in_threadpool
@@ -30,7 +33,13 @@ from app.templating import avatar_url, templates
 router = APIRouter()
 
 BAD_IMAGE = "This file is not a valid image"
-_JSON_PATH = re.compile(r"/chat/(\d+/(messages|image)|messages/\d+/delete)")
+_JSON_PATH = re.compile(r"/chat/(\d+/(messages|reactions|image)|messages/\d+/(delete|reaction))")
+# Один процесс обслуживает чат. Запись реакции, её рассылка и удаление сообщения идут по порядку.
+_message_change_lock = Lock()
+
+
+class ReactionChange(BaseModel):
+    active: StrictBool
 
 
 def is_json_path(path: str) -> bool:
@@ -47,6 +56,26 @@ def _room_or_404(db: DbSession, user: User, room_id: int) -> ChatRoom:
     if room is None or not chat.can_access(db, user, room):
         raise HTTPException(404)
     return room
+
+
+def _message_and_room(db: DbSession, user: User, message_id: int) -> tuple[ChatMessage, ChatRoom]:
+    message = db.get(ChatMessage, message_id)
+    if message is None:
+        raise HTTPException(404)
+    return message, _room_or_404(db, user, message.room_id)
+
+
+def _serialize_history(db: DbSession, rows: list[ChatMessage], user: User, moderator: bool) -> list[dict]:
+    if not rows:
+        return []
+    users = chat.reaction_users(db, rows[0].room_id, rows[0].id, rows[-1].id)
+    items = []
+    for message in rows:
+        item = chat.serialize(message, moderator)
+        if not item["deleted"]:
+            item["reaction"] = chat.reaction_state(users.get(message.id, ()), user.id)
+        items.append(item)
+    return items
 
 
 def _broadcast(db: DbSession, room: ChatRoom, make) -> None:
@@ -124,13 +153,12 @@ def room_page(room_id: Id, request: Request, user: User = Depends(require_user),
         "kind": room.kind,
         "me": user.id,
         "moderator": moderator,
-        "messages": [chat.serialize(m, moderator) for m in messages],
+        "messages": _serialize_history(db, messages, user, moderator),
         "has_more": len(messages) == chat.PAGE_SIZE,
         "text_max": chat.TEXT_MAX,
         "swear_reason": stamps.PENALTY_REASON_SWEARING,
         "stickers": [{"id": key, "label": label, "url": f"/static/stickers/{key}.svg"} for key, label in chat.STICKERS.items()],
     }
-    # меню не показываем (user в шаблон не передаём): переписка на весь экран, как плеер
     context = {
         "room": room,
         "title": chat.room_title(db, room, user),
@@ -156,7 +184,40 @@ def messages(
     if moderator:
         response.headers["Cache-Control"] = "private, no-store"
     rows = chat.history(db, room, before=before, after=after)
-    return {"messages": [chat.serialize(m, moderator) for m in rows], "has_more": len(rows) == chat.PAGE_SIZE}
+    return {"messages": _serialize_history(db, rows, user, moderator), "has_more": len(rows) == chat.PAGE_SIZE}
+
+
+@router.get("/chat/{room_id}/reactions")
+def reactions(
+    room_id: Id,
+    response: Response,
+    first: Annotated[int, Query(ge=1, le=MAX_ID)],
+    last: Annotated[int, Query(ge=1, le=MAX_ID)],
+    user: User = Depends(require_user),
+    db: DbSession = Depends(get_db),
+):
+    _room_or_404(db, user, room_id)
+    response.headers["Cache-Control"] = "private, no-store"
+    return {
+        message_id: chat.reaction_state(users, user.id)
+        for message_id, users in chat.reaction_users(db, room_id, first, last).items()
+    }
+
+
+@router.put("/chat/messages/{message_id}/reaction")
+def react(message_id: Id, change: ReactionChange, user: User = Depends(require_user), db: DbSession = Depends(get_db)):
+    with _message_change_lock:
+        message, room = _message_and_room(db, user, message_id)
+        if message.deleted_at is not None:
+            return _error(404, "Message deleted")
+        changed = chat.set_reaction(db, message_id, user.id, change.active)
+        users = chat.reaction_users(db, room.id, message_id, message_id).get(message_id, ())
+        if changed:
+            hub.send({
+                uid: {"type": "reaction", "room_id": room.id, "id": message_id, "state": chat.reaction_state(users, uid)}
+                for uid in chat.participants(db, room)
+            })
+        return chat.reaction_state(users, user.id)
 
 
 @router.post("/chat/{room_id}/image")
@@ -182,13 +243,11 @@ def upload_image(
 
 @router.post("/chat/messages/{message_id}/delete")
 def delete(message_id: Id, user: User = Depends(require_user), db: DbSession = Depends(get_db)):
-    message = db.get(ChatMessage, message_id)
-    room = db.get(ChatRoom, message.room_id) if message is not None else None
-    if room is None or not chat.can_access(db, user, room):
-        raise HTTPException(404)
-    if not chat.delete_message(db, user, message, chat.can_moderate(db, user, room)):
-        return _error(403, "You can’t delete this message")
-    _broadcast(db, room, lambda _: {"type": "deleted", "room_id": room.id, "id": message.id})
+    with _message_change_lock:
+        message, room = _message_and_room(db, user, message_id)
+        if not chat.delete_message(db, user, message, chat.can_moderate(db, user, room)):
+            return _error(403, "You can’t delete this message")
+        _broadcast(db, room, lambda _: {"type": "deleted", "room_id": room.id, "id": message.id})
     return {"ok": True}
 
 

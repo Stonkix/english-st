@@ -1,5 +1,5 @@
 // Переписка: сообщения по WebSocket (/ws/chat), догрузка пропущенного после обрыва, история при прокрутке вверх,
-// стикеры, фото, удаление. Данные комнаты — в #chat-data (см. routes/chat.py::room_page).
+// стикеры, фото, реакции, удаление. Данные комнаты — в #chat-data (см. routes/chat.py::room_page).
 (() => {
   const data = JSON.parse(document.getElementById("chat-data").textContent);
   const list = document.getElementById("chat-messages");
@@ -14,6 +14,11 @@
 
   const ROOM = data.room_id;
   const byId = new Map(); // id -> элемент сообщения
+  const emptyReaction = { count: 0, mine: false };
+  const reactionEvents = new Map();
+  const pendingReactions = new Set();
+  let reactionVersion = 0;
+  let lastTap = null;
   let firstId = null; // самое старое показанное
   let lastId = 0; // самое новое полученное: от него догружаем после обрыва
   let hasMore = data.has_more;
@@ -62,7 +67,29 @@
     body.insertBefore(el("p", "msg-deleted-label", "Deleted"), before);
   }
 
-  function render(m) {
+  function paintReaction(button, { count, mine }) {
+    button.setAttribute("aria-pressed", String(mine));
+    button.setAttribute("aria-label", count ? `Heart reaction, ${count} total` : "Heart reaction");
+    button.firstChild.textContent = count ? "❤️" : "♡";
+    button.lastChild.textContent = count || "";
+  }
+
+  function setReaction(id, state) {
+    const button = byId.get(id)?.querySelector(".msg-reaction");
+    if (button) paintReaction(button, state);
+  }
+
+  function recordReaction(id, state) {
+    reactionEvents.set(id, { version: ++reactionVersion, state });
+    setReaction(id, state);
+  }
+
+  function newerReaction(id, since) {
+    const event = reactionEvents.get(id);
+    return event?.version > since ? event.state : null;
+  }
+
+  function render(m, since) {
     const mine = m.author.id === data.me;
     const showDeleted = m.deleted && data.moderator && !m.author.teacher;
     const node = el("div", "msg" + (mine ? " is-mine" : ""));
@@ -115,6 +142,18 @@
       }
     }
     const meta = el("div", "msg-meta");
+    if (!m.deleted) {
+      const reaction = el("button", "msg-reaction");
+      reaction.type = "button";
+      reaction.title = "Heart reaction";
+      const icon = el("span", "msg-reaction-icon");
+      const count = el("span", "msg-reaction-count");
+      icon.setAttribute("aria-hidden", "true");
+      count.setAttribute("aria-hidden", "true");
+      reaction.append(icon, count);
+      paintReaction(reaction, newerReaction(m.id, since) ?? m.reaction ?? emptyReaction);
+      meta.append(reaction);
+    }
     meta.append(el("time", "", m.time));
     if (!m.deleted && (mine || data.moderator)) {
       const del = el("button", "msg-delete", "Delete");
@@ -152,10 +191,10 @@
   }
 
   // Новое сообщение снизу (или замена уже показанного — так дубль после догрузки не появится)
-  function append(m) {
+  function append(m, since = 0) {
     const old = byId.get(m.id);
     if (old) {
-      const fresh = render(m);
+      const fresh = render(m, since);
       old.replaceWith(fresh);
       byId.set(m.id, fresh);
       return;
@@ -163,7 +202,7 @@
     if (m.id < lastId) return; // старее последнего показанного — придёт с историей
     const lastMsg = list.querySelector(".msg:last-of-type");
     if (!lastMsg || lastMsg.dataset.day !== m.day) list.append(separator(m.day));
-    const node = render(m);
+    const node = render(m, since);
     list.append(node);
     byId.set(m.id, node);
     lastId = Math.max(lastId, m.id);
@@ -173,7 +212,7 @@
   }
 
   // Порция истории сверху; прокрутка остаётся на том же сообщении
-  function prepend(messages) {
+  function prepend(messages, since) {
     if (!messages.length) return;
     const before = list.scrollHeight;
     const firstSep = list.querySelector("[data-sep]");
@@ -186,7 +225,7 @@
         frag.append(separator(m.day));
         day = m.day;
       }
-      const node = render(m);
+      const node = render(m, since);
       frag.append(node);
       byId.set(m.id, node);
     }
@@ -212,6 +251,7 @@
     if (!node || node.classList.contains("is-deleted")) return;
     node.classList.add("is-deleted");
     const body = node.querySelector(".msg-body");
+    body.querySelector(".msg-reaction")?.remove();
     if (data.moderator && node.dataset.studentAuthor === "true") {
       node.classList.add("shows-deleted-content");
       body.querySelectorAll(".msg-take, .msg-delete").forEach((n) => n.remove());
@@ -253,13 +293,27 @@
   // Всё, что пришло, пока не было связи
   async function catchUp() {
     for (let guard = 0; guard < 20; guard += 1) {
+      const since = reactionVersion;
       const body = await fetchJSON(`/chat/${ROOM}/messages?after=${lastId}`);
       const stick = nearBottom();
-      body.messages.forEach(append);
+      body.messages.forEach((m) => append(m, since));
       if (stick) scrollToBottom();
       if (!body.has_more) break;
     }
     sendRead();
+  }
+
+  async function refreshReactions() {
+    if (firstId === null) return;
+    const first = firstId;
+    const last = lastId;
+    const since = reactionVersion;
+    const states = await fetchJSON(`/chat/${ROOM}/reactions?first=${first}&last=${last}`);
+    for (const id of byId.keys()) {
+      if (id >= first && id <= last && !newerReaction(id, since)) {
+        setReaction(id, states[id] ?? emptyReaction);
+      }
+    }
   }
 
   function connect() {
@@ -270,6 +324,7 @@
       statusBox.hidden = true;
       sendBtn.disabled = !input.value.trim();
       catchUp().catch(() => {});
+      refreshReactions().catch(() => {});
     });
     socket.addEventListener("message", (event) => {
       let msg;
@@ -286,6 +341,8 @@
         sendRead();
       } else if (msg.type === "deleted" && msg.room_id === ROOM) {
         markDeleted(msg.id);
+      } else if (msg.type === "reaction" && msg.room_id === ROOM) {
+        recordReaction(msg.id, msg.state);
       } else if (msg.type === "error") {
         const text = pending.get(msg.client_id);
         pending.delete(msg.client_id);
@@ -306,6 +363,27 @@
   }
 
   // ---------- действия ----------
+
+  async function toggleReaction(button) {
+    const id = Number(button.closest(".msg").dataset.id);
+    if (pendingReactions.has(id)) return;
+    const active = button.getAttribute("aria-pressed") !== "true";
+    const since = reactionVersion;
+    pendingReactions.add(id);
+    showError("");
+    try {
+      const state = await fetchJSON(`/chat/messages/${id}/reaction`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active }),
+      });
+      if (!newerReaction(id, since)) recordReaction(id, state);
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      pendingReactions.delete(id);
+    }
+  }
 
   function sendPayload(payload, text) {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
@@ -396,8 +474,31 @@
   });
 
   list.addEventListener("click", async (event) => {
+    const reaction = event.target.closest(".msg-reaction");
+    if (reaction) {
+      lastTap = null;
+      await toggleReaction(reaction);
+      return;
+    }
     const button = event.target.closest("[data-delete]");
-    if (!button || !window.confirm("Delete this message for everyone?")) return;
+    if (!button) {
+      const body = event.target.closest(".msg:not(.is-deleted) .msg-body");
+      const previous = lastTap;
+      lastTap = null;
+      if (!body || event.detail === 0 || event.target.closest("a, button")) return;
+      const doubleTap = previous?.body === body && (
+        event.detail === 2 ||
+        (event.timeStamp - previous.time <= 350 && Math.hypot(event.clientX - previous.x, event.clientY - previous.y) <= 24)
+      );
+      if (doubleTap) {
+        await toggleReaction(body.querySelector(".msg-reaction"));
+      } else {
+        lastTap = { body, time: event.timeStamp, x: event.clientX, y: event.clientY };
+      }
+      return;
+    }
+    lastTap = null;
+    if (!window.confirm("Delete this message for everyone?")) return;
     button.disabled = true;
     try {
       await fetchJSON(`/chat/messages/${button.dataset.delete}/delete`, { method: "POST" });
@@ -412,9 +513,10 @@
     if (list.scrollTop > 200 || !hasMore || loadingOlder || firstId === null) return;
     loadingOlder = true;
     try {
+      const since = reactionVersion;
       const body = await fetchJSON(`/chat/${ROOM}/messages?before=${firstId}`);
       hasMore = body.has_more;
-      prepend(body.messages);
+      prepend(body.messages, since);
     } catch {
       // прокрутка повторит попытку
     } finally {
@@ -425,7 +527,7 @@
   document.addEventListener("visibilitychange", sendRead);
 
   // ---------- старт ----------
-  data.messages.forEach(append);
+  data.messages.forEach((m) => append(m));
   showEmpty();
   scrollToBottom();
   connect();
