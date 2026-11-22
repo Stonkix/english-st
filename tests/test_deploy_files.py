@@ -52,11 +52,11 @@ def test_update_runs_migrations():
 
 def test_backup_runs_python_as_app_user_and_checks_db():
     b = _read("deploy/backup.sh")
-    guard = b.index('[ -f "$APP/data/site.db" ]')
-    run = b.index("runuser -u englishst --")
-    assert guard < run < b.index("import sqlite3")  # проверка файла раньше, чем sqlite что-то откроет
-    assert "exit 1" in b[guard:run] and "trap " in b
-    assert "mv " in b and "chown root:root" in b  # готовый файл переезжает в $DEST уже от root
+    helper = _read("deploy/backup_db.py")
+    assert 'runuser -u englishst -- "$APP/.venv/bin/python" -m deploy.backup_db' in b
+    assert "trap " in b and "chown root:root" in b and 'mv -T "$STAGED"' in b
+    assert '["pg_dump", "--no-password", "--format=custom"' in helper
+    assert '["pg_restore", "--list"' in helper and "?mode=ro" in helper
 
 
 def test_pip_installs_use_constraints():

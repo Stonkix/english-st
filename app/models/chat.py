@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index
+from sqlalchemy import CheckConstraint, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -33,11 +33,18 @@ class ChatRoom(Base):
 
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
-    __table_args__ = (Index("ix_chat_messages_room_id_id", "room_id", "id"),)
+    __table_args__ = (
+        Index("ix_chat_messages_room_id_id", "room_id", "id"),
+        Index("uq_chat_messages_sender_client", "room_id", "author_id", "client_id", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     room_id: Mapped[int] = mapped_column(ForeignKey("chat_rooms.id", ondelete="CASCADE"))
     author_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    client_id: Mapped[str | None] = mapped_column(String(40))
+    reply_to_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_messages.id", name="fk_chat_message_reply", ondelete="SET NULL"), index=True,
+    )
     kind: Mapped[str]  # text | image | sticker
     text_original: Mapped[str | None]  # как написал автор (видят учитель комнаты и админ)
     text_shown: Mapped[str | None]  # после фильтра мата
@@ -49,6 +56,7 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
     author: Mapped[User] = relationship(foreign_keys=[author_id])
+    reply_to: Mapped["ChatMessage | None"] = relationship(remote_side=[id], foreign_keys=[reply_to_id])
 
 
 class ChatReadMark(Base):

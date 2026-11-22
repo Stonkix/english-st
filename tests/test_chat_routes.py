@@ -79,6 +79,8 @@ def test_room_page_data_and_access(client, db):
     assert '<body class="has-nav chat-room-page">' in r.text
     assert 'class="tabbar"' in r.text and 'href="/chat" aria-current="page"' in r.text
     assert '<dialog class="confirm-dialog" id="action-confirm"' in r.text
+    assert 'class="chat-room-sidebar"' in r.text and f'href="/chat/{room.id}" aria-current="page"' in r.text
+    assert f'href="/chat/{direct2.id}"' not in r.text
     assert client.get(f"/chat/{direct2.id}").status_code == 404  # чужой личный чат
     assert client.get(f"/chat/{direct2.id}/messages").json() == {"error": "Something went wrong"}
     assert client.get("/chat/999999").status_code == 404
@@ -309,6 +311,33 @@ def test_ws_errors_and_rate_limit(db):
         assert w1.receive_json()["message"]["kind"] == "sticker"
         w1.send_json({"type": "send", "room_id": room.id, "text": "быстро", "client_id": "f"})
         assert w1.receive_json() == {"type": "error", "client_id": "f", "error": chat.TOO_FAST}
+
+
+def test_ws_reply_retry_is_idempotent_and_quote_hides_deleted_content(client, db):
+    seed_filter(db)
+    teacher, group, student, peer = _school(db)
+    room = chat.group_room(db, group.id)
+    original = chat.post_text(db, peer, room, "ну ты сука")
+    foreign = chat.post_text(db, teacher, chat.direct_room(db, peer.id), "Private")
+    login_as(client, student.login)
+    with client.websocket_connect("/ws/chat") as ws:
+        send = {"type": "send", "room_id": room.id, "text": "A reply", "client_id": "stable", "reply_to": original.id}
+        ws.send_json({**send, "reply_to": foreign.id})
+        assert ws.receive_json() == {"type": "error", "client_id": "stable", "error": "The original message is no longer available."}
+        ws.send_json(send)
+        event = ws.receive_json()
+        assert event["message"]["reply"] == {
+            "id": original.id, "text": original.text_shown, "author": peer.full_name, "deleted": False,
+        }
+    with client.websocket_connect("/ws/chat") as ws:
+        ws.send_json(send)
+        assert ws.receive_json() == {"type": "ack", "room_id": room.id, "client_id": "stable"}
+    history = client.get(f"/chat/{room.id}/messages").json()["messages"]
+    assert len(history) == 2 and history[-1]["id"] == event["message"]["id"]
+    login_as(client, peer.login)
+    assert client.post(f"/chat/messages/{original.id}/delete").status_code == 200
+    history = client.get(f"/chat/{room.id}/messages").json()["messages"]
+    assert history[-1]["reply"] == {"id": original.id, "text": "Message deleted", "author": "", "deleted": True}
 
 
 def test_ws_delete_and_image_broadcast(client, db):

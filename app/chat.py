@@ -13,7 +13,7 @@ from enum import StrEnum
 
 from sqlalchemy import and_, delete, func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session as DbSession
+from sqlalchemy.orm import Session as DbSession, selectinload
 
 from app.images import delete_media
 from app.models import ChatMessage, ChatReaction, ChatReadMark, ChatRoom, Group, User
@@ -196,7 +196,10 @@ def _clean_input(text: str) -> str:
     return _MANY_NEWLINES.sub("\n\n", text).strip()
 
 
-def post_text(db: DbSession, user: User, room: ChatRoom, text: str) -> ChatMessage:
+def post_text(
+    db: DbSession, user: User, room: ChatRoom, text: str, *,
+    client_id: str | None = None, reply_to_id: int | None = None,
+) -> ChatMessage:
     text = _clean_input(text)
     if not text:
         raise ChatError(EMPTY_TEXT)
@@ -205,21 +208,27 @@ def post_text(db: DbSession, user: User, room: ChatRoom, text: str) -> ChatMessa
     check_rate(user)
     shown, filtered = clean_text(text, load_filter(db))
     return _save(db, ChatMessage(
-        room_id=room.id, author_id=user.id, kind="text",
+        room_id=room.id, author_id=user.id, kind="text", client_id=client_id, reply_to_id=reply_to_id,
         text_original=text, text_shown=shown, was_filtered=filtered,
     ))
 
 
-def post_sticker(db: DbSession, user: User, room: ChatRoom, sticker: str) -> ChatMessage:
+def post_sticker(
+    db: DbSession, user: User, room: ChatRoom, sticker: str, *,
+    client_id: str | None = None, reply_to_id: int | None = None,
+) -> ChatMessage:
     if sticker not in STICKERS:
         raise ChatError("Sticker not found")
     check_rate(user)
-    return _save(db, ChatMessage(room_id=room.id, author_id=user.id, kind="sticker", sticker=sticker))
+    return _save(db, ChatMessage(
+        room_id=room.id, author_id=user.id, kind="sticker", sticker=sticker,
+        client_id=client_id, reply_to_id=reply_to_id,
+    ))
 
 
-def post_image(db: DbSession, user: User, room: ChatRoom, rel: str) -> ChatMessage:
+def post_image(db: DbSession, user: User, room: ChatRoom, rel: str, *, reply_to_id: int | None = None) -> ChatMessage:
     """rel — уже сохранённая картинка (images.save_chat_image); лимит частоты проверяют до её обработки."""
-    return _save(db, ChatMessage(room_id=room.id, author_id=user.id, kind="image", image=rel))
+    return _save(db, ChatMessage(room_id=room.id, author_id=user.id, kind="image", image=rel, reply_to_id=reply_to_id))
 
 
 def _save(db: DbSession, message: ChatMessage) -> ChatMessage:
@@ -308,7 +317,9 @@ def reaction_state(users: dict[int, str], viewer_id: int) -> dict:
 
 def history(db: DbSession, room: ChatRoom, before: int | None = None, after: int | None = None) -> list[ChatMessage]:
     """По возрастанию id: последние PAGE_SIZE (до before) или первые PAGE_SIZE после after (догрузка после обрыва)."""
-    stmt = select(ChatMessage).where(ChatMessage.room_id == room.id)
+    stmt = select(ChatMessage).where(ChatMessage.room_id == room.id).options(
+        selectinload(ChatMessage.reply_to).selectinload(ChatMessage.author),
+    )
     if after is not None:
         rows = db.scalars(stmt.where(ChatMessage.id > after).order_by(ChatMessage.id).limit(PAGE_SIZE)).all()
         return list(rows)
@@ -343,6 +354,16 @@ def serialize(message: ChatMessage, moderator: bool) -> dict:
     }
     if data["deleted"] and not can_view_deleted_content(message, moderator):
         return data
+    original = message.reply_to
+    if not data["deleted"] and original is not None and original.room_id == message.room_id:
+        deleted = original.deleted_at is not None
+        text = {"image": "Photo", "sticker": "Sticker"}.get(original.kind, (original.text_shown or "")[:150])
+        data["reply"] = {
+            "id": original.id,
+            "author": "" if deleted else original.author.full_name,
+            "text": "Message deleted" if deleted else text,
+            "deleted": deleted,
+        }
     if message.kind == "text":
         data["text"] = message.text_shown
         if moderator and message.was_filtered:

@@ -10,22 +10,20 @@ umask 077
 APP=/srv/englishst
 DEST=/var/backups/englishst
 KEEP_DAYS=14
-STAMP=$(date +%F)
-
-# sqlite3.connect на несуществующем пути молча создаёт пустую БД — бэкап «успешно» сохранил бы пустышку
-[ -f "$APP/data/site.db" ] || { echo "Нет файла $APP/data/site.db: бэкапить нечего" >&2; exit 1; }
+STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 
 mkdir -p "$DEST"
+chmod 700 "$DEST"
+# Сервисному пользователю нужен доступ к временной папке, но итоговый архив доступен только root.
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 chown englishst "$TMP"
-
-# Онлайн-бэкап SQLite: корректен даже во время записи. Запускаем от englishst: от root при открытии БД
-# могли бы появиться site.db-wal и site.db-shm с владельцем root, и сайт перестал бы писать в БД.
-runuser -u englishst -- "$APP/.venv/bin/python" -c "import sqlite3, sys; sqlite3.connect(sys.argv[1]).backup(sqlite3.connect(sys.argv[2]))" \
-    "$APP/data/site.db" "$TMP/site.db"
-mv "$TMP/site.db" "$DEST/site-$STAMP.db"
-chown root:root "$DEST/site-$STAMP.db"
-
-tar -czf "$DEST/media-$STAMP.tar.gz" -C "$APP" media
-find "$DEST" -type f -mtime +$KEEP_DAYS -delete
+cd "$APP"
+runuser -u englishst -- "$APP/.venv/bin/python" -m deploy.backup_db "$TMP"
+STAGED=$(mktemp -d "$DEST/.partial-XXXXXXXX")
+trap 'rm -rf "$TMP" "$STAGED"' EXIT
+mv "$TMP/"* "$STAGED/"
+chown root:root "$STAGED/"*
+chmod 600 "$STAGED/"*
+mv -T "$STAGED" "$DEST/backup-$STAMP-${STAGED##*-}"
+find "$DEST" -mindepth 1 -maxdepth 1 -type d -name 'backup-????????T??????Z-*' -mtime "+$KEEP_DAYS" -exec rm -rf -- {} +

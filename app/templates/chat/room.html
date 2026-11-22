@@ -3,6 +3,11 @@
 {% block body_class %} chat-room-page{% endblock %}
 
 {% block content %}
+<div class="chat-room-layout" id="chat-room-layout">
+<aside class="chat-room-sidebar" aria-label="Chat rooms">
+  <h2>Chats</h2>
+  {% include "partials/chat_rooms.html" %}
+</aside>
 <div class="chat" id="chat">
   <header class="chat-top">
     <a class="chat-back" href="/chat" aria-label="Back to chats">&larr;</a>
@@ -27,7 +32,12 @@
 
   <footer class="chat-bottom">
     <p class="chat-error" id="chat-error" role="alert" hidden></p>
-    <p class="chat-notice" id="chat-notice" role="status" hidden>Message copied.</p>
+    <p class="chat-notice" id="chat-notice" role="status" hidden></p>
+    <div class="chat-outbox" id="chat-outbox" aria-label="Outgoing messages" hidden></div>
+    <div class="chat-reply-draft" id="chat-reply-draft" hidden>
+      <div id="chat-reply-summary"></div>
+      <button type="button" class="btn btn-secondary" id="chat-reply-cancel" aria-label="Cancel reply">Cancel</button>
+    </div>
     <form class="chat-form" id="chat-form" autocomplete="off">
       <button class="chat-tool" id="chat-sticker-btn" type="button" aria-label="Stickers" aria-expanded="false">
         <img src="/static/stickers/smile.svg" alt="" width="28" height="28">
@@ -42,6 +52,7 @@
       </button>
     </form>
   </footer>
+</div>
 </div>
 <script type="application/json" id="chat-data">{{ data|tojson }}</script>
 {% endblock %}

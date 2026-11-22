@@ -3,11 +3,15 @@
 (() => {
   const data = JSON.parse(document.getElementById("chat-data").textContent);
   const list = document.getElementById("chat-messages");
+  const roomLayout = document.getElementById("chat-room-layout");
   const form = document.getElementById("chat-form");
   const input = document.getElementById("chat-input");
   const sendBtn = document.getElementById("chat-send");
   const errorBox = document.getElementById("chat-error");
   const noticeBox = document.getElementById("chat-notice");
+  const outbox = document.getElementById("chat-outbox");
+  const replyBox = document.getElementById("chat-reply-draft");
+  const replySummary = document.getElementById("chat-reply-summary");
   const statusBox = document.getElementById("chat-status");
   const stickerBtn = document.getElementById("chat-sticker-btn");
   const stickerPanel = document.getElementById("chat-stickers");
@@ -17,6 +21,7 @@
   const byId = new Map(); // id -> элемент сообщения
   const emptyReaction = { counts: {}, mine: null };
   const reactionEvents = new Map();
+  const deletedMessages = new Set();
   const pendingReactions = new Set();
   const pendingDeletes = new Set();
   let reactionVersion = 0;
@@ -34,10 +39,12 @@
   let firstId = null; // самое старое показанное
   let lastId = 0; // самое новое полученное: от него догружаем после обрыва
   let hasMore = data.has_more;
-  let loadingOlder = false;
+  let olderRequest = null;
+  let replyDraft = null;
+  let jumpingTo = null;
   let socket = null;
   let retry = 0;
-  let pending = new Map(); // client_id -> текст (вернуть в поле, если сервер отказал)
+  const pending = new Map();
   let noticeTimer;
 
   // ---------- вывод ----------
@@ -111,6 +118,7 @@
   }
 
   function render(m, since) {
+    if (deletedMessages.has(m.id)) m = { ...m, deleted: true };
     const mine = m.author.id === data.me;
     const showDeleted = m.deleted && data.moderator && !m.author.teacher;
     const node = el("div", "msg" + (mine ? " is-mine" : ""));
@@ -119,6 +127,7 @@
     node.dataset.id = m.id;
     node.dataset.day = m.day;
     node.dataset.author = m.author.id;
+    node.dataset.authorName = m.author.name;
     const [hours, minutes] = m.time.split(":").map(Number);
     node.dataset.minute = hours * 60 + minutes;
     node.dataset.studentAuthor = String(!m.author.teacher);
@@ -133,6 +142,15 @@
       body.append(name);
     }
     if (showDeleted) addDeletedLabel(body);
+    if (!m.deleted && m.reply) {
+      const quote = el("button", "msg-quote");
+      quote.type = "button";
+      quote.dataset.quoteId = m.reply.id;
+      quote.disabled = m.reply.deleted || deletedMessages.has(m.reply.id);
+      if (!quote.disabled && m.reply.author) quote.append(el("strong", "", m.reply.author));
+      quote.append(el("span", "", quote.disabled ? "Message deleted" : m.reply.text));
+      body.append(quote);
+    }
     if (m.deleted && !showDeleted) {
       body.append(el("p", "msg-text", "Message deleted"));
     } else if (m.kind === "sticker") {
@@ -272,6 +290,12 @@
   }
 
   function markDeleted(id) {
+    deletedMessages.add(id);
+    for (const quote of list.querySelectorAll(`[data-quote-id="${id}"]`)) {
+      quote.disabled = true;
+      quote.replaceChildren(el("span", "", "Message deleted"));
+    }
+    if (replyDraft === id) setReply(null);
     const node = byId.get(id);
     if (!node || node.classList.contains("is-deleted")) return;
     node.classList.add("is-deleted");
@@ -286,12 +310,12 @@
     body.querySelector(".msg-reactions")?.remove();
     if (data.moderator && node.dataset.studentAuthor === "true") {
       node.classList.add("shows-deleted-content");
-      body.querySelector(".msg-take")?.remove();
+      body.querySelectorAll(".msg-take, .msg-quote").forEach((n) => n.remove());
       addDeletedLabel(body, body.querySelector(".msg-text, .msg-sticker, .msg-image-link, .msg-meta"));
       return;
     }
     body.classList.remove("is-media", "is-sticker");
-    body.querySelectorAll(".msg-text, .msg-sticker, .msg-image-link, .msg-original, .msg-take").forEach((n) => n.remove());
+    body.querySelectorAll(".msg-text, .msg-sticker, .msg-image-link, .msg-original, .msg-take, .msg-quote").forEach((n) => n.remove());
     body.insertBefore(el("p", "msg-text", "Message deleted"), body.querySelector(".msg-meta"));
   }
 
@@ -300,6 +324,13 @@
     noticeBox.hidden = true;
     errorBox.textContent = text;
     errorBox.hidden = !text;
+  }
+
+  function showNotice(text) {
+    clearTimeout(noticeTimer);
+    noticeBox.textContent = text;
+    noticeBox.hidden = false;
+    noticeTimer = setTimeout(() => { noticeBox.hidden = true; }, 2500);
   }
 
   // ---------- связь ----------
@@ -350,6 +381,26 @@
     }
   }
 
+  function updateRoomPreview(message) {
+    const room = roomLayout?.querySelector(`[data-chat-room="${message.room_id}"]`);
+    if (!room || message.id <= Number(room.dataset.lastMessage)) return;
+    room.dataset.lastMessage = message.id;
+    const mine = message.author.id === data.me;
+    const preview = { image: "Photo", sticker: "Sticker" }[message.kind] ?? message.text ?? "";
+    room.querySelector(".chat-preview").textContent = (mine ? "You: " : "") + preview;
+    room.querySelector("[data-room-time]").textContent = message.time;
+    if (mine || message.room_id === ROOM) return;
+    const count = Number(room.dataset.roomUnread) + 1;
+    room.dataset.roomUnread = count;
+    let badge = room.querySelector(".chat-unread");
+    if (!badge) {
+      badge = el("span", "chat-unread");
+      room.querySelector(".chat-list-meta").append(badge);
+    }
+    badge.textContent = count < 100 ? count : "99+";
+    badge.setAttribute("aria-label", `Unread: ${count}`);
+  }
+
   function connect() {
     const proto = location.protocol === "https:" ? "wss" : "ws";
     socket = new WebSocket(`${proto}://${location.host}/ws/chat`);
@@ -367,28 +418,32 @@
       } catch {
         return;
       }
-      if (msg.type === "message" && msg.message.room_id === ROOM) {
-        pending.delete(msg.client_id);
+      if (msg.type === "message") {
+        updateRoomPreview(msg.message);
+        if (msg.message.room_id !== ROOM) return;
+        if (msg.message.author.id === data.me) acknowledge(msg.client_id);
         const stick = nearBottom() || msg.message.author.id === data.me;
         append(msg.message);
         if (stick) scrollToBottom();
         sendRead();
+      } else if (msg.type === "ack" && msg.room_id === ROOM) {
+        acknowledge(msg.client_id);
+        catchUp().catch(() => {});
       } else if (msg.type === "deleted" && msg.room_id === ROOM) {
         markDeleted(msg.id);
       } else if (msg.type === "reaction" && msg.room_id === ROOM) {
         recordReaction(msg.id, msg.state);
       } else if (msg.type === "error") {
-        const text = pending.get(msg.client_id);
-        pending.delete(msg.client_id);
-        if (text !== undefined && !input.value) {
-          input.value = text;
-          autosize();
-        }
-        showError(msg.error);
+        const draft = pending.get(msg.client_id);
+        if (draft) failSend(draft, msg.error);
+        else showError(msg.error);
       }
     });
     socket.addEventListener("close", () => {
       statusBox.hidden = false;
+      for (const draft of pending.values()) {
+        if (!draft.error) failSend(draft, "Connection lost. Retry when connected.");
+      }
       // пауза растёт: 1, 2, 4… до 30 секунд, с разбросом, чтобы весь класс не переподключался разом
       const delay = Math.min(30000, 1000 * 2 ** retry) * (0.75 + Math.random() / 2);
       retry += 1;
@@ -425,6 +480,10 @@
     }));
     messageMenu.replaceChildren(reactions);
     const actions = el("div", "chat-message-actions");
+    const reply = el("button", "chat-message-action", "Reply");
+    reply.type = "button";
+    reply.dataset.action = "reply";
+    actions.append(reply);
     if (row.dataset.kind === "text" && row.querySelector(".msg-text")?.textContent) {
       const copy = el("button", "chat-message-action", "Copy text");
       copy.type = "button";
@@ -479,11 +538,50 @@
     showError("");
     try {
       await navigator.clipboard.writeText(row.querySelector(".msg-text").textContent);
-      showError("");
-      noticeBox.hidden = false;
-      noticeTimer = setTimeout(() => { noticeBox.hidden = true; }, 2500);
+      showNotice("Message copied.");
     } catch {
       showError("Couldn’t copy the message.");
+    }
+  }
+
+  function setReply(row) {
+    replyDraft = row ? Number(row.dataset.id) : null;
+    replyBox.hidden = !row;
+    replySummary.replaceChildren();
+    if (!row) return;
+    const preview = row.dataset.kind === "image" ? "Photo" : row.dataset.kind === "sticker" ? "Sticker" :
+      row.querySelector(".msg-text").textContent.slice(0, 150);
+    replySummary.append(el("strong", "", `Reply to ${row.dataset.authorName}`), el("span", "", preview));
+    input.focus();
+  }
+
+  document.getElementById("chat-reply-cancel").addEventListener("click", () => {
+    setReply(null);
+    input.focus();
+  });
+
+  async function jumpToMessage(id) {
+    if (jumpingTo === id) return;
+    jumpingTo = id;
+    showError("");
+    try {
+      while (jumpingTo === id && !byId.has(id) && hasMore && firstId > id) {
+        await loadOlder();
+      }
+      if (jumpingTo !== id) return;
+      const original = byId.get(id);
+      if (!original || original.classList.contains("is-deleted")) {
+        showError("The original message is no longer available.");
+        return;
+      }
+      original.scrollIntoView({ block: "center" });
+      original.querySelector(".msg-body").focus({ preventScroll: true });
+      original.classList.add("is-highlighted");
+      setTimeout(() => original.classList.remove("is-highlighted"), 1500);
+    } catch {
+      showError("Couldn’t load the original message. Try again.");
+    } finally {
+      if (jumpingTo === id) jumpingTo = null;
     }
   }
 
@@ -507,16 +605,70 @@
     }
   }
 
-  function sendPayload(payload, text) {
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      showError("You’re offline. Try sending your message again in a moment.");
-      return false;
-    }
-    const clientId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    if (text !== undefined) pending.set(clientId, text);
-    socket.send(JSON.stringify({ type: "send", room_id: ROOM, client_id: clientId, ...payload }));
+  function drawOutbox() {
+    outbox.replaceChildren(...[...pending.values()].map((draft) => {
+      const row = el("div", "chat-outbox-row");
+      const summary = el("div", "chat-outbox-summary");
+      summary.append(el("strong", "", draft.payload.text ?? "Sticker"));
+      const state = el("span", "", draft.error || "Sending…");
+      state.setAttribute("role", "status");
+      summary.append(state);
+      row.append(summary);
+      if (draft.error) {
+        const retryButton = el("button", "btn btn-secondary", "Retry");
+        retryButton.type = "button";
+        retryButton.addEventListener("click", () => transmit(draft));
+        const dismiss = el("button", "btn btn-secondary", "Dismiss");
+        dismiss.type = "button";
+        dismiss.addEventListener("click", () => {
+          pending.delete(draft.id);
+          drawOutbox();
+        });
+        row.append(retryButton, dismiss);
+      }
+      return row;
+    }));
+    outbox.hidden = !pending.size;
+  }
+
+  function failSend(draft, error) {
+    clearTimeout(draft.timer);
+    draft.error = error;
+    drawOutbox();
+  }
+
+  function acknowledge(id) {
+    const draft = pending.get(id);
+    if (!draft) return;
+    clearTimeout(draft.timer);
+    pending.delete(id);
+    drawOutbox();
+    showNotice("Message sent.");
+  }
+
+  function transmit(draft) {
     showError("");
-    return true;
+    if (socket?.readyState !== WebSocket.OPEN) {
+      failSend(draft, "You’re offline. Retry when connected.");
+      return;
+    }
+    draft.error = "";
+    draft.timer = setTimeout(() => failSend(draft, "No confirmation. You can retry."), 12000);
+    try {
+      socket.send(JSON.stringify({ type: "send", room_id: ROOM, client_id: draft.id, ...draft.payload }));
+      drawOutbox();
+    } catch {
+      failSend(draft, "Connection lost. Retry when connected.");
+    }
+  }
+
+  function sendPayload(payload) {
+    const id = crypto.randomUUID?.() ??
+      Array.from(crypto.getRandomValues(new Uint32Array(4)), (part) => part.toString(16).padStart(8, "0")).join("");
+    const draft = { id, payload: { ...payload, reply_to: replyDraft } };
+    pending.set(id, draft);
+    setReply(null);
+    transmit(draft);
   }
 
   function autosize() {
@@ -529,10 +681,9 @@
     event.preventDefault();
     const text = input.value.trim();
     if (!text) return;
-    if (sendPayload({ text }, text)) {
-      input.value = "";
-      autosize();
-    }
+    sendPayload({ text });
+    input.value = "";
+    autosize();
     input.focus();
   });
 
@@ -564,10 +715,9 @@
   stickerPanel.addEventListener("click", (event) => {
     const button = event.target.closest("[data-sticker]");
     if (!button) return;
-    if (sendPayload({ sticker: button.dataset.sticker })) {
-      stickerPanel.hidden = true;
-      stickerBtn.setAttribute("aria-expanded", "false");
-    }
+    sendPayload({ sticker: button.dataset.sticker });
+    stickerPanel.hidden = true;
+    stickerBtn.setAttribute("aria-expanded", "false");
   });
 
   imageInput.addEventListener("change", async () => {
@@ -580,11 +730,14 @@
     }
     const body = new FormData();
     body.append("image", file);
+    const replyingTo = replyDraft;
+    if (replyingTo !== null) body.append("reply_to", replyingTo);
     showError("");
     statusBox.textContent = "Sending photo…";
     statusBox.hidden = false;
     try {
       const result = await fetchJSON(`/chat/${ROOM}/image`, { method: "POST", body });
+      if (replyDraft === replyingTo) setReply(null);
       append(result.message);
       scrollToBottom();
     } catch (err) {
@@ -599,13 +752,17 @@
     if (event.detail > 0 && heldMessage?.node.contains(event.target) && performance.now() < heldMessage.until) {
       event.preventDefault();
       heldMessage = null;
+      return;
     }
+    const quote = event.target.closest("[data-quote-id]");
+    if (quote && !quote.disabled) jumpToMessage(Number(quote.dataset.quoteId));
   });
 
-  list.addEventListener("contextmenu", (event) => {
+  (roomLayout ?? document.getElementById("chat")).addEventListener("contextmenu", (event) => {
+    if (event.target.closest("input, textarea, [contenteditable]")) return;
+    event.preventDefault();
     const bubble = event.target.closest(".msg-body[aria-controls]");
     if (!bubble) return;
-    event.preventDefault();
     if (press?.node === bubble) {
       press.open();
       return;
@@ -614,6 +771,9 @@
     const keyboard = event.clientX === 0 && event.clientY === 0;
     const { left, top } = bubble.getBoundingClientRect();
     openMessageMenu(bubble, keyboard ? left : event.clientX, keyboard ? top : event.clientY, keyboard);
+  });
+  list.addEventListener("selectstart", (event) => {
+    if (lastPointerType === "touch") event.preventDefault();
   });
 
   list.addEventListener("pointerdown", (event) => {
@@ -650,6 +810,7 @@
     const row = bubble.closest(".msg");
     closeMessageMenu(true);
     if (option.dataset.kind) chooseReaction(bubble, option.dataset.kind);
+    else if (option.dataset.action === "reply") setReply(row);
     else if (option.dataset.action === "copy") copyMessage(row);
     else if (option.dataset.action === "delete") deleteMessage(Number(row.dataset.id));
   });
@@ -670,21 +831,23 @@
   });
   window.addEventListener("resize", () => closeMessageMenu());
 
-  list.addEventListener("scroll", async () => {
+  function loadOlder() {
+    if (olderRequest) return olderRequest;
+    const since = reactionVersion;
+    olderRequest = fetchJSON(`/chat/${ROOM}/messages?before=${firstId}`).then((body) => {
+      hasMore = body.has_more && body.messages.length > 0;
+      prepend(body.messages, since);
+    }).finally(() => {
+      olderRequest = null;
+    });
+    return olderRequest;
+  }
+
+  list.addEventListener("scroll", () => {
     cancelPress();
     closeMessageMenu();
-    if (list.scrollTop > 200 || !hasMore || loadingOlder || firstId === null) return;
-    loadingOlder = true;
-    try {
-      const since = reactionVersion;
-      const body = await fetchJSON(`/chat/${ROOM}/messages?before=${firstId}`);
-      hasMore = body.has_more;
-      prepend(body.messages, since);
-    } catch {
-      // прокрутка повторит попытку
-    } finally {
-      loadingOlder = false;
-    }
+    if (list.scrollTop > 200 || !hasMore || olderRequest || firstId === null) return;
+    loadOlder().catch(() => {});
   });
 
   document.addEventListener("visibilitychange", sendRead);

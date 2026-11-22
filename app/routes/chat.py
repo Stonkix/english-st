@@ -11,7 +11,7 @@ import re
 from threading import Lock
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -33,6 +33,7 @@ from app.templating import avatar_url, templates
 router = APIRouter()
 
 BAD_IMAGE = "This file is not a valid image"
+REPLY_UNAVAILABLE = "The original message is no longer available."
 _JSON_PATH = re.compile(r"/chat/(\d+/(messages|reactions|image)|messages/\d+/(delete|reaction))")
 # Один процесс обслуживает чат. Запись реакции, её рассылка и удаление сообщения идут по порядку.
 _message_change_lock = Lock()
@@ -63,6 +64,14 @@ def _message_and_room(db: DbSession, user: User, message_id: int) -> tuple[ChatM
     if message is None:
         raise HTTPException(404)
     return message, _room_or_404(db, user, message.room_id)
+
+
+def _reply_target(db: DbSession, room_id: int, reply_to: int | None) -> int | None:
+    if reply_to is not None:
+        original = db.get(ChatMessage, reply_to)
+        if original is None or original.room_id != room_id or original.deleted_at is not None:
+            raise chat.ChatError(REPLY_UNAVAILABLE)
+    return reply_to
 
 
 def _serialize_history(db: DbSession, rows: list[ChatMessage], user: User, moderator: bool) -> list[dict]:
@@ -116,8 +125,7 @@ templates.env.globals["chat_unread"] = unread_for_nav
 # ---------- страницы ----------
 
 
-@router.get("/chat")
-def rooms_page(request: Request, user: User = Depends(require_user), db: DbSession = Depends(get_db)):
+def _room_items(db: DbSession, user: User) -> list[dict]:
     rooms = chat.rooms_for(db, user)
     ids = [r.id for r in rooms]
     unread = chat.unread_counts(db, user, ids)
@@ -137,7 +145,12 @@ def rooms_page(request: Request, user: User = Depends(require_user), db: DbSessi
     # комнаты с новыми сообщениями выше; у ученика порядок постоянный: группа, потом учитель
     if user.role != "student":
         items.sort(key=lambda item: -item["last_id"])
-    return templates.TemplateResponse(request, "chat/rooms.html", {"user": user, "items": items})
+    return items
+
+
+@router.get("/chat")
+def rooms_page(request: Request, user: User = Depends(require_user), db: DbSession = Depends(get_db)):
+    return templates.TemplateResponse(request, "chat/rooms.html", {"user": user, "items": _room_items(db, user)})
 
 
 @router.get("/chat/{room_id}")
@@ -166,6 +179,7 @@ def room_page(room_id: Id, request: Request, user: User = Depends(require_user),
         "title": chat.room_title(db, room, user),
         "person": person,
         "person_avatar": avatar_url(person),
+        "items": _room_items(db, user),
         "data": data,
     }
     headers = {"Cache-Control": "private, no-store"} if moderator else None
@@ -226,10 +240,15 @@ def react(message_id: Id, change: ReactionChange, user: User = Depends(require_u
 def upload_image(
     room_id: Id,
     image: UploadFile = File(...),
+    reply_to: Annotated[int | None, Form(ge=1, le=MAX_ID)] = None,
     user: User = Depends(require_user),
     db: DbSession = Depends(get_db),
 ):
     room = _room_or_404(db, user, room_id)
+    try:
+        reply_to_id = _reply_target(db, room.id, reply_to)
+    except chat.ChatError as exc:
+        return _error(400, str(exc))
     try:
         chat.check_rate(user)  # до обработки: она дорогая
     except chat.ChatError as exc:
@@ -238,7 +257,7 @@ def upload_image(
         rel = save_chat_image(room.id, read_limited(image.file, CHAT_UPLOAD_BYTES))
     except InvalidImage:
         return _error(400, BAD_IMAGE)
-    message = chat.post_image(db, user, room, rel)
+    message = chat.post_image(db, user, room, rel, reply_to_id=reply_to_id)
     _broadcast_message(db, room, message)
     return {"message": chat.serialize(message, chat.can_moderate(db, user, room))}
 
@@ -272,18 +291,29 @@ class _Closed(Exception):
     """Сессия больше не действует — подключение закрываем."""
 
 
-def _ws_send(token: str | None, room_id: int, text: str | None, sticker: str | None, client_id: str | None) -> None:
-    with SessionLocal() as db:
+def _ws_send(
+    conn: Connection, token: str | None, room_id: int, text: str | None, sticker: str | None, client_id: str | None,
+    reply_to: int | None,
+) -> None:
+    with _message_change_lock, SessionLocal() as db:
         user = _session_user(db, token)
         if user is None:
             raise _Closed
         room = db.get(ChatRoom, room_id)
         if room is None or not chat.can_access(db, user, room):
             raise chat.ChatError(chat.NO_ACCESS)
+        if client_id:
+            existing = db.scalar(select(ChatMessage.id).where(
+                ChatMessage.room_id == room.id, ChatMessage.author_id == user.id, ChatMessage.client_id == client_id,
+            ))
+            if existing is not None:
+                hub.send_one(conn, {"type": "ack", "room_id": room.id, "client_id": client_id})
+                return
+        reply_to_id = _reply_target(db, room.id, reply_to)
         if sticker is not None:
-            message = chat.post_sticker(db, user, room, sticker)
+            message = chat.post_sticker(db, user, room, sticker, client_id=client_id, reply_to_id=reply_to_id)
         else:
-            message = chat.post_text(db, user, room, text or "")
+            message = chat.post_text(db, user, room, text or "", client_id=client_id, reply_to_id=reply_to_id)
         _broadcast_message(db, room, message, client_id)
 
 
@@ -315,10 +345,14 @@ async def _handle(conn: Connection, token: str | None, raw: str) -> None:
     client_id = client_id[:40] if client_id else None
     if kind == "send" and room_id:
         text, sticker = data.get("text"), data.get("sticker")
+        raw_reply = data.get("reply_to")
+        reply_to = _int(raw_reply)
         if not isinstance(text, str | None) or not isinstance(sticker, str | None) or len(text or "") > 10 * chat.TEXT_MAX:
             text, sticker = "", None
         try:
-            await run_in_threadpool(_ws_send, token, room_id, text, sticker, client_id)
+            if raw_reply is not None and reply_to is None:
+                raise chat.ChatError(REPLY_UNAVAILABLE)
+            await run_in_threadpool(_ws_send, conn, token, room_id, text, sticker, client_id, reply_to)
         except chat.ChatError as exc:
             hub.send_one(conn, {"type": "error", "client_id": client_id, "error": str(exc)})
     elif kind == "read" and room_id and _int(data.get("message_id")):
