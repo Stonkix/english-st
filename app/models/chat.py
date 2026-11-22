@@ -62,12 +62,16 @@ class ChatReadMark(Base):
 
 
 class ChatReaction(Base):
-    """Одна реакция-сердечко на сообщение от каждого пользователя."""
+    """Одна реакция на сообщение от каждого пользователя."""
 
     __tablename__ = "chat_reactions"
+    __table_args__ = (
+        CheckConstraint("kind IN ('heart', 'like', 'laugh', 'wow', 'sad', 'fire')", name="ck_chat_reaction_kind"),
+    )
 
     message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.id", ondelete="CASCADE"), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    kind: Mapped[str] = mapped_column(default="heart", server_default="heart")
 
 
 class BadWord(Base):

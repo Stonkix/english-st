@@ -16,7 +16,7 @@
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/js/app.js?v={{ static_v }}" defer></script>
 </head>
-<body{% if user %} class="has-nav"{% endif %}>
+<body{% if user %} class="has-nav{% block body_class %}{% endblock %}"{% endif %}>
   {% if user %}{% include "partials/nav.html" %}{% endif %}
   <main id="main">
     {% block content %}{% endblock %}

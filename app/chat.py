@@ -7,9 +7,9 @@
 import re
 import threading
 import time
-from collections import defaultdict, deque
-from collections.abc import Collection
+from collections import Counter, defaultdict, deque
 from datetime import timezone
+from enum import StrEnum
 
 from sqlalchemy import and_, delete, func, select
 from sqlalchemy.exc import IntegrityError
@@ -253,21 +253,42 @@ def delete_message(db: DbSession, user: User, message: ChatMessage, moderator: b
     return True
 
 
-def set_reaction(db: DbSession, message_id: int, user_id: int, active: bool) -> bool:
+class ReactionKind(StrEnum):
+    HEART = "heart"
+    LIKE = "like"
+    LAUGH = "laugh"
+    WOW = "wow"
+    SAD = "sad"
+    FIRE = "fire"
+
+
+REACTIONS = {
+    ReactionKind.HEART: ("❤️", "Heart"),
+    ReactionKind.LIKE: ("👍", "Thumbs up"),
+    ReactionKind.LAUGH: ("😂", "Laughing"),
+    ReactionKind.WOW: ("😮", "Surprised"),
+    ReactionKind.SAD: ("😢", "Sad"),
+    ReactionKind.FIRE: ("🔥", "Fire"),
+}
+
+
+def set_reaction(db: DbSession, message_id: int, user_id: int, kind: ReactionKind | None) -> bool:
     reaction = db.get(ChatReaction, (message_id, user_id))
-    if active and reaction is None:
-        db.add(ChatReaction(message_id=message_id, user_id=user_id))
-    elif not active and reaction is not None:
+    if kind == (reaction.kind if reaction is not None else None):
+        return False
+    if reaction is None:
+        db.add(ChatReaction(message_id=message_id, user_id=user_id, kind=kind))
+    elif kind is None:
         db.delete(reaction)
     else:
-        return False
+        reaction.kind = kind
     db.commit()
     return True
 
 
-def reaction_users(db: DbSession, room_id: int, first_id: int, last_id: int) -> dict[int, set[int]]:
+def reaction_users(db: DbSession, room_id: int, first_id: int, last_id: int) -> dict[int, dict[int, str]]:
     stmt = (
-        select(ChatReaction.message_id, ChatReaction.user_id)
+        select(ChatReaction.message_id, ChatReaction.user_id, ChatReaction.kind)
         .join(ChatMessage, ChatMessage.id == ChatReaction.message_id)
         .where(
             ChatMessage.room_id == room_id,
@@ -275,14 +296,14 @@ def reaction_users(db: DbSession, room_id: int, first_id: int, last_id: int) -> 
             ChatReaction.message_id.between(first_id, last_id),
         )
     )
-    users = defaultdict(set)
-    for message_id, user_id in db.execute(stmt):
-        users[message_id].add(user_id)
+    users = defaultdict(dict)
+    for message_id, user_id, kind in db.execute(stmt):
+        users[message_id][user_id] = kind
     return users
 
 
-def reaction_state(users: Collection[int], viewer_id: int) -> dict:
-    return {"count": len(users), "mine": viewer_id in users}
+def reaction_state(users: dict[int, str], viewer_id: int) -> dict:
+    return {"counts": dict(Counter(users.values())), "mine": users.get(viewer_id)}
 
 
 def history(db: DbSession, room: ChatRoom, before: int | None = None, after: int | None = None) -> list[ChatMessage]:

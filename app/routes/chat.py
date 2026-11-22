@@ -13,7 +13,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, StrictBool
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 from starlette.concurrency import run_in_threadpool
@@ -39,7 +39,7 @@ _message_change_lock = Lock()
 
 
 class ReactionChange(BaseModel):
-    active: StrictBool
+    kind: chat.ReactionKind | None
 
 
 def is_json_path(path: str) -> bool:
@@ -73,7 +73,7 @@ def _serialize_history(db: DbSession, rows: list[ChatMessage], user: User, moder
     for message in rows:
         item = chat.serialize(message, moderator)
         if not item["deleted"]:
-            item["reaction"] = chat.reaction_state(users.get(message.id, ()), user.id)
+            item["reaction"] = chat.reaction_state(users.get(message.id, {}), user.id)
         items.append(item)
     return items
 
@@ -157,9 +157,11 @@ def room_page(room_id: Id, request: Request, user: User = Depends(require_user),
         "has_more": len(messages) == chat.PAGE_SIZE,
         "text_max": chat.TEXT_MAX,
         "swear_reason": stamps.PENALTY_REASON_SWEARING,
+        "reactions": [{"id": kind, "emoji": emoji, "label": label} for kind, (emoji, label) in chat.REACTIONS.items()],
         "stickers": [{"id": key, "label": label, "url": f"/static/stickers/{key}.svg"} for key, label in chat.STICKERS.items()],
     }
     context = {
+        "user": user,
         "room": room,
         "title": chat.room_title(db, room, user),
         "person": person,
@@ -210,8 +212,8 @@ def react(message_id: Id, change: ReactionChange, user: User = Depends(require_u
         message, room = _message_and_room(db, user, message_id)
         if message.deleted_at is not None:
             return _error(404, "Message deleted")
-        changed = chat.set_reaction(db, message_id, user.id, change.active)
-        users = chat.reaction_users(db, room.id, message_id, message_id).get(message_id, ())
+        changed = chat.set_reaction(db, message_id, user.id, change.kind)
+        users = chat.reaction_users(db, room.id, message_id, message_id).get(message_id, {})
         if changed:
             hub.send({
                 uid: {"type": "reaction", "room_id": room.id, "id": message_id, "state": chat.reaction_state(users, uid)}

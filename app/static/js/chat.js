@@ -14,11 +14,20 @@
 
   const ROOM = data.room_id;
   const byId = new Map(); // id -> элемент сообщения
-  const emptyReaction = { count: 0, mine: false };
+  const emptyReaction = { counts: {}, mine: null };
   const reactionEvents = new Map();
   const pendingReactions = new Set();
   let reactionVersion = 0;
-  let lastTap = null;
+  let reactionTarget = null;
+  let press = null;
+  let heldMessage = null;
+  const reactionMenu = document.createElement("div");
+  reactionMenu.id = "chat-reaction-menu";
+  reactionMenu.className = "chat-reaction-menu";
+  reactionMenu.hidden = true;
+  reactionMenu.setAttribute("role", "group");
+  reactionMenu.setAttribute("aria-label", "Choose a reaction");
+  document.body.append(reactionMenu);
   let firstId = null; // самое старое показанное
   let lastId = 0; // самое новое полученное: от него догружаем после обрыва
   let hasMore = data.has_more;
@@ -67,11 +76,17 @@
     body.insertBefore(el("p", "msg-deleted-label", "Deleted"), before);
   }
 
-  function paintReaction(button, { count, mine }) {
-    button.setAttribute("aria-pressed", String(mine));
-    button.setAttribute("aria-label", count ? `Heart reaction, ${count} total` : "Heart reaction");
-    button.firstChild.textContent = count ? "❤️" : "♡";
-    button.lastChild.textContent = count || "";
+  function paintReaction(button, { counts, mine }) {
+    button.dataset.mine = mine ?? "";
+    const visible = data.reactions.filter(({ id }) => counts[id]);
+    button.replaceChildren(...visible.map(({ id, emoji }) => {
+      const badge = el("span", "msg-reaction-badge", `${emoji} ${counts[id]}`);
+      badge.classList.toggle("is-mine", id === mine);
+      return badge;
+    }));
+    if (!visible.length) button.textContent = "☺";
+    const summary = visible.map(({ id, label }) => `${label} ${counts[id]}`).join(", ");
+    button.setAttribute("aria-label", summary ? `Reactions, ${summary}` : "Choose a reaction");
   }
 
   function setReaction(id, state) {
@@ -145,12 +160,9 @@
     if (!m.deleted) {
       const reaction = el("button", "msg-reaction");
       reaction.type = "button";
-      reaction.title = "Heart reaction";
-      const icon = el("span", "msg-reaction-icon");
-      const count = el("span", "msg-reaction-count");
-      icon.setAttribute("aria-hidden", "true");
-      count.setAttribute("aria-hidden", "true");
-      reaction.append(icon, count);
+      reaction.title = "Choose a reaction";
+      reaction.setAttribute("aria-controls", reactionMenu.id);
+      reaction.setAttribute("aria-expanded", "false");
       paintReaction(reaction, newerReaction(m.id, since) ?? m.reaction ?? emptyReaction);
       meta.append(reaction);
     }
@@ -251,6 +263,7 @@
     if (!node || node.classList.contains("is-deleted")) return;
     node.classList.add("is-deleted");
     const body = node.querySelector(".msg-body");
+    if (reactionTarget && node.contains(reactionTarget)) closeReactionMenu();
     body.querySelector(".msg-reaction")?.remove();
     if (data.moderator && node.dataset.studentAuthor === "true") {
       node.classList.add("shows-deleted-content");
@@ -364,10 +377,46 @@
 
   // ---------- действия ----------
 
-  async function toggleReaction(button) {
+  function closeReactionMenu(restoreFocus = false) {
+    if (!reactionTarget) return;
+    reactionTarget.setAttribute("aria-expanded", "false");
+    if (restoreFocus) reactionTarget.focus({ preventScroll: true });
+    reactionTarget = null;
+    reactionMenu.hidden = true;
+  }
+
+  function openReactionMenu(button, x, y, focus = false) {
+    closeReactionMenu();
+    reactionTarget = button;
+    button.setAttribute("aria-expanded", "true");
+    reactionMenu.replaceChildren(...data.reactions.map(({ id, emoji, label }) => {
+      const option = el("button", "chat-reaction-option", emoji);
+      option.type = "button";
+      option.title = label;
+      option.setAttribute("aria-label", label);
+      option.setAttribute("aria-pressed", String(button.dataset.mine === id));
+      option.dataset.kind = id;
+      return option;
+    }));
+    reactionMenu.style.left = "0px";
+    reactionMenu.style.top = "0px";
+    reactionMenu.hidden = false;
+    const { width, height } = reactionMenu.getBoundingClientRect();
+    reactionMenu.style.left = `${Math.max(8, Math.min(x, innerWidth - width - 8))}px`;
+    reactionMenu.style.top = `${Math.max(8, Math.min(y - height - 8, innerHeight - height - 8))}px`;
+    if (focus) reactionMenu.firstElementChild.focus({ preventScroll: true });
+  }
+
+  function cancelPress() {
+    if (!press) return;
+    clearTimeout(press.timer);
+    press = null;
+  }
+
+  async function chooseReaction(button, kind) {
     const id = Number(button.closest(".msg").dataset.id);
     if (pendingReactions.has(id)) return;
-    const active = button.getAttribute("aria-pressed") !== "true";
+    const selected = button.dataset.mine === kind ? null : kind;
     const since = reactionVersion;
     pendingReactions.add(id);
     showError("");
@@ -375,7 +424,7 @@
       const state = await fetchJSON(`/chat/messages/${id}/reaction`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ active }),
+        body: JSON.stringify({ kind: selected }),
       });
       if (!newerReaction(id, since)) recordReaction(id, state);
     } catch (err) {
@@ -474,31 +523,19 @@
   });
 
   list.addEventListener("click", async (event) => {
+    if (event.detail > 0 && heldMessage?.node.contains(event.target) && performance.now() < heldMessage.until) {
+      event.preventDefault();
+      heldMessage = null;
+      return;
+    }
     const reaction = event.target.closest(".msg-reaction");
     if (reaction) {
-      lastTap = null;
-      await toggleReaction(reaction);
+      const { left, top } = reaction.getBoundingClientRect();
+      openReactionMenu(reaction, left, top, event.detail === 0);
       return;
     }
     const button = event.target.closest("[data-delete]");
-    if (!button) {
-      const body = event.target.closest(".msg:not(.is-deleted) .msg-body");
-      const previous = lastTap;
-      lastTap = null;
-      if (!body || event.detail === 0 || event.target.closest("a, button")) return;
-      const doubleTap = previous?.body === body && (
-        event.detail === 2 ||
-        (event.timeStamp - previous.time <= 350 && Math.hypot(event.clientX - previous.x, event.clientY - previous.y) <= 24)
-      );
-      if (doubleTap) {
-        await toggleReaction(body.querySelector(".msg-reaction"));
-      } else {
-        lastTap = { body, time: event.timeStamp, x: event.clientX, y: event.clientY };
-      }
-      return;
-    }
-    lastTap = null;
-    if (!window.confirm("Delete this message for everyone?")) return;
+    if (!button || !window.confirm("Delete this message for everyone?")) return;
     button.disabled = true;
     try {
       await fetchJSON(`/chat/messages/${button.dataset.delete}/delete`, { method: "POST" });
@@ -509,7 +546,66 @@
     }
   });
 
+  list.addEventListener("contextmenu", (event) => {
+    const bubble = event.target.closest(".msg-body");
+    const reaction = bubble?.querySelector(".msg-reaction");
+    if (!reaction) return;
+    event.preventDefault();
+    if (press) {
+      press.open();
+      return;
+    }
+    if (event.pointerType === "touch" || heldMessage?.node === bubble) return;
+    openReactionMenu(reaction, event.clientX, event.clientY);
+  });
+
+  list.addEventListener("pointerdown", (event) => {
+    heldMessage = null;
+    if (event.pointerType !== "touch" || !event.isPrimary || event.target.closest("button")) return;
+    const bubble = event.target.closest(".msg-body");
+    const reaction = bubble?.querySelector(".msg-reaction");
+    if (!reaction) return;
+    const { pointerId, clientX: x, clientY: y } = event;
+    const open = () => {
+      cancelPress();
+      if (!reaction.isConnected) return;
+      heldMessage = { node: bubble, until: Infinity };
+      openReactionMenu(reaction, x, y);
+    };
+    press = { pointerId, x, y, open, timer: setTimeout(open, 500) };
+  });
+  list.addEventListener("pointermove", (event) => {
+    if (press?.pointerId === event.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > 12) {
+      cancelPress();
+    }
+  });
+  for (const type of ["pointerup", "pointercancel"]) {
+    list.addEventListener(type, (event) => {
+      if (press?.pointerId === event.pointerId) cancelPress();
+      if (heldMessage) heldMessage.until = performance.now() + 500;
+    });
+  }
+
+  reactionMenu.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-kind]");
+    if (!option || !reactionTarget) return;
+    const button = reactionTarget;
+    closeReactionMenu(event.detail === 0);
+    chooseReaction(button, option.dataset.kind);
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (reactionTarget && !reactionMenu.contains(event.target) && !reactionTarget.contains(event.target)) {
+      closeReactionMenu();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (reactionTarget && event.key === "Escape") closeReactionMenu(true);
+  });
+  window.addEventListener("resize", () => closeReactionMenu());
+
   list.addEventListener("scroll", async () => {
+    cancelPress();
+    closeReactionMenu();
     if (list.scrollTop > 200 || !hasMore || loadingOlder || firstId === null) return;
     loadingOlder = true;
     try {

@@ -267,7 +267,30 @@ a.list-item:active { background: var(--blue-light); }
 .list-item-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .list-item-main strong { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list-item-main small { color: var(--muted); font-size: 15px; }
+.ranking-entry {
+  display: grid;
+  grid-template-columns: minmax(3ch, max-content) minmax(0, 1fr) fit-content(42%) fit-content(30%);
+  gap: clamp(6px, 2vw, 12px);
+  padding-inline: clamp(10px, 3vw, 16px);
+}
+.ranking-entry .list-item-main strong { white-space: normal; overflow-wrap: anywhere; }
+.ranking-place { color: var(--ranking-place-color, inherit); text-align: right; }
+.ranking-stamps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 8px;
+  min-width: 0;
+  font-size: 15px;
+}
+.ranking-stamp { display: inline-flex; align-items: center; }
+.ranking-stamp img { flex: none; }
+.ranking-stamp strong, .ranking-points { overflow-wrap: anywhere; }
+.ranking-points { text-align: right; }
 .ranking-self { background: var(--blue-light); }
+.ranking-entry[value="1"] { background: #FFF1BC; --ranking-place-color: #785100; }
+.ranking-entry[value="2"] { background: #E9EDF3; --ranking-place-color: #495A70; }
+.ranking-entry[value="3"] { background: #F8E3D4; --ranking-place-color: #85451F; }
 
 /* ---------- Главное меню: снизу на телефоне ---------- */
 .tabbar {
@@ -758,7 +781,11 @@ details > summary { font-weight: 800; cursor: pointer; padding: 6px 0; }
   .tabbar-badge { position: static; margin-left: auto; }
 }
 
-/* ---------- Чат: переписка на весь экран ---------- */
+/* ---------- Чат: переписка ---------- */
+@media (width < 900px) {
+  body.chat-room-page { padding-bottom: 0; }
+  .chat-room-page .tabbar { display: none; }
+}
 .chat { display: flex; flex-direction: column; height: 100vh; height: 100dvh; max-width: 720px; margin: 0 auto; }
 .chat-top {
   display: flex;
@@ -819,6 +846,9 @@ details > summary { font-weight: 800; cursor: pointer; padding: 6px 0; }
 .msg.is-mine .msg-body { border-color: var(--blue-border); border-radius: 18px 18px 6px 18px; background: var(--blue-light); }
 .msg-body.is-media { padding: 6px; }
 .msg:not(.is-deleted) .msg-body { touch-action: manipulation; }
+@media (pointer: coarse) {
+  .msg:not(.is-deleted) .msg-body { -webkit-touch-callout: none; user-select: none; }
+}
 .msg .msg-body.is-sticker { padding: 0; border-color: transparent; background: none; }
 .msg.is-cont .msg-name { display: none; }
 .msg.is-cont > .avatar { visibility: hidden; }
@@ -837,6 +867,7 @@ details > summary { font-weight: 800; cursor: pointer; padding: 6px 0; }
   align-items: center;
   justify-content: center;
   gap: 4px;
+  flex-wrap: wrap;
   min-width: 28px;
   min-height: 26px;
   padding: 2px 5px;
@@ -847,13 +878,41 @@ details > summary { font-weight: 800; cursor: pointer; padding: 6px 0; }
   font: inherit;
   cursor: pointer;
 }
-.msg-reaction-icon { font-size: 16px; line-height: 1; }
-.msg-reaction-count:empty { display: none; }
 .msg-reaction:hover { background: #fff; border-color: var(--border); }
-.msg-reaction[aria-pressed="true"] {
-  border-color: var(--red);
-  background: var(--red-light);
-  color: var(--text);
+.msg-reaction-badge {
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  white-space: nowrap;
+}
+.msg-reaction-badge.is-mine { background: var(--blue-light); border-color: var(--blue-border); }
+.chat-reaction-menu {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-width: calc(100vw - 16px);
+  padding: 4px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  box-shadow: 0 4px 16px #0002;
+}
+.chat-reaction-menu[hidden] { display: none; }
+.chat-reaction-option {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  font: 24px/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+.chat-reaction-option:hover, .chat-reaction-option[aria-pressed="true"] {
+  background: var(--blue-light);
 }
 .msg-delete {
   padding: 2px 4px;

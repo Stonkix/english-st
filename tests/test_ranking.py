@@ -28,7 +28,8 @@ def test_ranking_counts_earned_stamps_and_stays_within_student_group(client, db)
             (alice, rare, 1, "refund"),
             (alice, common, -1, "penalty"),
             (ben, rare, 3, "manual"),
-            (ben, common, 6, "daily"),
+            (ben, common, 4, "daily"),
+            (ben, common, 2, "manual"),
             (inactive, legendary, 5, "manual"),
             (outsider, legendary, 10, "manual"),
         ]
@@ -39,13 +40,19 @@ def test_ranking_counts_earned_stamps_and_stays_within_student_group(client, db)
     login_as(client, alice.login)
     response = client.get("/ranking", params={"group_id": other_group.id})
     assert response.status_code == 200
-    assert response.context["rows"] == [
-        {"rank": 1, "student_id": alice.id, "name": "Alice Bennett", "points": 36},
-        {"rank": 1, "student_id": ben.id, "name": "Ben Carter", "points": 36},
-        {"rank": 3, "student_id": zero.id, "name": "Cora Dale", "points": 0},
+    assert [
+        (row["rank"], row["student_id"], row["name"], row["points"],
+         {stamp.id: amount for stamp, amount in row["stamps"]})
+        for row in response.context["rows"]
+    ] == [
+        (1, alice.id, "Alice Bennett", 36, {common.id: 1, rare.id: 1, legendary.id: 1}),
+        (1, ben.id, "Ben Carter", 36, {common.id: 6, rare.id: 3}),
+        (3, zero.id, "Cora Dale", 0, {}),
     ]
     assert "Blue group" in response.text and "Green group" not in response.text
     assert 'href="/ranking" aria-current="page"' in response.text and "ranking-self" in response.text
+    assert 'alt="Class star" width="22" height="22"><strong>: 6</strong>' in response.text
+    assert "0 stamps" in response.text
 
 
 def test_staff_see_only_accessible_group_rankings(client, db):

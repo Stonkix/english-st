@@ -76,7 +76,8 @@ def test_room_page_data_and_access(client, db):
     data = _data(r.text)
     assert data["room_id"] == room.id and data["me"] == s1.id and not data["moderator"]
     assert [m["kind"] for m in data["messages"]] == ["sticker"] and len(data["stickers"]) == len(chat.STICKERS)
-    assert 'class="tabbar"' not in r.text  # на весь экран
+    assert '<body class="has-nav chat-room-page">' in r.text
+    assert 'class="tabbar"' in r.text and 'href="/chat" aria-current="page"' in r.text
     assert client.get(f"/chat/{direct2.id}").status_code == 404  # чужой личный чат
     assert client.get(f"/chat/{direct2.id}/messages").json() == {"error": "Something went wrong"}
     assert client.get("/chat/999999").status_code == 404
@@ -98,7 +99,7 @@ def test_history_json(client, db):
     assert client.get(f"/chat/{room.id}/messages", params={"before": "x"}).status_code == 422
 
 
-def test_heart_reactions_persist_and_broadcast_personalized_counts(client, db):
+def test_reactions_persist_and_broadcast_personalized_counts(client, db):
     teacher, group, student, peer = _school(db)
     room = chat.group_room(db, group.id)
     message = chat.post_text(db, teacher, room, "Welcome")
@@ -109,27 +110,30 @@ def test_heart_reactions_persist_and_broadcast_personalized_counts(client, db):
     with TestClient(app, headers={"Origin": "http://testserver"}) as other:
         login_as(other, peer.login)
         with client.websocket_connect("/ws/chat") as own_ws, other.websocket_connect("/ws/chat") as peer_ws:
-            def check_events(count, mine, theirs):
+            def check_events(counts, mine, theirs):
                 event = {"type": "reaction", "room_id": room.id, "id": message.id}
-                assert own_ws.receive_json() == {**event, "state": {"count": count, "mine": mine}}
-                assert peer_ws.receive_json() == {**event, "state": {"count": count, "mine": theirs}}
+                assert own_ws.receive_json() == {**event, "state": {"counts": counts, "mine": mine}}
+                assert peer_ws.receive_json() == {**event, "state": {"counts": counts, "mine": theirs}}
 
-            assert client.put(url, json={"active": True}).json() == {"count": 1, "mine": True}
-            check_events(1, True, False)
-            assert client.put(url, json={"active": True}).json() == {"count": 1, "mine": True}
-            assert other.put(url, json={"active": True}).json() == {"count": 2, "mine": True}
-            check_events(2, True, True)
+            for _ in range(2):
+                assert client.put(url, json={"kind": "heart"}).json() == {"counts": {"heart": 1}, "mine": "heart"}
+            check_events({"heart": 1}, "heart", None)
+            assert other.put(url, json={"kind": "like"}).json() == {"counts": {"heart": 1, "like": 1}, "mine": "like"}
+            check_events({"heart": 1, "like": 1}, "heart", "like")
 
             page = _data(client.get(f"/chat/{room.id}").text)
-            assert page["messages"][0]["reaction"] == {"count": 2, "mine": True}
+            assert {item["id"] for item in page["reactions"]} == {kind.value for kind in chat.ReactionKind}
+            assert page["messages"][0]["reaction"] == {"counts": {"heart": 1, "like": 1}, "mine": "heart"}
             history = other.get(f"/chat/{room.id}/messages").json()["messages"]
-            assert history[0]["reaction"] == {"count": 2, "mine": True}
+            assert history[0]["reaction"] == {"counts": {"heart": 1, "like": 1}, "mine": "like"}
 
-            assert client.put(url, json={"active": False}).json() == {"count": 1, "mine": False}
-            check_events(1, False, True)
-            assert client.get(reaction_list).json() == {str(message.id): {"count": 1, "mine": False}}
-            assert other.put(url, json={"active": False}).json() == {"count": 0, "mine": False}
-            check_events(0, False, False)
+            assert client.put(url, json={"kind": "like"}).json() == {"counts": {"like": 2}, "mine": "like"}
+            check_events({"like": 2}, "like", "like")
+            assert client.put(url, json={"kind": None}).json() == {"counts": {"like": 1}, "mine": None}
+            check_events({"like": 1}, None, "like")
+            assert client.get(reaction_list).json() == {str(message.id): {"counts": {"like": 1}, "mine": None}}
+            assert other.put(url, json={"kind": None}).json() == {"counts": {}, "mine": None}
+            check_events({}, None, None)
             assert client.get(reaction_list).json() == {}
 
 
@@ -140,16 +144,16 @@ def test_reactions_require_room_access_and_disappear_on_delete(client, db):
     url = f"/chat/messages/{message.id}/reaction"
     reaction_list = f"/chat/{room.id}/reactions?first={message.id}&last={message.id}"
     login_as(client, student.login)
-    assert client.put(url, json={"active": True}).status_code == 404
+    assert client.put(url, json={"kind": "heart"}).status_code == 404
     assert client.get(reaction_list).status_code == 404
 
     login_as(client, peer.login)
-    assert client.put(url, json={"active": True}, headers={"Origin": "http://evil.test"}).status_code == 403
-    assert client.put(url, json={"active": "true"}).status_code == 422
-    assert client.put(url, json={"active": True}).status_code == 200
+    assert client.put(url, json={"kind": "heart"}, headers={"Origin": "http://evil.test"}).status_code == 403
+    assert client.put(url, json={"kind": "unknown"}).status_code == 422
+    assert client.put(url, json={"kind": "heart"}).status_code == 200
     assert client.post(f"/chat/messages/{message.id}/delete").status_code == 200
     assert client.get(reaction_list).json() == {}
-    assert client.put(url, json={"active": True}).status_code == 404
+    assert client.put(url, json={"kind": "heart"}).status_code == 404
     assert db.get(ChatReaction, (message.id, peer.id)) is None
 
 

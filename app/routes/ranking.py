@@ -15,25 +15,38 @@ router = APIRouter()
 
 
 def _ranked_students(db: DbSession, group_id: int) -> list[dict]:
-    points = func.coalesce(func.sum(StampTransaction.amount * StampType.ranking_points), 0).label("points")
     stmt = (
-        select(User.id, User.first_name, User.last_name, points)
+        select(User.id, User.first_name, User.last_name, StampType, func.sum(StampTransaction.amount))
         .outerjoin(StampTransaction, and_(
             StampTransaction.student_id == User.id,
             StampTransaction.reason.in_(("manual", "daily")),
         ))
         .outerjoin(StampType, StampType.id == StampTransaction.stamp_type_id)
         .where(User.group_id == group_id, User.role == "student", User.is_active.is_(True))
-        .group_by(User.id, User.first_name, User.last_name)
-        .order_by(points.desc(), User.last_name, User.first_name, User.id)
+        .group_by(User.id, User.first_name, User.last_name, StampType.id)
+        .order_by(User.last_name, User.first_name, User.id, StampType.sort_order, StampType.id)
     )
-    rows = []
+
+    students = {}
+    for student_id, first_name, last_name, stamp_type, amount in db.execute(stmt):
+        row = students.setdefault(student_id, {
+            "student_id": student_id,
+            "name": f"{first_name} {last_name}",
+            "stamps": [],
+            "points": 0,
+        })
+        if stamp_type is not None:
+            row["stamps"].append((stamp_type, amount))
+            row["points"] += amount * stamp_type.ranking_points
+
+    rows = sorted(students.values(), key=lambda row: row["points"], reverse=True)
     rank = 0
     previous = None
-    for position, (student_id, first_name, last_name, score) in enumerate(db.execute(stmt), 1):
+    for position, row in enumerate(rows, 1):
+        score = row["points"]
         if score != previous:
             rank = position
-        rows.append({"rank": rank, "student_id": student_id, "name": f"{first_name} {last_name}", "points": score})
+        row["rank"] = rank
         previous = score
     return rows
 

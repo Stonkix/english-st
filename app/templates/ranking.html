@@ -27,13 +27,22 @@
   {% if rows %}
   <ol class="list" role="list" aria-label="Group ranking">
     {% for row in rows %}
-    <li value="{{ row.rank }}" class="list-item{% if row.student_id == user.id %} ranking-self{% endif %}">
-      <strong>#{{ row.rank }}</strong>
+    <li value="{{ row.rank }}" class="list-item ranking-entry{% if row.student_id == user.id %} ranking-self{% endif %}">
+      <strong class="ranking-place">#{{ row.rank }}</strong>
       <span class="list-item-main">
         <strong>{{ row.name }}</strong>
         {% if row.student_id == user.id %}<small>You</small>{% endif %}
       </span>
-      <strong>{{ row.points }} point{% if row.points != 1 %}s{% endif %}</strong>
+      <span class="ranking-stamps">
+        {% for stamp_type, amount in row.stamps %}
+        <span class="ranking-stamp" title="{{ stamp_type.display_name }}">
+          <img src="{{ stamp_type|stamp_icon }}" alt="{{ stamp_type.display_name }}" width="22" height="22"><strong>: {{ amount }}</strong>
+        </span>
+        {% else %}
+        <span>0 stamps</span>
+        {% endfor %}
+      </span>
+      <strong class="ranking-points">{{ row.points }} point{% if row.points != 1 %}s{% endif %}</strong>
     </li>
     {% endfor %}
   </ol>

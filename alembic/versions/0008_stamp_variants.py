@@ -64,7 +64,7 @@ def _seed() -> None:
         if row is None:
             conn.execute(
                 sa.text("INSERT INTO stamp_types (name, icon, color, sort_order, is_active, craftable) "
-                        "VALUES (:n, :ic, :c, :o, 1, :cr)"),
+                        "VALUES (:n, :ic, :c, :o, TRUE, :cr)"),
                 {"n": name, "ic": icon, "c": color, "o": order, "cr": craftable},
             )
             row = conn.execute(sa.text("SELECT id FROM stamp_types WHERE name = :n"), {"n": name}).first()
@@ -74,13 +74,13 @@ def _seed() -> None:
     for type_id, icon in conn.execute(sa.text("SELECT id, icon FROM stamp_types")).all():
         conn.execute(
             sa.text("INSERT INTO stamp_variants (stamp_type_id, name, icon, sort_order, is_active, created_at) "
-                    "VALUES (:t, '', :ic, 1, 1, CURRENT_TIMESTAMP)"),
+                    "VALUES (:t, '', :ic, 1, TRUE, CURRENT_TIMESTAMP)"),
             {"t": type_id, "ic": icon},
         )
     for src, src_amount, dst, dst_amount in RULES:
         conn.execute(
             sa.text("INSERT INTO conversion_rules (from_type_id, from_amount, to_type_id, to_amount, is_active) "
-                    "VALUES (:f, :fa, :t, :ta, 1)"),
+                    "VALUES (:f, :fa, :t, :ta, TRUE)"),
             {"f": ids[src], "fa": src_amount, "t": ids[dst], "ta": dst_amount},
         )
 
