@@ -911,9 +911,6 @@ details > summary { font-weight: 800; cursor: pointer; padding: 6px 0; }
 .msg-body.is-media { max-width: 296px; padding: 6px; }
 .msg-body.is-media .msg-name, .msg-body.is-media .msg-meta { margin-inline: 3px; }
 .msg:not(.is-deleted) .msg-body { touch-action: manipulation; }
-@media (hover: hover) and (pointer: fine) {
-  .msg-body[aria-controls] { cursor: pointer; }
-}
 @media (pointer: coarse) {
   .msg:not(.is-deleted) .msg-body { -webkit-touch-callout: none; user-select: none; }
 }

@@ -599,21 +599,21 @@
     if (event.detail > 0 && heldMessage?.node.contains(event.target) && performance.now() < heldMessage.until) {
       event.preventDefault();
       heldMessage = null;
-      return;
     }
-    if (event.button !== 0 || (event.pointerType || lastPointerType) === "touch" ||
-        event.target.closest("a, button")) return;
-    const bubble = event.target.closest(".msg-body[aria-controls]");
-    if (!bubble || window.getSelection()?.isCollapsed === false) return;
-    if (bubble === menuTarget) closeMessageMenu();
-    else openMessageMenu(bubble, event.clientX, event.clientY);
   });
 
   list.addEventListener("contextmenu", (event) => {
     const bubble = event.target.closest(".msg-body[aria-controls]");
-    if (!bubble || ((event.pointerType || lastPointerType) !== "touch" && !press && heldMessage?.node !== bubble)) return;
+    if (!bubble) return;
     event.preventDefault();
-    if (press?.node === bubble) press.open();
+    if (press?.node === bubble) {
+      press.open();
+      return;
+    }
+    if ((event.pointerType || lastPointerType) === "touch" || heldMessage?.node === bubble) return;
+    const keyboard = event.clientX === 0 && event.clientY === 0;
+    const { left, top } = bubble.getBoundingClientRect();
+    openMessageMenu(bubble, keyboard ? left : event.clientX, keyboard ? top : event.clientY, keyboard);
   });
 
   list.addEventListener("pointerdown", (event) => {
